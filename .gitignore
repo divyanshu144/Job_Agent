@@ -1,0 +1,12 @@
+.env
+data/cv.pdf
+data/jobfit.db
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+frontend/node_modules/
+frontend/dist/
+.pytest_cache/
+*.egg-info/
+dist/
