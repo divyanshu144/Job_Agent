@@ -102,7 +102,9 @@ async def test_patch_status_not_found_returns_404(app_client):
 
 
 async def test_history_list_includes_status(app_client, seeded_analysis):
-    await app_client.patch(f"/api/analysis/{seeded_analysis}/status", json={"status": "interviewing"})
+    await app_client.patch(
+        f"/api/analysis/{seeded_analysis}/status", json={"status": "interviewing"}
+    )
     resp = await app_client.get("/api/history")
     assert resp.status_code == 200
     items = resp.json()

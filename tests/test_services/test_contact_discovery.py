@@ -31,19 +31,35 @@ async def mem_db():
 async def analysis_with_jp(mem_db):
     """Insert a Profile, Analysis, and job_parser JobResult with company='Stripe'."""
     profile = Profile(
-        id="prof-1", yaml_data="", cv_text="", github_data="{}", merged_profile="test profile",
+        id="prof-1",
+        yaml_data="",
+        cv_text="",
+        github_data="{}",
+        merged_profile="test profile",
         last_refreshed_at=datetime.now(timezone.utc),
     )
     mem_db.add(profile)
     analysis = Analysis(
-        id="anal-1", jd_text="test jd", profile_id="prof-1",
-        created_at=datetime.now(timezone.utc), partial=False,
+        id="anal-1",
+        jd_text="test jd",
+        profile_id="prof-1",
+        created_at=datetime.now(timezone.utc),
+        partial=False,
     )
     mem_db.add(analysis)
     jp = JobResult(
-        id="jr-1", analysis_id="anal-1", agent_name="job_parser",
-        output_json=json.dumps({"company": "Stripe", "required_skills": [], "nice_to_have": [],
-                                "role_type": "Engineering", "seniority": "Senior"}),
+        id="jr-1",
+        analysis_id="anal-1",
+        agent_name="job_parser",
+        output_json=json.dumps(
+            {
+                "company": "Stripe",
+                "required_skills": [],
+                "nice_to_have": [],
+                "role_type": "Engineering",
+                "seniority": "Senior",
+            }
+        ),
     )
     mem_db.add(jp)
     await mem_db.commit()
@@ -67,10 +83,20 @@ async def test_discover_contacts_happy_path(analysis_with_jp, mem_db):
     hunter_response = {
         "data": {
             "emails": [
-                {"value": "alice@stripe.com", "first_name": "Alice", "last_name": "Chen",
-                 "position": "Engineering Manager", "confidence": 94},
-                {"value": "bob@stripe.com", "first_name": "Bob", "last_name": "Smith",
-                 "position": "Recruiter", "confidence": 72},
+                {
+                    "value": "alice@stripe.com",
+                    "first_name": "Alice",
+                    "last_name": "Chen",
+                    "position": "Engineering Manager",
+                    "confidence": 94,
+                },
+                {
+                    "value": "bob@stripe.com",
+                    "first_name": "Bob",
+                    "last_name": "Smith",
+                    "position": "Recruiter",
+                    "confidence": 72,
+                },
             ]
         }
     }
@@ -125,6 +151,7 @@ async def test_discover_contacts_filters_no_email(analysis_with_jp, mem_db):
 @pytest.mark.asyncio
 async def test_discover_contacts_raises_on_http_error(analysis_with_jp, mem_db):
     import httpx
+
     mock_resp = MagicMock()
     mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
         "403", request=MagicMock(), response=MagicMock()
@@ -144,19 +171,35 @@ async def test_discover_contacts_raises_on_http_error(analysis_with_jp, mem_db):
 @pytest.mark.asyncio
 async def test_discover_contacts_raises_domain_required_when_no_company(mem_db):
     profile = Profile(
-        id="prof-2", yaml_data="", cv_text="", github_data="{}", merged_profile="",
+        id="prof-2",
+        yaml_data="",
+        cv_text="",
+        github_data="{}",
+        merged_profile="",
         last_refreshed_at=datetime.now(timezone.utc),
     )
     mem_db.add(profile)
     analysis = Analysis(
-        id="anal-2", jd_text="test jd", profile_id="prof-2",
-        created_at=datetime.now(timezone.utc), partial=False,
+        id="anal-2",
+        jd_text="test jd",
+        profile_id="prof-2",
+        created_at=datetime.now(timezone.utc),
+        partial=False,
     )
     mem_db.add(analysis)
     jp = JobResult(
-        id="jr-2", analysis_id="anal-2", agent_name="job_parser",
-        output_json=json.dumps({"company": None, "required_skills": [], "nice_to_have": [],
-                                "role_type": "Engineering", "seniority": "Senior"}),
+        id="jr-2",
+        analysis_id="anal-2",
+        agent_name="job_parser",
+        output_json=json.dumps(
+            {
+                "company": None,
+                "required_skills": [],
+                "nice_to_have": [],
+                "role_type": "Engineering",
+                "seniority": "Senior",
+            }
+        ),
     )
     mem_db.add(jp)
     await mem_db.commit()
@@ -167,9 +210,13 @@ async def test_discover_contacts_raises_domain_required_when_no_company(mem_db):
 
 @pytest.mark.asyncio
 async def test_discover_contacts_uses_supplied_domain(analysis_with_jp, mem_db):
-    hunter_response = {"data": {"emails": [
-        {"value": "carol@customdomain.io", "confidence": 85, "position": "Founder"},
-    ]}}
+    hunter_response = {
+        "data": {
+            "emails": [
+                {"value": "carol@customdomain.io", "confidence": 85, "position": "Founder"},
+            ]
+        }
+    }
     mock_resp = MagicMock()
     mock_resp.json.return_value = hunter_response
     mock_resp.raise_for_status = MagicMock()
@@ -192,6 +239,7 @@ async def test_discover_contacts_uses_supplied_domain(analysis_with_jp, mem_db):
 @pytest.mark.asyncio
 async def test_discover_contacts_raises_on_request_error(analysis_with_jp, mem_db):
     import httpx
+
     with patch("httpx.AsyncClient") as mock_client_cls:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)

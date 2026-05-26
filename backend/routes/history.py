@@ -69,7 +69,9 @@ async def update_analysis_status(
     db: AsyncSession = Depends(get_db),
 ) -> AnalysisSummary:
     analysis = (
-        await db.execute(select(Analysis).where(Analysis.id == analysis_id, Analysis.user_id == current_user.id))
+        await db.execute(
+            select(Analysis).where(Analysis.id == analysis_id, Analysis.user_id == current_user.id)
+        )
     ).scalar_one_or_none()
     if analysis is None:
         raise HTTPException(status_code=404, detail=f"Analysis {analysis_id} not found")

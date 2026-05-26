@@ -37,9 +37,10 @@ async def get_profile_status(
     stale_after = timedelta(days=settings.github_stale_days)
     now = datetime.utcnow()
 
-    github_is_stale = profile.github_last_fetched_at is None or (
-        now - profile.github_last_fetched_at
-    ) > stale_after
+    github_is_stale = (
+        profile.github_last_fetched_at is None
+        or (now - profile.github_last_fetched_at) > stale_after
+    )
 
     return ProfileStatusResponse(
         profile_last_built_at=profile.last_refreshed_at,

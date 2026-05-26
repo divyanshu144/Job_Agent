@@ -85,12 +85,14 @@ async def fetch_hn_jobs() -> list[RawJob]:
                     if not obj_id:
                         continue
                     obj_id = str(obj_id)
-                    jobs.append(RawJob(
-                        source_id=obj_id,
-                        source_url=f"https://news.ycombinator.com/item?id={obj_id}",
-                        raw_text=text,
-                        dedup_hash=hashlib.sha256(text.encode()).hexdigest(),
-                    ))
+                    jobs.append(
+                        RawJob(
+                            source_id=obj_id,
+                            source_url=f"https://news.ycombinator.com/item?id={obj_id}",
+                            raw_text=text,
+                            dedup_hash=hashlib.sha256(text.encode()).hexdigest(),
+                        )
+                    )
                 # Use nbPages when present; fall back to empty-hits check for termination
                 nb_pages = data.get("nbPages")
                 if nb_pages is not None and page >= nb_pages - 1:

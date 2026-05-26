@@ -71,8 +71,11 @@ async def register(
 
     token = create_access_token(user.id)
     response.set_cookie(
-        "access_token", token,
-        httponly=True, samesite="lax", max_age=60 * 60 * 24 * 7,
+        "access_token",
+        token,
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 7,
     )
     return UserResponse.model_validate(user)
 
@@ -93,8 +96,11 @@ async def login(
 
     token = create_access_token(user.id)
     response.set_cookie(
-        "access_token", token,
-        httponly=True, samesite="lax", max_age=60 * 60 * 24 * 7,
+        "access_token",
+        token,
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 7,
     )
     return UserResponse.model_validate(user)
 
