@@ -1,20 +1,21 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { api, streamGenerate } from "../api/client";
-import type { AnalysisDetail, AgentName, AgentStatus } from "../types";
+import type { AnalysisDetail, AgentName, AgentStatus, Contact } from "../types";
 import { PHASE2_AGENTS } from "../types";
 import { ScoreCard } from "../components/ScoreCard";
 import { GapList } from "../components/GapList";
 import { ResourcePanel } from "../components/ResourcePanel";
 import { DocViewer } from "../components/DocViewer";
 
-type Tab = "score" | "gaps" | "resources" | "letter" | "resume";
+type Tab = "score" | "gaps" | "resources" | "letter" | "resume" | "cold_email";
 const TABS: { id: Tab; label: string }[] = [
   { id: "score", label: "Score" },
   { id: "gaps", label: "Gaps" },
   { id: "resources", label: "Resources" },
   { id: "letter", label: "Cover Letter" },
   { id: "resume", label: "Resume" },
+  { id: "cold_email", label: "Cold Email" },
 ];
 
 export function Results() {
@@ -26,9 +27,48 @@ export function Results() {
   const [genStates, setGenStates] = useState<Partial<Record<AgentName, AgentStatus>>>({});
   const cancelRef = useRef<(() => void) | null>(null);
 
+  // Cold Email state
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [contactsError, setContactsError] = useState<string | null>(null);
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [draftSubject, setDraftSubject] = useState("");
+  const [draftBody, setDraftBody] = useState("");
+  const [originalDraftBody, setOriginalDraftBody] = useState("");
+  const [drafting, setDrafting] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [coldEmailScreen, setColdEmailScreen] = useState<"picker" | "review" | "sent">("picker");
+  const [domainOverride, setDomainOverride] = useState("");
+
   useEffect(() => {
     if (id) api.getAnalysis(id).then(setData).catch((e) => setError(String(e)));
   }, [id]);
+
+  useEffect(() => {
+    if (tab !== "cold_email" || !id) return;
+    setContactsLoading(true);
+    api.getContacts(id)
+      .then((cs) => {
+        setContacts(cs);
+        const sent = cs.find((c) => c.status === "sent");
+        const drafted = cs.find((c) => c.status === "drafted");
+        if (sent) {
+          setColdEmailScreen("sent");
+          setSelectedContactId(sent.id);
+        } else if (drafted) {
+          setColdEmailScreen("review");
+          setSelectedContactId(drafted.id);
+          setDraftSubject(drafted.draft_subject ?? "");
+          setDraftBody(drafted.draft_text ?? "");
+          setOriginalDraftBody(drafted.draft_text ?? "");
+        } else {
+          setColdEmailScreen("picker");
+        }
+      })
+      .catch((e) => setContactsError(String(e)))
+      .finally(() => setContactsLoading(false));
+  }, [tab, id]);
 
   const generate = () => {
     if (!data) return;
@@ -42,6 +82,49 @@ export function Results() {
         api.getAnalysis(data.id).then(setData).finally(() => setGenerating(false));
       },
     });
+  };
+
+  const handleDiscover = (domain?: string) => {
+    if (!id) return;
+    setContactsLoading(true);
+    setContactsError(null);
+    api.discoverContacts(id, domain || undefined)
+      .then((cs) => {
+        setSelectedContactId(null);
+        setContacts(cs);
+        setColdEmailScreen("picker");
+      })
+      .catch((e) => setContactsError(String(e)))
+      .finally(() => setContactsLoading(false));
+  };
+
+  const handleDraft = () => {
+    if (!selectedContactId) return;
+    setDrafting(true);
+    api.draftEmail(selectedContactId)
+      .then((d) => {
+        setDraftSubject(d.subject);
+        setDraftBody(d.body);
+        setOriginalDraftBody(d.body);
+        setColdEmailScreen("review");
+      })
+      .catch((e) => setContactsError(String(e)))
+      .finally(() => setDrafting(false));
+  };
+
+  const handleSendConfirm = () => {
+    if (!selectedContactId || !id) return;
+    setSending(true);
+    setShowSendModal(false);
+    api.sendEmail(selectedContactId)
+      .then(() =>
+        api.getContacts(id).then((cs) => {
+          setContacts(cs);
+          setColdEmailScreen("sent");
+        })
+      )
+      .catch((e) => setContactsError(String(e)))
+      .finally(() => setSending(false));
   };
 
   if (error) return <p className="p-6 text-red-600">{error}</p>;
@@ -92,19 +175,21 @@ export function Results() {
       )}
 
       <div className="flex gap-2 border-b">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-              tab === t.id
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+        {TABS
+          .filter((t) => t.id !== "cold_email" || !!r.job_parser?.company)
+          .map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+                tab === t.id
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {t.label}{t.id === "cold_email" && coldEmailScreen === "sent" ? " ✓" : ""}
+            </button>
+          ))}
       </div>
 
       <div className="pt-2">
@@ -146,6 +231,203 @@ export function Results() {
               </div>
             )
             : <p className="text-sm text-slate-400 italic">Generate documents to see resume bullets.</p>
+        )}
+
+        {tab === "cold_email" && (
+          <div className="space-y-4">
+            {contactsError && (
+              <p className="text-sm text-red-600">{contactsError}</p>
+            )}
+            {contactsLoading && (
+              <p className="text-sm text-slate-400">Loading…</p>
+            )}
+
+            {/* Screen 1 — Contact Picker */}
+            {!contactsLoading && coldEmailScreen === "picker" && (
+              <div className="space-y-4">
+                {contacts.length === 0 ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-slate-500">
+                      No contacts discovered yet. Enter a company domain to search:
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="stripe.com"
+                        value={domainOverride}
+                        onChange={(e) => setDomainOverride(e.target.value)}
+                        className="flex-1 border rounded px-3 py-2 text-sm"
+                      />
+                      <button
+                        onClick={() => handleDiscover(domainOverride)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded text-sm"
+                      >
+                        Search
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => handleDiscover()}
+                      className="text-sm text-blue-600 underline"
+                    >
+                      Auto-detect from job description
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-slate-600 font-medium">
+                      Select a contact to email:
+                    </p>
+                    {contacts.map((c) => {
+                      const badge =
+                        c.confidence >= 0.8
+                          ? { label: "High", cls: "bg-green-100 text-green-700" }
+                          : c.confidence >= 0.5
+                          ? { label: "Medium", cls: "bg-yellow-100 text-yellow-700" }
+                          : { label: "Low", cls: "bg-slate-100 text-slate-600" };
+                      return (
+                        <label
+                          key={c.id}
+                          className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer ${
+                            selectedContactId === c.id ? "border-blue-500 bg-blue-50" : ""
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="contact"
+                            value={c.id}
+                            checked={selectedContactId === c.id}
+                            onChange={() => setSelectedContactId(c.id)}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">{c.name ?? c.email}</p>
+                            {c.title && (
+                              <p className="text-xs text-slate-500">{c.title}</p>
+                            )}
+                            <p className="text-xs text-slate-400">{c.email}</p>
+                          </div>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>
+                            {badge.label}
+                          </span>
+                        </label>
+                      );
+                    })}
+                    <button
+                      onClick={handleDraft}
+                      disabled={!selectedContactId || drafting}
+                      className="px-4 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-50"
+                    >
+                      {drafting ? "Drafting…" : "Draft Email"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Screen 2 — Draft Review */}
+            {!contactsLoading && coldEmailScreen === "review" && (
+              <div className="space-y-3">
+                {drafting && (
+                  <p className="text-sm text-slate-400">Drafting email (5–15s)…</p>
+                )}
+                {!drafting && (
+                  <>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Subject</label>
+                      <input
+                        type="text"
+                        value={draftSubject}
+                        onChange={(e) => setDraftSubject(e.target.value)}
+                        className="w-full border rounded px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Body</label>
+                      <textarea
+                        value={draftBody}
+                        onChange={(e) => setDraftBody(e.target.value)}
+                        rows={10}
+                        className="w-full border rounded px-3 py-2 text-sm font-mono"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setColdEmailScreen("picker")}
+                        className="px-4 py-2 border rounded text-sm text-slate-500 hover:bg-slate-50"
+                      >
+                        ← Change contact
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (draftBody !== originalDraftBody) {
+                            if (!window.confirm("This will overwrite your edits. Continue?")) return;
+                          }
+                          handleDraft();
+                        }}
+                        className="px-4 py-2 border rounded text-sm text-slate-700 hover:bg-slate-50"
+                      >
+                        Re-draft
+                      </button>
+                      <button
+                        onClick={() => setShowSendModal(true)}
+                        disabled={sending}
+                        className="px-4 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-50"
+                      >
+                        {sending ? "Sending…" : "Send"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Screen 3 — Sent Confirmation */}
+            {!contactsLoading && coldEmailScreen === "sent" && (() => {
+              const sentContact = contacts.find((c) => c.id === selectedContactId) ?? contacts.find((c) => c.status === "sent");
+              return (
+                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-green-800 font-medium text-sm">
+                    ✓ Sent to {sentContact?.name ?? sentContact?.email ?? "contact"}
+                    {sentContact?.email && sentContact?.name ? ` (${sentContact.email})` : ""}
+                  </p>
+                  {sentContact?.sent_at && (
+                    <p className="text-xs text-green-600 mt-1">
+                      {new Date(sentContact.sent_at).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Send confirmation modal */}
+            {showSendModal && (() => {
+              const target = contacts.find((c) => c.id === selectedContactId);
+              return (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                  <div className="bg-white rounded-lg p-6 max-w-sm w-full shadow-xl space-y-4">
+                    <p className="text-sm text-slate-800">
+                      Send to <strong>{target?.email}</strong>? This will send via Gmail. The email
+                      lands in Drafts briefly before firing — you can delete it from there if you
+                      act fast.
+                    </p>
+                    <div className="flex gap-3 justify-end">
+                      <button
+                        onClick={() => setShowSendModal(false)}
+                        className="px-4 py-2 text-sm border rounded text-slate-700"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSendConfirm}
+                        className="px-4 py-2 text-sm bg-blue-600 text-white rounded"
+                      >
+                        Confirm Send
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
         )}
       </div>
     </div>

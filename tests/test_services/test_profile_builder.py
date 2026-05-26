@@ -25,21 +25,22 @@ async def session():
 
 
 async def test_build_profile_merges_sources(session, tmp_path):
+    from backend.models import GithubCache
+
     yaml_path = tmp_path / "profile.yaml"
     yaml_path.write_text(
         "identity:\n  name: Test User\ncore_skills:\n  languages: [Python]\n"
         "featured_projects:\n  - repo: divyanshu144/docchat\n"
     )
 
-    with (
-        patch(
-            "backend.services.profile_builder.fetch_all_readmes", new_callable=AsyncMock
-        ) as mock_gh,
-        patch(
-            "backend.services.profile_builder.extract_text_from_file", new_callable=AsyncMock
-        ) as mock_cv,
-    ):
-        mock_gh.return_value = {"divyanshu144/docchat": "# DocChat README"}
+    # Populate GitHub cache
+    cache = GithubCache(owner="divyanshu144", repo_name="docchat", readme_content="# DocChat README")
+    session.add(cache)
+    await session.commit()
+
+    with patch(
+        "backend.services.cv_parser.extract_text_from_file", new_callable=AsyncMock
+    ) as mock_cv:
         mock_cv.return_value = ""
         from backend.services.profile_builder import build_profile
 
@@ -58,17 +59,10 @@ async def test_get_or_build_returns_cached(session, tmp_path):
     yaml_path = tmp_path / "profile.yaml"
     yaml_path.write_text("identity:\n  name: Cached\nfeatured_projects: []\n")
 
-    with (
-        patch(
-            "backend.services.profile_builder.fetch_all_readmes",
-            new_callable=AsyncMock,
-            return_value={},
-        ),
-        patch(
-            "backend.services.profile_builder.extract_text_from_file",
-            new_callable=AsyncMock,
-            return_value="",
-        ),
+    with patch(
+        "backend.services.cv_parser.extract_text_from_file",
+        new_callable=AsyncMock,
+        return_value="",
     ):
         from backend.services.profile_builder import build_profile
 
@@ -85,12 +79,7 @@ async def test_get_or_build_creates_when_none(session, tmp_path):
 
     with (
         patch(
-            "backend.services.profile_builder.fetch_all_readmes",
-            new_callable=AsyncMock,
-            return_value={},
-        ),
-        patch(
-            "backend.services.profile_builder.extract_text_from_file",
+            "backend.services.cv_parser.extract_text_from_file",
             new_callable=AsyncMock,
             return_value="",
         ),

@@ -12,6 +12,22 @@ Full plan: `docs/superpowers/plans/2026-05-23-pipeline-optimisation.md`
 - [x] Task 7: Frontend AnalyseJob.tsx — Evaluate → Generate two-phase UI
 - [x] Task 8: Frontend Results.tsx — Generate button + placeholder tabs
 
+## Harness Improvements — HANDOFF.md System
+
+- [x] Task 1: Create HANDOFF.md at project root — populate with actual current state (Wave 1 not started, lint failing, tests 131 passing)
+- [x] Task 2: Create HANDOFF.template.md at project root — empty template with [bracket] placeholders for all 6 sections
+- [x] Task 3: Update CLAUDE.md — add "Session Lifecycle" section with start/checkpoint/end subsections; add HANDOFF.md to session-start read order; define 6 checkpoint triggers
+- [x] Task 4: Verify — 131 tests still pass, HANDOFF.md and template exist, CLAUDE.md has new section
+
+## Harness Improvements — Wave 1 (CLAUDE.md drift fixes)
+
+- [x] Task 1: Replace stale project overview TODO with real 3-5 sentence description
+- [x] Task 2: Update Architecture Map — add 4 missing routes + 5 missing frontend pages + remove stale TODO comment
+- [x] Task 3: Add "Undocumented Conventions" section — 5 items (SSE protocol, _inject vs .replace, with_tracking, runtime model override, JD hash cache limitation)
+- [x] Task 4: Add `make check` target to Makefile + update CLAUDE.md Common Commands
+- [x] Task 5: Add "Definition of Done" section to CLAUDE.md
+- [x] Task 6: Verify — 131 tests still pass, make check runs cleanly
+
 ## Feature Improvements
 Full plan: `docs/superpowers/plans/2026-05-23-feature-improvements.md`
 

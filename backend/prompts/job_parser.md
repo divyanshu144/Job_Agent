@@ -12,4 +12,4 @@ Analyse the job description below. Extract structured role requirements.
 {jd}
 
 ## Output Schema — respond with valid JSON only, no preamble, no markdown fences
-{"required_skills": ["list"], "nice_to_have": ["list"], "years_experience": null, "role_type": "string", "seniority": "Junior|Mid|Senior|Lead|Staff|Principal"}
+{"required_skills": ["list"], "nice_to_have": ["list"], "years_experience": null, "role_type": "string", "seniority": "Junior|Mid|Senior|Lead|Staff|Principal", "company": "string or null"}

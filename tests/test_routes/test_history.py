@@ -9,7 +9,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import backend.models  # noqa: F401
 from backend.database import Base, get_db
-from backend.models import Analysis, JobResult, Profile
+from backend.models import Analysis, JobResult, Profile, User
+from backend.services.auth_service import get_current_user
+
+_FAKE_USER = User(id="test-user-id", email="test@example.com", hashed_password="x", is_active=True)
 
 
 @pytest.fixture
@@ -29,7 +32,7 @@ async def client_with_data():
         )
         s.add(p)
         await s.flush()
-        a = Analysis(jd_text="Senior ML Engineer " * 5, profile_id=p.id, partial=False)
+        a = Analysis(jd_text="Senior ML Engineer " * 5, profile_id=p.id, partial=False, user_id=_FAKE_USER.id)
         s.add(a)
         await s.flush()
         s.add(
@@ -46,7 +49,11 @@ async def client_with_data():
         async with Session() as s:
             yield s
 
+    async def override_auth():
+        return _FAKE_USER
+
     app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = override_auth
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac, analysis_id
     app.dependency_overrides.clear()

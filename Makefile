@@ -1,4 +1,4 @@
-.PHONY: run test fmt lint docker-up
+.PHONY: run test fmt lint check docker-up
 
 run:
 	uvicorn backend.main:app --reload --port 8000 & cd frontend && npm run dev
@@ -13,6 +13,9 @@ lint:
 	ruff check backend/ tests/
 	mypy backend/
 	python scripts/check_schema_drift.py
+
+check:
+	make fmt && make lint && make test
 
 docker-up:
 	docker-compose up --build

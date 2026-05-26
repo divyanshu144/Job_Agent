@@ -56,6 +56,7 @@ async def build_profile(
     db: AsyncSession,
     yaml_path: str | None = None,
     cv_path: str | None = None,
+    user_id: str | None = None,
 ) -> Profile:
     """Build a Profile row from YAML + CV + whatever is in github_cache.
 
@@ -94,13 +95,16 @@ async def build_profile(
         merged_profile=merged,
         last_refreshed_at=datetime.now(timezone.utc),
         github_last_fetched_at=max_fetched,
+        user_id=user_id,
     )
     db.add(profile)
     await db.flush()
     return profile
 
 
-async def refresh_github_cache(db: AsyncSession) -> tuple[Profile, int]:
+async def refresh_github_cache(
+    db: AsyncSession, user_id: str | None = None
+) -> tuple[Profile, int]:
     """Fetch all repos from GitHub, update github_cache, rebuild merged_profile.
 
     Returns (new Profile row, number of repos updated).
@@ -158,13 +162,16 @@ async def refresh_github_cache(db: AsyncSession) -> tuple[Profile, int]:
 
     await db.flush()
 
-    profile = await build_profile(db)
+    profile = await build_profile(db, user_id=user_id)
     return profile, repos_updated
 
 
-async def get_or_build_profile(db: AsyncSession) -> Profile:
-    result = await db.execute(select(Profile).order_by(Profile.last_refreshed_at.desc()).limit(1))
+async def get_or_build_profile(db: AsyncSession, user_id: str | None = None) -> Profile:
+    q = select(Profile).order_by(Profile.last_refreshed_at.desc()).limit(1)
+    if user_id:
+        q = select(Profile).where(Profile.user_id == user_id).order_by(Profile.last_refreshed_at.desc()).limit(1)
+    result = await db.execute(q)
     profile = result.scalar_one_or_none()
     if profile is None:
-        profile = await build_profile(db)
+        profile = await build_profile(db, user_id=user_id)
     return profile

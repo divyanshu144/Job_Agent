@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import backend.models  # noqa: F401
 from backend.database import Base, get_db
+from backend.models import User
+from backend.services.auth_service import get_current_user
 from backend.services.orchestrator import SSEEvent
+
+_FAKE_USER = User(id="test-user-id", email="test@example.com", hashed_password="x", is_active=True)
 
 
 async def make_events():
@@ -29,7 +33,11 @@ async def client():
         async with Session() as s:
             yield s
 
+    async def override_auth():
+        return _FAKE_USER
+
     app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = override_auth
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()

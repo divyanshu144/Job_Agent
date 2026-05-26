@@ -6,6 +6,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import backend.models  # noqa: F401 — registers ORM models with Base.metadata
 from backend.database import Base, get_db
+from backend.models import User
+from backend.services.auth_service import get_current_user
+
+_FAKE_USER = User(id="test-user-id", email="test@example.com", hashed_password="x", is_active=True)
 
 
 @pytest.fixture
@@ -26,6 +30,26 @@ async def db_session(test_engine):
 
 @pytest.fixture
 async def app_client(test_engine):
+    Session = async_sessionmaker(test_engine, expire_on_commit=False)
+    from backend.main import app
+
+    async def override_db():
+        async with Session() as s:
+            yield s
+
+    async def override_auth():
+        return _FAKE_USER
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = override_auth
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def unauthenticated_client(test_engine):
+    """Client without authentication - for testing auth requirements."""
     Session = async_sessionmaker(test_engine, expire_on_commit=False)
     from backend.main import app
 

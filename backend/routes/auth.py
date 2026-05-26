@@ -1,0 +1,135 @@
+from __future__ import annotations
+
+import secrets
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.database import get_db
+from backend.models import InviteToken, User
+from backend.schemas import InviteCreate, InviteResponse, UserCreate, UserLogin, UserResponse
+from backend.services.auth_service import (
+    create_access_token,
+    get_current_user,
+    hash_password,
+    verify_password,
+)
+
+router = APIRouter(tags=["auth"])
+
+_INVITE_EXPIRE_HOURS = 72
+
+
+@router.post("/auth/register", response_model=UserResponse)
+async def register(
+    data: UserCreate,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    user_count: int = (await db.execute(select(func.count()).select_from(User))).scalar_one()
+    is_first_user = user_count == 0
+
+    invite = None
+    if not is_first_user:
+        if not data.invite_token:
+            raise HTTPException(status_code=400, detail="Invite token required")
+        invite = (
+            await db.execute(
+                select(InviteToken).where(
+                    InviteToken.token == data.invite_token,
+                    InviteToken.used_at.is_(None),
+                    InviteToken.expires_at > datetime.now(timezone.utc),
+                )
+            )
+        ).scalar_one_or_none()
+        if invite is None:
+            raise HTTPException(status_code=400, detail="Invalid or expired invite token")
+        if invite.email and invite.email.lower() != data.email.lower():
+            raise HTTPException(status_code=400, detail="Invite token is for a different email")
+
+    existing = (
+        await db.execute(select(User).where(User.email == data.email.lower()))
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    user = User(
+        email=data.email.lower(),
+        hashed_password=hash_password(data.password),
+        is_admin=is_first_user,
+    )
+    db.add(user)
+    await db.flush()
+
+    if not is_first_user and invite:
+        invite.used_by = user.id
+        invite.used_at = datetime.now(timezone.utc)
+
+    await db.commit()
+
+    token = create_access_token(user.id)
+    response.set_cookie(
+        "access_token", token,
+        httponly=True, samesite="lax", max_age=60 * 60 * 24 * 7,
+    )
+    return UserResponse.model_validate(user)
+
+
+@router.post("/auth/login", response_model=UserResponse)
+async def login(
+    data: UserLogin,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    user = (
+        await db.execute(select(User).where(User.email == data.email.lower()))
+    ).scalar_one_or_none()
+    if user is None or not verify_password(data.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user.is_active:
+        raise HTTPException(status_code=401, detail="Account disabled")
+
+    token = create_access_token(user.id)
+    response.set_cookie(
+        "access_token", token,
+        httponly=True, samesite="lax", max_age=60 * 60 * 24 * 7,
+    )
+    return UserResponse.model_validate(user)
+
+
+@router.post("/auth/logout")
+async def logout(response: Response) -> dict[str, bool]:
+    response.delete_cookie("access_token")
+    return {"ok": True}
+
+
+@router.get("/auth/me", response_model=UserResponse)
+async def me(user: User = Depends(get_current_user)) -> UserResponse:
+    return UserResponse.model_validate(user)
+
+
+@router.post("/auth/invite", response_model=InviteResponse)
+async def create_invite(
+    data: InviteCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> InviteResponse:
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=_INVITE_EXPIRE_HOURS)
+    invite = InviteToken(
+        token=token,
+        email=data.email,
+        created_by=user.id,
+        expires_at=expires_at,
+    )
+    db.add(invite)
+    await db.commit()
+    return InviteResponse(
+        invite_url=f"/register?token={token}",
+        token=token,
+        expires_at=expires_at,
+    )
