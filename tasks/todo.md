@@ -28,6 +28,16 @@ Full plan: `docs/superpowers/plans/2026-05-23-pipeline-optimisation.md`
 - [x] Task 5: Add "Definition of Done" section to CLAUDE.md
 - [x] Task 6: Verify — 131 tests still pass, make check runs cleanly
 
+## Harness Improvements — Wave 2 (Git Safety Skills)
+
+- [x] Task 1: Create `.claude/skills/git-leak-cleanup.md` — generic skill: scrub secrets from git history with git-filter-repo, rotate credentials, force-push safely
+- [x] Task 2: Create `.claude/skills/pre-push-checklist.md` — lightweight companion skill: pre-push safety checklist (secrets scan, large files, sensitive paths)
+- [x] Task 3: Update `RESOLVER.md` — add routing rows for both new skills (`leak`, `secret`, `credential`, `history`, `filter-repo` → git-leak-cleanup; `push`, `pre-push`, `safe to ship` → pre-push-checklist)
+- [x] Task 4: Run `make check` — verify no regressions introduced (lint baseline unchanged, tests still pass)
+- [x] Task 5: Update `HANDOFF.md` — Current State = two new skills added; Next Action = Feature Improvements wave (Task 1: analysis caching); In-Flight = None
+
+**Constraint:** Do NOT touch `backend/`, `frontend/`, or `tests/` files.
+
 ## Feature Improvements
 Full plan: `docs/superpowers/plans/2026-05-23-feature-improvements.md`
 

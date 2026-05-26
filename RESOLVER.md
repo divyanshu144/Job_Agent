@@ -14,6 +14,8 @@ When starting a task, match keywords from the user request against this table an
 | `review`, `check`, `audit`, `diff`, `PR`, `quality` | `.claude/skills/fde-review/SKILL.md` |
 | `merge`, `pull request`, `ship`, `deploy`, `checklist` | `.claude/skills/pr-checklist/SKILL.md` |
 | `convention`, `pattern`, `how do I`, `how should I`, `config`, `session`, `async` | `.claude/skills/conventions.md` |
+| `leak`, `secret`, `credential`, `api key`, `filter-repo`, `filter-branch`, `rewrite history`, `remove from history` | `.claude/skills/git-leak-cleanup.md` |
+| `pre-push`, `before push`, `safe to push`, `safe to ship`, `secrets scan`, `sensitive file` | `.claude/skills/pre-push-checklist.md` |
 
 ---
 
