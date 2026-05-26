@@ -84,7 +84,7 @@ export function Discover() {
       .then((runs) => {
         if (runs.length > 0) {
           setLastRun(runs[0]);
-          if (runs[0].status === "complete") loadFeed();
+          if (runs[0].status === "complete" || runs[0].status === "failed") loadFeed();
         }
       })
       .finally(() => setLoading(false));
@@ -100,7 +100,7 @@ export function Discover() {
         setActiveRunId(null);
         setFetching(false);
         setLastRun(run);
-        if (run.status === "complete") loadFeed(profileFilter || undefined, locationFilter || undefined);
+        loadFeed(profileFilter || undefined, locationFilter || undefined);
       }
     }, 3000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
@@ -188,7 +188,7 @@ export function Discover() {
         </div>
       )}
 
-      {feed.length === 0 && lastRun?.status === "complete" && (
+      {feed.length === 0 && (lastRun?.status === "complete" || lastRun?.status === "failed") && (
         <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-xl">
           <p className="text-slate-500">No matched jobs found.</p>
           <p className="text-xs text-slate-400 mt-1">

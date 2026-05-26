@@ -99,7 +99,8 @@ async def _stage2_check(
         f"Candidate summary:\n{compact_profile[:1000]}\n\n"
         "Evaluate if the job posting is relevant to this candidate. "
         'Respond with ONLY valid JSON: {"relevant": true/false, "reason": "one sentence", '
-        '"title": "job title or empty string", "company": "company name or empty string", "location": "city/remote or null"}'
+        '"title": "job title or empty string", "company": "company name or empty string", '
+        '"location": "city/remote or null"}'
     )
     msg = await tracked_call(
         _anthropic_client,
@@ -202,7 +203,9 @@ async def _process_job(
     await db.commit()
 
     try:
-        result = await _run_phase1(raw.raw_text, profile, db, job_id=job.id, run_id=run_id, model=HAIKU)
+        result = await _run_phase1(
+            raw.raw_text, profile, db, job_id=job.id, run_id=run_id, model=HAIKU
+        )
     except Exception as e:
         logger.warning("Phase 1 failed for job %s: %s", job.id, e)
         return
@@ -223,43 +226,58 @@ async def _process_job(
     await db.commit()
 
 
+_DISCOVERY_CONCURRENCY = 5
+
+
 async def _run_discovery_task(run_id: str, source: str) -> None:
     # Background task — must own its own session (cannot receive FastAPI DI)
-    async with SessionLocal() as db:
-        await db.execute(
-            update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(status="running")
-        )
-        await db.commit()
-        try:
+    # Phase 1: setup — fetch jobs and build profile with a single session
+    try:
+        async with SessionLocal() as db:
+            await db.execute(
+                update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(status="running")
+            )
+            await db.commit()
+
             raw_jobs = await fetch_hn_jobs()
             await db.execute(
-                update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(jobs_found=len(raw_jobs))
+                update(DiscoveryRun).where(DiscoveryRun.id == run_id)
+                .values(jobs_found=len(raw_jobs))
             )
             await db.commit()
 
             profiles = _load_search_profiles()
             profile = await get_or_build_profile(db)
             compact = build_compact_profile(profile.yaml_data, profile.cv_text)
+    except Exception as e:
+        logger.error("Discovery run %s setup failed: %s", run_id, e, exc_info=True)
+        async with SessionLocal() as db:
+            await db.execute(
+                update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(
+                    status="failed", completed_at=datetime.now(timezone.utc)
+                )
+            )
+            await db.commit()
+        return
 
-            for raw in raw_jobs:
+    # Phase 2: process jobs concurrently, each with its own session
+    sem = asyncio.Semaphore(_DISCOVERY_CONCURRENCY)
+
+    async def _bounded(raw: RawJob) -> None:
+        async with sem:
+            async with SessionLocal() as db:
                 await _process_job(db, run_id, raw, profiles, profile, compact)
 
-            await db.execute(
-                update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(
-                    status="complete",
-                    completed_at=datetime.now(timezone.utc),
-                )
+    await asyncio.gather(*[_bounded(raw) for raw in raw_jobs], return_exceptions=True)
+
+    async with SessionLocal() as db:
+        await db.execute(
+            update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(
+                status="complete",
+                completed_at=datetime.now(timezone.utc),
             )
-            await db.commit()
-        except Exception as e:
-            logger.error("Discovery run %s failed: %s", run_id, e, exc_info=True)
-            await db.execute(
-                update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(
-                    status="failed",
-                    completed_at=datetime.now(timezone.utc),
-                )
-            )
-            await db.commit()
+        )
+        await db.commit()
 
 
 async def run_discovery(source: str, db: AsyncSession) -> str:

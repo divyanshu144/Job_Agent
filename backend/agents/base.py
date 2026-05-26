@@ -50,6 +50,11 @@ class BaseAgent:
 
     async def _call(self, system: str, user: str) -> str:
         from backend.services.instrumentation import tracked_call
+        # Wrap system in a list block so Anthropic can cache the prefix.
+        # cache_control marks the stable system prompt for reuse across requests
+        # with the same profile (most impactful for job_parser in discovery runs).
+        # Silently no-ops if the prefix is below the model's minimum cacheable size.
+        system_blocks = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
         msg = await tracked_call(
             self._client,
             type(self).__name__.lower(),
@@ -58,7 +63,7 @@ class BaseAgent:
             run_id=self._run_id,
             analysis_id=self._analysis_id,
             max_tokens=MAX_TOKENS,
-            system=system,
+            system=system_blocks,
             messages=[{"role": "user", "content": user}],
         )
         return msg.content[0].text  # type: ignore[union-attr]

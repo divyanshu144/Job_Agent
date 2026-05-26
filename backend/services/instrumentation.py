@@ -25,7 +25,15 @@ async def tracked_call(
     msg = await client.messages.create(model=model, **create_kwargs)  # type: ignore[arg-type]
     latency_ms = int((time.monotonic() - start) * 1000)
     if db is not None:
-        cost = calculate_cost(model, msg.usage.input_tokens, msg.usage.output_tokens)
+        cache_read = getattr(msg.usage, "cache_read_input_tokens", None) or 0
+        cache_write = getattr(msg.usage, "cache_creation_input_tokens", None) or 0
+        cost = calculate_cost(
+            model,
+            msg.usage.input_tokens,
+            msg.usage.output_tokens,
+            cache_read_tokens=cache_read,
+            cache_write_tokens=cache_write,
+        )
         await _write_llm_call(
             db,
             agent_name=agent_name,
