@@ -1,12 +1,77 @@
-.env
-data/cv.pdf
-data/jobfit.db
+# Python
 __pycache__/
-*.pyc
-.mypy_cache/
-.ruff_cache/
-frontend/node_modules/
-frontend/dist/
-.pytest_cache/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.python-version
 *.egg-info/
 dist/
+build/
+.eggs/
+
+# Testing & coverage
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+
+# Database — NEVER commit
+*.db
+*.sqlite
+*.sqlite3
+jobfit.db
+
+# Environment & secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.next/
+.cache/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Data directory — review contents, ignore if personal
+data/*.json
+data/*.yaml
+data/*.yml
+data/cv/
+data/profiles/
+!data/.gitkeep
+!data/schemas/
+!data/fixtures/
+
+# Build artifacts
+.code-review-graph/
+
+# OS
+Thumbs.db
+.DS_Store
