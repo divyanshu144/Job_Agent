@@ -139,9 +139,9 @@ async def _process_job(
     profile: Any,
     compact: str,
 ) -> None:
-    existing = (await db.execute(
-        select(Job).where(Job.dedup_hash == raw.dedup_hash)
-    )).scalar_one_or_none()
+    existing = (
+        await db.execute(select(Job).where(Job.dedup_hash == raw.dedup_hash))
+    ).scalar_one_or_none()
     if existing is not None:
         sources = json.loads(existing.sources)
         if "hn" not in sources:
@@ -171,7 +171,8 @@ async def _process_job(
         await db.commit()
         return
     await db.execute(
-        update(DiscoveryRun).where(DiscoveryRun.id == run_id)
+        update(DiscoveryRun)
+        .where(DiscoveryRun.id == run_id)
         .values(jobs_passed_stage1=DiscoveryRun.jobs_passed_stage1 + 1)
     )
     await db.commit()
@@ -185,9 +186,9 @@ async def _process_job(
         return
 
     await db.execute(
-        update(Job).where(Job.id == job.id).values(
-            title=s2.title, company=s2.company, location=s2.location
-        )
+        update(Job)
+        .where(Job.id == job.id)
+        .values(title=s2.title, company=s2.company, location=s2.location)
     )
     await db.commit()
 
@@ -196,20 +197,25 @@ async def _process_job(
         await db.commit()
         return
     await db.execute(
-        update(DiscoveryRun).where(DiscoveryRun.id == run_id)
+        update(DiscoveryRun)
+        .where(DiscoveryRun.id == run_id)
         .values(jobs_passed_stage2=DiscoveryRun.jobs_passed_stage2 + 1)
     )
     await db.commit()
 
     try:
-        result = await _run_phase1(raw.raw_text, profile, db, job_id=job.id, run_id=run_id, model=HAIKU)
+        result = await _run_phase1(
+            raw.raw_text, profile, db, job_id=job.id, run_id=run_id, model=HAIKU
+        )
     except Exception as e:
         logger.warning("Phase 1 failed for job %s: %s", job.id, e)
         return
 
     matched = _match_profiles(result.score, profiles)
     await db.execute(
-        update(Job).where(Job.id == job.id).values(
+        update(Job)
+        .where(Job.id == job.id)
+        .values(
             relevance_score=result.score,
             matched_profiles=json.dumps(matched),
             state="scored",
@@ -217,7 +223,8 @@ async def _process_job(
     )
     await db.commit()
     await db.execute(
-        update(DiscoveryRun).where(DiscoveryRun.id == run_id)
+        update(DiscoveryRun)
+        .where(DiscoveryRun.id == run_id)
         .values(jobs_scored=DiscoveryRun.jobs_scored + 1)
     )
     await db.commit()
@@ -233,7 +240,9 @@ async def _run_discovery_task(run_id: str, source: str) -> None:
         try:
             raw_jobs = await fetch_hn_jobs()
             await db.execute(
-                update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(jobs_found=len(raw_jobs))
+                update(DiscoveryRun)
+                .where(DiscoveryRun.id == run_id)
+                .values(jobs_found=len(raw_jobs))
             )
             await db.commit()
 
@@ -245,7 +254,9 @@ async def _run_discovery_task(run_id: str, source: str) -> None:
                 await _process_job(db, run_id, raw, profiles, profile, compact)
 
             await db.execute(
-                update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(
+                update(DiscoveryRun)
+                .where(DiscoveryRun.id == run_id)
+                .values(
                     status="complete",
                     completed_at=datetime.now(timezone.utc),
                 )
@@ -254,7 +265,9 @@ async def _run_discovery_task(run_id: str, source: str) -> None:
         except Exception as e:
             logger.error("Discovery run %s failed: %s", run_id, e, exc_info=True)
             await db.execute(
-                update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(
+                update(DiscoveryRun)
+                .where(DiscoveryRun.id == run_id)
+                .values(
                     status="failed",
                     completed_at=datetime.now(timezone.utc),
                 )

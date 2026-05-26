@@ -50,6 +50,7 @@ class BaseAgent:
 
     async def _call(self, system: str, user: str) -> str:
         from backend.services.instrumentation import tracked_call
+
         msg = await tracked_call(
             self._client,
             type(self).__name__.lower(),

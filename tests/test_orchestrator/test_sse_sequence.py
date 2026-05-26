@@ -36,7 +36,9 @@ def stub_agents():
     jp = JobParserOutput(
         required_skills=["Python"], nice_to_have=[], role_type="ML Engineer", seniority="Senior"
     )
-    ms = MatchScorerOutput(score=82, matched_skills=["Python"], missing_skills=[], partial_matches=[])
+    ms = MatchScorerOutput(
+        score=82, matched_skills=["Python"], missing_skills=[], partial_matches=[]
+    )
     ga = GapAnalystOutput(critical_gaps=[], nice_to_have_gaps=[])
     rp = ResourcePlannerOutput(gaps=[])
     cl = CoverLetterOutput(subject="Cover Letter", body="Dear...", tone_notes="confident")
@@ -62,9 +64,19 @@ async def test_evaluate_pipeline_sse_sequence(session, stub_agents):
             new_callable=AsyncMock,
             return_value=mock_profile,
         ),
-        patch("backend.agents.job_parser.JobParserAgent.run", new_callable=AsyncMock, return_value=jp),
-        patch("backend.agents.match_scorer.MatchScorerAgent.run", new_callable=AsyncMock, return_value=ms),
-        patch("backend.agents.gap_analyst.GapAnalystAgent.run", new_callable=AsyncMock, return_value=ga),
+        patch(
+            "backend.agents.job_parser.JobParserAgent.run", new_callable=AsyncMock, return_value=jp
+        ),
+        patch(
+            "backend.agents.match_scorer.MatchScorerAgent.run",
+            new_callable=AsyncMock,
+            return_value=ms,
+        ),
+        patch(
+            "backend.agents.gap_analyst.GapAnalystAgent.run",
+            new_callable=AsyncMock,
+            return_value=ga,
+        ),
     ):
         from backend.services.orchestrator import run_evaluate_pipeline
 
@@ -120,17 +132,31 @@ async def test_generate_pipeline_sse_sequence(session, stub_agents):
         ("match_scorer", ms.model_dump()),
         ("gap_analyst", ga.model_dump()),
     ]:
-        session.add(JobResult(
-            analysis_id=analysis.id,
-            agent_name=name,
-            output_json=json.dumps(output),
-        ))
+        session.add(
+            JobResult(
+                analysis_id=analysis.id,
+                agent_name=name,
+                output_json=json.dumps(output),
+            )
+        )
     await session.commit()
 
     with (
-        patch("backend.agents.resource_planner.ResourcePlannerAgent.run", new_callable=AsyncMock, return_value=rp),
-        patch("backend.agents.cover_letter.CoverLetterAgent.run", new_callable=AsyncMock, return_value=cl),
-        patch("backend.agents.resume_tailorer.ResumeTailorerAgent.run", new_callable=AsyncMock, return_value=rt),
+        patch(
+            "backend.agents.resource_planner.ResourcePlannerAgent.run",
+            new_callable=AsyncMock,
+            return_value=rp,
+        ),
+        patch(
+            "backend.agents.cover_letter.CoverLetterAgent.run",
+            new_callable=AsyncMock,
+            return_value=cl,
+        ),
+        patch(
+            "backend.agents.resume_tailorer.ResumeTailorerAgent.run",
+            new_callable=AsyncMock,
+            return_value=rt,
+        ),
     ):
         from backend.services.orchestrator import run_generate_pipeline
 

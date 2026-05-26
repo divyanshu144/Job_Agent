@@ -97,13 +97,19 @@ async def test_runs_requires_auth(unauthenticated_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_runs_returns_analysis_run(authed_client: AsyncClient, db_session):
     run_id = "test-run-001"
-    db_session.add(LLMCall(
-        agent_name="stage2_haiku", model="claude-haiku-4-5-20251001",
-        input_tokens=500, output_tokens=100, cost_usd=0.0008,
-        latency_ms=800, cache_hit=False,
-        run_id=run_id,
-        created_at=datetime.now(timezone.utc),
-    ))
+    db_session.add(
+        LLMCall(
+            agent_name="stage2_haiku",
+            model="claude-haiku-4-5-20251001",
+            input_tokens=500,
+            output_tokens=100,
+            cost_usd=0.0008,
+            latency_ms=800,
+            cache_hit=False,
+            run_id=run_id,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
     await db_session.commit()
     r = await authed_client.get("/api/metrics/costs/runs")
     assert r.status_code == 200

@@ -69,16 +69,18 @@ async def get_cost_runs(
     for dr in disc_rows:
         agents = await _agent_breakdown(db, run_id=dr.run_id)
         p50 = await _p50_latency(db, run_id=dr.run_id)
-        runs.append(RunCost(
-            id=dr.run_id,
-            type="discovery",
-            created_at=dr.created_at,
-            total_cost_usd=float(dr.total_cost_usd or 0),
-            total_calls=dr.total_calls,
-            cached_calls=dr.cached_calls or 0,
-            latency_p50_ms=p50,
-            agents=agents,
-        ))
+        runs.append(
+            RunCost(
+                id=dr.run_id,
+                type="discovery",
+                created_at=dr.created_at,
+                total_cost_usd=float(dr.total_cost_usd or 0),
+                total_calls=dr.total_calls,
+                cached_calls=dr.cached_calls or 0,
+                latency_p50_ms=p50,
+                agents=agents,
+            )
+        )
 
     # Manual analyses
     anal_rows = (
@@ -100,16 +102,18 @@ async def get_cost_runs(
     for ar in anal_rows:
         agents = await _agent_breakdown(db, analysis_id=ar.analysis_id)
         p50 = await _p50_latency(db, analysis_id=ar.analysis_id)
-        runs.append(RunCost(
-            id=ar.analysis_id,
-            type="analysis",
-            created_at=ar.created_at,
-            total_cost_usd=float(ar.total_cost_usd or 0),
-            total_calls=ar.total_calls,
-            cached_calls=ar.cached_calls or 0,
-            latency_p50_ms=p50,
-            agents=agents,
-        ))
+        runs.append(
+            RunCost(
+                id=ar.analysis_id,
+                type="analysis",
+                created_at=ar.created_at,
+                total_cost_usd=float(ar.total_cost_usd or 0),
+                total_calls=ar.total_calls,
+                cached_calls=ar.cached_calls or 0,
+                latency_p50_ms=p50,
+                agents=agents,
+            )
+        )
 
     runs.sort(key=lambda r: r.created_at, reverse=True)
     return runs

@@ -45,6 +45,7 @@ async def test_cache_hit_returns_existing_analysis(session):
 
     # Pre-seed a complete analysis with the same JD
     import hashlib
+
     jd_hash = hashlib.sha256(f"{JD}::p1".encode()).hexdigest()
     existing = Analysis(
         jd_text=JD,
@@ -55,11 +56,15 @@ async def test_cache_hit_returns_existing_analysis(session):
     )
     session.add(existing)
     await session.flush()
-    session.add(JobResult(
-        analysis_id=existing.id,
-        agent_name="match_scorer",
-        output_json=json.dumps({"score": 75, "matched_skills": [], "missing_skills": [], "partial_matches": []}),
-    ))
+    session.add(
+        JobResult(
+            analysis_id=existing.id,
+            agent_name="match_scorer",
+            output_json=json.dumps(
+                {"score": 75, "matched_skills": [], "missing_skills": [], "partial_matches": []}
+            ),
+        )
+    )
     await session.commit()
 
     with patch(
@@ -68,6 +73,7 @@ async def test_cache_hit_returns_existing_analysis(session):
         return_value=profile,
     ):
         from backend.services.orchestrator import run_evaluate_pipeline
+
         events = []
         async for event in run_evaluate_pipeline(JD, session):
             events.append(event)
@@ -90,17 +96,36 @@ async def test_cache_miss_runs_pipeline(session):
         last_refreshed_at=datetime.now(timezone.utc),
     )
 
-    jp = JobParserOutput(required_skills=["Python"], nice_to_have=[], role_type="ML", seniority="Senior")
-    ms = MatchScorerOutput(score=80, matched_skills=["Python"], missing_skills=[], partial_matches=[])
+    jp = JobParserOutput(
+        required_skills=["Python"], nice_to_have=[], role_type="ML", seniority="Senior"
+    )
+    ms = MatchScorerOutput(
+        score=80, matched_skills=["Python"], missing_skills=[], partial_matches=[]
+    )
     ga = GapAnalystOutput(critical_gaps=[], nice_to_have_gaps=[])
 
     with (
-        patch("backend.services.orchestrator.get_or_build_profile", new_callable=AsyncMock, return_value=profile),
-        patch("backend.agents.job_parser.JobParserAgent.run", new_callable=AsyncMock, return_value=jp),
-        patch("backend.agents.match_scorer.MatchScorerAgent.run", new_callable=AsyncMock, return_value=ms),
-        patch("backend.agents.gap_analyst.GapAnalystAgent.run", new_callable=AsyncMock, return_value=ga),
+        patch(
+            "backend.services.orchestrator.get_or_build_profile",
+            new_callable=AsyncMock,
+            return_value=profile,
+        ),
+        patch(
+            "backend.agents.job_parser.JobParserAgent.run", new_callable=AsyncMock, return_value=jp
+        ),
+        patch(
+            "backend.agents.match_scorer.MatchScorerAgent.run",
+            new_callable=AsyncMock,
+            return_value=ms,
+        ),
+        patch(
+            "backend.agents.gap_analyst.GapAnalystAgent.run",
+            new_callable=AsyncMock,
+            return_value=ga,
+        ),
     ):
         from backend.services.orchestrator import run_evaluate_pipeline
+
         events = []
         async for event in run_evaluate_pipeline(JD, session):
             events.append(event)
@@ -124,6 +149,7 @@ async def test_partial_cache_not_reused(session):
     await session.flush()
 
     import hashlib
+
     jd_hash = hashlib.sha256(f"{JD}::p3".encode()).hexdigest()
     partial_analysis = Analysis(
         jd_text=JD, profile_id="p3", partial=True, evaluate_only=True, jd_hash=jd_hash
@@ -131,17 +157,36 @@ async def test_partial_cache_not_reused(session):
     session.add(partial_analysis)
     await session.commit()
 
-    jp = JobParserOutput(required_skills=["Python"], nice_to_have=[], role_type="ML", seniority="Senior")
-    ms = MatchScorerOutput(score=80, matched_skills=["Python"], missing_skills=[], partial_matches=[])
+    jp = JobParserOutput(
+        required_skills=["Python"], nice_to_have=[], role_type="ML", seniority="Senior"
+    )
+    ms = MatchScorerOutput(
+        score=80, matched_skills=["Python"], missing_skills=[], partial_matches=[]
+    )
     ga = GapAnalystOutput(critical_gaps=[], nice_to_have_gaps=[])
 
     with (
-        patch("backend.services.orchestrator.get_or_build_profile", new_callable=AsyncMock, return_value=profile),
-        patch("backend.agents.job_parser.JobParserAgent.run", new_callable=AsyncMock, return_value=jp),
-        patch("backend.agents.match_scorer.MatchScorerAgent.run", new_callable=AsyncMock, return_value=ms),
-        patch("backend.agents.gap_analyst.GapAnalystAgent.run", new_callable=AsyncMock, return_value=ga),
+        patch(
+            "backend.services.orchestrator.get_or_build_profile",
+            new_callable=AsyncMock,
+            return_value=profile,
+        ),
+        patch(
+            "backend.agents.job_parser.JobParserAgent.run", new_callable=AsyncMock, return_value=jp
+        ),
+        patch(
+            "backend.agents.match_scorer.MatchScorerAgent.run",
+            new_callable=AsyncMock,
+            return_value=ms,
+        ),
+        patch(
+            "backend.agents.gap_analyst.GapAnalystAgent.run",
+            new_callable=AsyncMock,
+            return_value=ga,
+        ),
     ):
         from backend.services.orchestrator import run_evaluate_pipeline
+
         events = []
         async for event in run_evaluate_pipeline(JD, session):
             events.append(event)

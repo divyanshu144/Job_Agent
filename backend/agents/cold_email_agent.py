@@ -19,8 +19,7 @@ class ColdEmailAgent(BaseAgent):
     ) -> ColdEmailOutput:
         template = self._load_prompt("cold_email")
         system = (
-            template
-            .replace("{profile}", profile)
+            template.replace("{profile}", profile)
             .replace("{jd}", jd)
             .replace("{contact_name}", contact_name or "")
             .replace("{contact_title}", contact_title or "")

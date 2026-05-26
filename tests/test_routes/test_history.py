@@ -32,7 +32,9 @@ async def client_with_data():
         )
         s.add(p)
         await s.flush()
-        a = Analysis(jd_text="Senior ML Engineer " * 5, profile_id=p.id, partial=False, user_id=_FAKE_USER.id)
+        a = Analysis(
+            jd_text="Senior ML Engineer " * 5, profile_id=p.id, partial=False, user_id=_FAKE_USER.id
+        )
         s.add(a)
         await s.flush()
         s.add(

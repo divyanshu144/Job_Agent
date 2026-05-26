@@ -34,7 +34,9 @@ async def test_build_profile_merges_sources(session, tmp_path):
     )
 
     # Populate GitHub cache
-    cache = GithubCache(owner="divyanshu144", repo_name="docchat", readme_content="# DocChat README")
+    cache = GithubCache(
+        owner="divyanshu144", repo_name="docchat", readme_content="# DocChat README"
+    )
     session.add(cache)
     await session.commit()
 
