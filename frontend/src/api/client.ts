@@ -1,4 +1,4 @@
-import type { ProfileResponse, ProfileStatusResponse, GitHubRefreshResponse, AnalysisDetail, AgentName, SSECallbacks, DiscoveryRun, DiscoveryFeedResponse, User, RunCost, CostSummary, Contact, ColdEmailDraft } from "../types";
+import type { ProfileResponse, AnalysisDetail, AgentName, SSECallbacks, DiscoveryRun, DiscoveryFeedResponse, User, RunCost, CostSummary, Contact, ColdEmailDraft, InviteResponse, ReferralEntry } from "../types";
 
 const BASE = "/api";
 
@@ -32,12 +32,6 @@ export const api = {
     const r = await fetch(`${BASE}/profile/cv`, { method: "POST", body: form, credentials: "include" });
     if (!r.ok) throw new Error(`CV upload failed: ${r.status}`);
     return r.json() as Promise<ProfileResponse>;
-  },
-  getProfileStatus: () => get<ProfileStatusResponse>("/profile/status"),
-  refreshGithub: async (): Promise<GitHubRefreshResponse> => {
-    const r = await fetch(`${BASE}/profile/refresh/github`, { method: "POST", credentials: "include" });
-    if (!r.ok) throw new Error(`GitHub refresh failed: ${r.status}`);
-    return r.json() as Promise<GitHubRefreshResponse>;
   },
   getAnalysis: (id: string) => get<AnalysisDetail>(`/analysis/${id}`),
   triggerDiscovery: async (source: string): Promise<{ run_id: string }> => {
@@ -83,11 +77,11 @@ export const api = {
     }
     return r.json() as Promise<User>;
   },
-  register: async (email: string, password: string, inviteToken?: string): Promise<User> => {
+  register: async (email: string, password: string, inviteToken?: string, referralCode?: string): Promise<User> => {
     const r = await fetch(`${BASE}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, invite_token: inviteToken }),
+      body: JSON.stringify({ email, password, invite_token: inviteToken ?? null, referral_code: referralCode ?? null }),
       credentials: "include",
     });
     if (!r.ok) {
@@ -96,6 +90,7 @@ export const api = {
     }
     return r.json() as Promise<User>;
   },
+  getReferrals: () => get<ReferralEntry[]>("/auth/referrals"),
   logout: async (): Promise<void> => {
     await fetch(`${BASE}/auth/logout`, { method: "POST", credentials: "include" });
   },
@@ -109,6 +104,8 @@ export const api = {
     post<ColdEmailDraft>(`/contacts/${contactId}/draft`, {}),
   sendEmail: (contactId: string) =>
     post<{ sent: boolean }>(`/contacts/${contactId}/send`, {}),
+  createInvite: (email?: string) =>
+    post<InviteResponse>("/auth/invite", { email: email || null }),
 };
 
 function _streamSSE(url: string, init: RequestInit, callbacks: SSECallbacks): () => void {

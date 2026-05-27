@@ -26,13 +26,14 @@ async def client_with_data():
         p = Profile(
             yaml_data="x",
             cv_text="",
-            github_data="{}",
             merged_profile="x",
             last_refreshed_at=datetime.now(timezone.utc),
         )
         s.add(p)
         await s.flush()
-        a = Analysis(jd_text="Senior ML Engineer " * 5, profile_id=p.id, partial=False, user_id=_FAKE_USER.id)
+        a = Analysis(
+            jd_text="Senior ML Engineer " * 5, profile_id=p.id, partial=False, user_id=_FAKE_USER.id
+        )
         s.add(a)
         await s.flush()
         s.add(

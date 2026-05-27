@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 async def test_strip_html_removes_tags_and_decodes_entities():
     from backend.services.hn_client import _strip_html
+
     result = _strip_html("<p>We&#39;re hiring a <b>Python</b> engineer.</p>")
     assert "<" not in result
     assert "Python" in result
@@ -25,6 +26,7 @@ async def test_fetch_hn_jobs_returns_empty_when_no_thread():
 
     with patch("httpx.AsyncClient", return_value=mock_client):
         from backend.services.hn_client import fetch_hn_jobs
+
         jobs = await fetch_hn_jobs()
 
     assert jobs == []
@@ -38,13 +40,20 @@ async def test_fetch_hn_jobs_skips_short_comments():
 
     comments_resp = MagicMock()
     comments_resp.raise_for_status = MagicMock()
-    comments_resp.json = MagicMock(return_value={
-        "hits": [
-            {"objectID": "222", "comment_text": "<p>Short</p>"},
-            {"objectID": "333", "comment_text": "<p>" + "We are hiring a Python engineer with 5+ years experience. " * 5 + "</p>"},
-        ],
-        "nbPages": 1,
-    })
+    comments_resp.json = MagicMock(
+        return_value={
+            "hits": [
+                {"objectID": "222", "comment_text": "<p>Short</p>"},
+                {
+                    "objectID": "333",
+                    "comment_text": "<p>"
+                    + "We are hiring a Python engineer with 5+ years experience. " * 5
+                    + "</p>",
+                },
+            ],
+            "nbPages": 1,
+        }
+    )
 
     call_count = 0
     mock_client = AsyncMock()
@@ -59,8 +68,10 @@ async def test_fetch_hn_jobs_skips_short_comments():
     mock_client.get = fake_get
 
     with patch("httpx.AsyncClient", return_value=mock_client):
-        from backend.services import hn_client
         import importlib
+
+        from backend.services import hn_client
+
         importlib.reload(hn_client)
         jobs = await hn_client.fetch_hn_jobs()
 
@@ -71,7 +82,9 @@ async def test_fetch_hn_jobs_skips_short_comments():
 async def test_raw_job_has_correct_fields():
     """RawJob.dedup_hash is sha256 of raw_text."""
     import hashlib
+
     from backend.services.hn_client import RawJob
+
     text = "some job text here"
     job = RawJob(
         source_id="x",

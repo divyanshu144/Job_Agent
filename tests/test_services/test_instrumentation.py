@@ -1,7 +1,9 @@
 # tests/test_services/test_instrumentation.py
-import pytest
 from unittest.mock import AsyncMock, MagicMock
-from backend.services.instrumentation import tracked_call, log_cache_hit
+
+import pytest
+
+from backend.services.instrumentation import log_cache_hit, tracked_call
 
 
 @pytest.fixture
@@ -18,10 +20,7 @@ def mock_client():
 @pytest.mark.asyncio
 async def test_tracked_call_returns_message(mock_client):
     client, msg = mock_client
-    result = await tracked_call(
-        client, "test_agent", "claude-sonnet-4-6",
-        system="s", messages=[]
-    )
+    result = await tracked_call(client, "test_agent", "claude-sonnet-4-6", system="s", messages=[])
     assert result is msg
 
 
@@ -40,8 +39,7 @@ async def test_tracked_call_db_failure_does_not_raise(mock_client):
     bad_db.commit = AsyncMock(side_effect=Exception("DB is down"))
     # must return message even when DB write fails
     result = await tracked_call(
-        client, "test_agent", "claude-sonnet-4-6",
-        db=bad_db, system="s", messages=[]
+        client, "test_agent", "claude-sonnet-4-6", db=bad_db, system="s", messages=[]
     )
     assert result.content[0].text == "response text"
 

@@ -1,5 +1,11 @@
 import pytest
-from backend.services.auth_service import hash_password, verify_password, create_access_token, decode_token
+
+from backend.services.auth_service import (
+    create_access_token,
+    decode_token,
+    hash_password,
+    verify_password,
+)
 
 
 def test_hash_and_verify():
@@ -15,5 +21,6 @@ def test_token_roundtrip():
 
 def test_invalid_token_raises():
     from jose import JWTError
+
     with pytest.raises(JWTError):
         decode_token("not.a.valid.token")

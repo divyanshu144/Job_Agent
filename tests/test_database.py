@@ -1,4 +1,3 @@
-
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -28,7 +27,7 @@ async def test_tables_created(engine):
 async def test_profile_insert(engine):
     Session = async_sessionmaker(engine, expire_on_commit=False)
     async with Session() as session:
-        p = Profile(yaml_data="name: test", cv_text="", github_data="{}", merged_profile="test")
+        p = Profile(yaml_data="name: test", cv_text="", merged_profile="test")
         session.add(p)
         await session.commit()
         await session.refresh(p)
@@ -39,7 +38,7 @@ async def test_profile_insert(engine):
 async def test_analysis_with_results(engine):
     Session = async_sessionmaker(engine, expire_on_commit=False)
     async with Session() as session:
-        p = Profile(yaml_data="x", cv_text="", github_data="{}", merged_profile="x")
+        p = Profile(yaml_data="x", cv_text="", merged_profile="x")
         session.add(p)
         await session.flush()
         a = Analysis(jd_text="Senior ML Engineer", profile_id=p.id)

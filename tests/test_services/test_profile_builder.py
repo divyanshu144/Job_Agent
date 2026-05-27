@@ -1,4 +1,3 @@
-import json
 from unittest.mock import AsyncMock, patch
 
 import pytest_asyncio
@@ -10,7 +9,6 @@ from backend.database import Base
 
 @pytest_asyncio.fixture(loop_scope="function")
 async def session():
-    # StaticPool ensures all connections reuse the same underlying SQLite DB.
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -25,61 +23,62 @@ async def session():
 
 
 async def test_build_profile_merges_sources(session, tmp_path):
-    from backend.models import GithubCache
-
     yaml_path = tmp_path / "profile.yaml"
-    yaml_path.write_text(
-        "identity:\n  name: Test User\ncore_skills:\n  languages: [Python]\n"
-        "featured_projects:\n  - repo: divyanshu144/docchat\n"
-    )
-
-    # Populate GitHub cache
-    cache = GithubCache(owner="divyanshu144", repo_name="docchat", readme_content="# DocChat README")
-    session.add(cache)
-    await session.commit()
+    yaml_path.write_text("identity:\n  name: Test User\ncore_skills:\n  languages: [Python]\n")
 
     with patch(
-        "backend.services.cv_parser.extract_text_from_file", new_callable=AsyncMock
+        "backend.services.profile_builder.extract_text_from_file", new_callable=AsyncMock
     ) as mock_cv:
-        mock_cv.return_value = ""
+        mock_cv.return_value = "Experienced Python developer"
         from backend.services.profile_builder import build_profile
 
         profile = await build_profile(session, str(yaml_path), "fake/cv.pdf")
 
     assert profile.id is not None
     assert "Test User" in profile.yaml_data
-    assert profile.cv_text == ""
-    github = json.loads(profile.github_data)
-    assert "divyanshu144/docchat" in github
+    assert profile.cv_text == "Experienced Python developer"
     assert "## Candidate Profile" in profile.merged_profile
-    assert "DocChat" in profile.merged_profile
+    assert "CV Text" in profile.merged_profile
+
+
+async def test_build_profile_no_cv(session, tmp_path):
+    yaml_path = tmp_path / "profile.yaml"
+    yaml_path.write_text("identity:\n  name: No CV\n")
+
+    with patch(
+        "backend.services.profile_builder.extract_text_from_file", new_callable=AsyncMock
+    ) as mock_cv:
+        mock_cv.return_value = ""
+        from backend.services.profile_builder import build_profile
+
+        profile = await build_profile(session, str(yaml_path), "fake/cv.pdf")
+
+    assert "No CV" in profile.yaml_data
+    assert "CV Text" not in profile.merged_profile
 
 
 async def test_get_or_build_returns_cached(session, tmp_path):
     yaml_path = tmp_path / "profile.yaml"
-    yaml_path.write_text("identity:\n  name: Cached\nfeatured_projects: []\n")
+    yaml_path.write_text("identity:\n  name: Cached\n")
 
     with patch(
-        "backend.services.cv_parser.extract_text_from_file",
+        "backend.services.profile_builder.extract_text_from_file",
         new_callable=AsyncMock,
         return_value="",
     ):
         from backend.services.profile_builder import build_profile
 
         p1 = await build_profile(session, str(yaml_path), "fake/cv.pdf")
-        # get_or_build_profile will use settings paths —
-        # override by directly calling build again isn't needed
-        # Just verify p1 was created with correct id
         assert p1.id is not None
 
 
 async def test_get_or_build_creates_when_none(session, tmp_path):
     yaml_path = tmp_path / "profile.yaml"
-    yaml_path.write_text("identity:\n  name: New\nfeatured_projects: []\n")
+    yaml_path.write_text("identity:\n  name: New\n")
 
     with (
         patch(
-            "backend.services.cv_parser.extract_text_from_file",
+            "backend.services.profile_builder.extract_text_from_file",
             new_callable=AsyncMock,
             return_value="",
         ),

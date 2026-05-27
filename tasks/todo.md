@@ -28,6 +28,17 @@ Full plan: `docs/superpowers/plans/2026-05-23-pipeline-optimisation.md`
 - [x] Task 5: Add "Definition of Done" section to CLAUDE.md
 - [x] Task 6: Verify — 131 tests still pass, make check runs cleanly
 
+## Referral System (Option B — full tracking)
+
+- [x] Task 1: `models.py` — add `referral_code` (unique, indexed, auto-generated) + `referred_by` (FK → users.id, nullable) to `User`
+- [x] Task 2: `database.py` — add `_migrate_add_columns()` helper called from `init_db()` to `ALTER TABLE` add new columns on existing DBs (SQLite has no `ADD COLUMN IF NOT EXISTS`)
+- [x] Task 3: `schemas.py` — add `referral_code: str | None = None` to `UserCreate`; add `referral_code: str` to `UserResponse`; add `ReferralEntry` schema `{email, joined_at}`
+- [x] Task 4: `routes/auth.py` — update register: accept `referral_code` as alternative to `invite_token` for non-first users; add `GET /api/auth/referrals` returning list of users referred by current user
+- [x] Task 5: `types/index.ts` — add `referral_code: string` to `User`; add `ReferralEntry` interface
+- [x] Task 6: `api/client.ts` — add `getReferrals()`; update `register()` to accept `referralCode` param
+- [x] Task 7: `ProfileSetup.tsx` — add referral section: permanent link (`/register?ref={code}`) with copy button + table of referrals (email, joined date, count badge)
+- [x] Task 8: `Register.tsx` — read `?ref=` from URL, pass to register API; show appropriate message when arriving via referral link
+
 ## Feature Improvements
 Full plan: `docs/superpowers/plans/2026-05-23-feature-improvements.md`
 

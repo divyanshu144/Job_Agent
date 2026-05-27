@@ -4,7 +4,7 @@ import json
 
 from pydantic import ValidationError
 
-from backend.agents.base import BaseAgent, HAIKU
+from backend.agents.base import HAIKU, BaseAgent
 from backend.agents.job_parser import AgentError, _parse_json
 from backend.schemas import MatchScorerOutput, PriorOutputs
 

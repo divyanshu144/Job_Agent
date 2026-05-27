@@ -140,9 +140,9 @@ async def _process_job(
     profile: Any,
     compact: str,
 ) -> None:
-    existing = (await db.execute(
-        select(Job).where(Job.dedup_hash == raw.dedup_hash)
-    )).scalar_one_or_none()
+    existing = (
+        await db.execute(select(Job).where(Job.dedup_hash == raw.dedup_hash))
+    ).scalar_one_or_none()
     if existing is not None:
         sources = json.loads(existing.sources)
         if "hn" not in sources:
@@ -172,7 +172,8 @@ async def _process_job(
         await db.commit()
         return
     await db.execute(
-        update(DiscoveryRun).where(DiscoveryRun.id == run_id)
+        update(DiscoveryRun)
+        .where(DiscoveryRun.id == run_id)
         .values(jobs_passed_stage1=DiscoveryRun.jobs_passed_stage1 + 1)
     )
     await db.commit()
@@ -186,9 +187,9 @@ async def _process_job(
         return
 
     await db.execute(
-        update(Job).where(Job.id == job.id).values(
-            title=s2.title, company=s2.company, location=s2.location
-        )
+        update(Job)
+        .where(Job.id == job.id)
+        .values(title=s2.title, company=s2.company, location=s2.location)
     )
     await db.commit()
 
@@ -197,7 +198,8 @@ async def _process_job(
         await db.commit()
         return
     await db.execute(
-        update(DiscoveryRun).where(DiscoveryRun.id == run_id)
+        update(DiscoveryRun)
+        .where(DiscoveryRun.id == run_id)
         .values(jobs_passed_stage2=DiscoveryRun.jobs_passed_stage2 + 1)
     )
     await db.commit()
@@ -212,7 +214,9 @@ async def _process_job(
 
     matched = _match_profiles(result.score, profiles)
     await db.execute(
-        update(Job).where(Job.id == job.id).values(
+        update(Job)
+        .where(Job.id == job.id)
+        .values(
             relevance_score=result.score,
             matched_profiles=json.dumps(matched),
             state="scored",
@@ -220,7 +224,8 @@ async def _process_job(
     )
     await db.commit()
     await db.execute(
-        update(DiscoveryRun).where(DiscoveryRun.id == run_id)
+        update(DiscoveryRun)
+        .where(DiscoveryRun.id == run_id)
         .values(jobs_scored=DiscoveryRun.jobs_scored + 1)
     )
     await db.commit()
@@ -241,7 +246,8 @@ async def _run_discovery_task(run_id: str, source: str) -> None:
 
             raw_jobs = await fetch_hn_jobs()
             await db.execute(
-                update(DiscoveryRun).where(DiscoveryRun.id == run_id)
+                update(DiscoveryRun)
+                .where(DiscoveryRun.id == run_id)
                 .values(jobs_found=len(raw_jobs))
             )
             await db.commit()
@@ -253,9 +259,9 @@ async def _run_discovery_task(run_id: str, source: str) -> None:
         logger.error("Discovery run %s setup failed: %s", run_id, e, exc_info=True)
         async with SessionLocal() as db:
             await db.execute(
-                update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(
-                    status="failed", completed_at=datetime.now(timezone.utc)
-                )
+                update(DiscoveryRun)
+                .where(DiscoveryRun.id == run_id)
+                .values(status="failed", completed_at=datetime.now(timezone.utc))
             )
             await db.commit()
         return
@@ -272,7 +278,9 @@ async def _run_discovery_task(run_id: str, source: str) -> None:
 
     async with SessionLocal() as db:
         await db.execute(
-            update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(
+            update(DiscoveryRun)
+            .where(DiscoveryRun.id == run_id)
+            .values(
                 status="complete",
                 completed_at=datetime.now(timezone.utc),
             )

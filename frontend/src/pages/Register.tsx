@@ -7,6 +7,7 @@ export function Register() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const inviteToken = searchParams.get("token") ?? undefined;
+  const referralCode = searchParams.get("ref") ?? undefined;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,7 +19,7 @@ export function Register() {
     setError(null);
     setLoading(true);
     try {
-      await register(email, password, inviteToken);
+      await register(email, password, inviteToken, referralCode);
       navigate("/");
     } catch (err) {
       setError((err as Error).message);
@@ -33,9 +34,11 @@ export function Register() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Create account</h1>
           {inviteToken ? (
-            <p className="text-sm text-emerald-600 mt-1">You have a valid invite.</p>
+            <p className="text-sm text-emerald-600 mt-1">You have a valid invite — fill in your details below.</p>
+          ) : referralCode ? (
+            <p className="text-sm text-emerald-600 mt-1">You were referred — fill in your details below.</p>
           ) : (
-            <p className="text-sm text-slate-500 mt-1">First user gets admin access.</p>
+            <p className="text-sm text-slate-500 mt-1">You need an invite or referral link to register. Ask an existing user to share theirs.</p>
           )}
         </div>
         {error && (

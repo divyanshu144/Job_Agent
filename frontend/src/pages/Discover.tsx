@@ -10,6 +10,8 @@ const FUNNEL_STEPS: { key: keyof FunnelMetrics; label: string; bar: string }[] =
   { key: "scored",        label: "Scored",   bar: "bg-emerald-500" },
 ];
 
+const isTerminal = (status: string) => status === "complete" || status === "failed";
+
 function FunnelBar({ run }: { run: DiscoveryRun }) {
   const f = run.funnel;
   const isRunning = run.status === "running" || run.status === "pending";
@@ -84,7 +86,7 @@ export function Discover() {
       .then((runs) => {
         if (runs.length > 0) {
           setLastRun(runs[0]);
-          if (runs[0].status === "complete" || runs[0].status === "failed") loadFeed();
+          if (isTerminal(runs[0].status)) loadFeed();
         }
       })
       .finally(() => setLoading(false));
@@ -95,7 +97,7 @@ export function Discover() {
     pollRef.current = setInterval(async () => {
       const run = await api.getDiscoveryRun(activeRunId);
       setActiveRun(run);
-      if (run.status === "complete" || run.status === "failed") {
+      if (isTerminal(run.status)) {
         clearInterval(pollRef.current!);
         setActiveRunId(null);
         setFetching(false);
@@ -188,7 +190,7 @@ export function Discover() {
         </div>
       )}
 
-      {feed.length === 0 && (lastRun?.status === "complete" || lastRun?.status === "failed") && (
+      {feed.length === 0 && lastRun && isTerminal(lastRun.status) && (
         <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-xl">
           <p className="text-slate-500">No matched jobs found.</p>
           <p className="text-xs text-slate-400 mt-1">

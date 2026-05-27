@@ -70,7 +70,9 @@ async def get_discovery_run(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryRunResponse:
-    run = (await db.execute(select(DiscoveryRun).where(DiscoveryRun.id == run_id))).scalar_one_or_none()
+    run = (
+        await db.execute(select(DiscoveryRun).where(DiscoveryRun.id == run_id))
+    ).scalar_one_or_none()
     if run is None:
         raise HTTPException(status_code=404, detail=f"Discovery run {run_id} not found")
     return _run_to_response(run)
@@ -82,10 +84,10 @@ async def list_discovery_runs(
     db: AsyncSession = Depends(get_db),
 ) -> list[DiscoveryRunResponse]:
     runs = (
-        await db.execute(
-            select(DiscoveryRun).order_by(DiscoveryRun.started_at.desc()).limit(20)
-        )
-    ).scalars().all()
+        (await db.execute(select(DiscoveryRun).order_by(DiscoveryRun.started_at.desc()).limit(20)))
+        .scalars()
+        .all()
+    )
     return [_run_to_response(r) for r in runs]
 
 

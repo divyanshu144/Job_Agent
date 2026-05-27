@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
@@ -18,22 +19,11 @@ class Profile(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
     yaml_data: Mapped[str] = mapped_column(Text)
     cv_text: Mapped[str] = mapped_column(Text, default="")
-    github_data: Mapped[str] = mapped_column(Text, default="{}")
     merged_profile: Mapped[str] = mapped_column(Text, default="")
     last_refreshed_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    github_last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
-    user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, default=None)
-
-
-class GithubCache(Base):
-    __tablename__ = "github_cache"
-    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
-    owner: Mapped[str] = mapped_column(String, nullable=False)
-    repo_name: Mapped[str] = mapped_column(String, nullable=False)
-    readme_content: Mapped[str] = mapped_column(Text, default="")
-    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    last_modified: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
-    __table_args__ = (UniqueConstraint("owner", "repo_name", name="uq_github_cache_repo"),)
+    user_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("users.id"), nullable=True, default=None
+    )
 
 
 class User(Base):
@@ -44,6 +34,12 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    referral_code: Mapped[str] = mapped_column(
+        String, unique=True, index=True, default=lambda: secrets.token_urlsafe(8)
+    )
+    referred_by: Mapped[str | None] = mapped_column(
+        String, ForeignKey("users.id"), nullable=True, default=None
+    )
 
 
 class InviteToken(Base):
@@ -52,7 +48,9 @@ class InviteToken(Base):
     token: Mapped[str] = mapped_column(String, unique=True, index=True)
     email: Mapped[str | None] = mapped_column(String, nullable=True)
     created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"))
-    used_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, default=None)
+    used_by: Mapped[str | None] = mapped_column(
+        String, ForeignKey("users.id"), nullable=True, default=None
+    )
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
 
@@ -101,7 +99,7 @@ class DiscoveryRun(Base):
 class Job(Base):
     __tablename__ = "jobs"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
-    sources: Mapped[str] = mapped_column(Text, default='[]')  # JSON array of source names
+    sources: Mapped[str] = mapped_column(Text, default="[]")  # JSON array of source names
     source_id: Mapped[str] = mapped_column(String, default="")
     source_url: Mapped[str] = mapped_column(String, default="")
     title: Mapped[str] = mapped_column(String, default="")
@@ -112,7 +110,7 @@ class Job(Base):
     discovered_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     state: Mapped[str] = mapped_column(String, default="discovered", index=True)
     relevance_score: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
-    matched_profiles: Mapped[str] = mapped_column(Text, default='[]')
+    matched_profiles: Mapped[str] = mapped_column(Text, default="[]")
     discovery_run_id: Mapped[str] = mapped_column(String, ForeignKey("discovery_runs.id"))
     run: Mapped[DiscoveryRun] = relationship("DiscoveryRun", back_populates="jobs")
 
@@ -127,8 +125,12 @@ class Analysis(Base):
     evaluate_only: Mapped[bool] = mapped_column(Boolean, default=False)
     jd_hash: Mapped[str] = mapped_column(String, default="", index=True)
     status: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
-    job_id: Mapped[str | None] = mapped_column(String, ForeignKey("jobs.id"), nullable=True, default=None)
-    user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, default=None)
+    job_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("jobs.id"), nullable=True, default=None
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("users.id"), nullable=True, default=None
+    )
     results: Mapped[list[JobResult]] = relationship("JobResult", back_populates="analysis")
     contacts: Mapped[list[Contact]] = relationship("Contact", back_populates="analysis")
 
