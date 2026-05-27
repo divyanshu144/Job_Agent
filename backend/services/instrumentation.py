@@ -22,7 +22,7 @@ async def tracked_call(
     **create_kwargs: Any,
 ) -> anthropic.types.Message:
     start = time.monotonic()
-    msg = await client.messages.create(model=model, **create_kwargs)  # type: ignore[arg-type]
+    msg: anthropic.types.Message = await client.messages.create(model=model, **create_kwargs)
     latency_ms = int((time.monotonic() - start) * 1000)
     if db is not None:
         cache_read = getattr(msg.usage, "cache_read_input_tokens", None) or 0

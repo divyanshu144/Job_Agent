@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from fastapi import APIRouter, Depends
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, Depends
 
 from backend.database import get_db
 from backend.models import LLMCall, User
@@ -21,8 +21,8 @@ async def get_cost_summary(
         await db.execute(
             select(
                 func.count(LLMCall.id).label("total_calls"),
-                func.sum(case((LLMCall.cache_hit == False, 1), else_=0)).label("real_calls"),
-                func.sum(case((LLMCall.cache_hit == True, 1), else_=0)).label("cached_calls"),
+                func.sum(case((LLMCall.cache_hit.is_(False), 1), else_=0)).label("real_calls"),
+                func.sum(case((LLMCall.cache_hit.is_(True), 1), else_=0)).label("cached_calls"),
                 func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("total_cost_usd"),
                 func.coalesce(func.sum(LLMCall.input_tokens), 0).label("total_input_tokens"),
                 func.coalesce(func.sum(LLMCall.output_tokens), 0).label("total_output_tokens"),
@@ -56,7 +56,7 @@ async def get_cost_runs(
                 LLMCall.run_id,
                 func.sum(LLMCall.cost_usd).label("total_cost_usd"),
                 func.count(LLMCall.id).label("total_calls"),
-                func.sum(case((LLMCall.cache_hit == True, 1), else_=0)).label("cached_calls"),
+                func.sum(case((LLMCall.cache_hit.is_(True), 1), else_=0)).label("cached_calls"),
                 func.min(LLMCall.created_at).label("created_at"),
             )
             .where(LLMCall.run_id.isnot(None))
@@ -69,16 +69,18 @@ async def get_cost_runs(
     for dr in disc_rows:
         agents = await _agent_breakdown(db, run_id=dr.run_id)
         p50 = await _p50_latency(db, run_id=dr.run_id)
-        runs.append(RunCost(
-            id=dr.run_id,
-            type="discovery",
-            created_at=dr.created_at,
-            total_cost_usd=float(dr.total_cost_usd or 0),
-            total_calls=dr.total_calls,
-            cached_calls=dr.cached_calls or 0,
-            latency_p50_ms=p50,
-            agents=agents,
-        ))
+        runs.append(
+            RunCost(
+                id=dr.run_id,
+                type="discovery",
+                created_at=dr.created_at,
+                total_cost_usd=float(dr.total_cost_usd or 0),
+                total_calls=dr.total_calls,
+                cached_calls=dr.cached_calls or 0,
+                latency_p50_ms=p50,
+                agents=agents,
+            )
+        )
 
     # Manual analyses
     anal_rows = (
@@ -87,7 +89,7 @@ async def get_cost_runs(
                 LLMCall.analysis_id,
                 func.sum(LLMCall.cost_usd).label("total_cost_usd"),
                 func.count(LLMCall.id).label("total_calls"),
-                func.sum(case((LLMCall.cache_hit == True, 1), else_=0)).label("cached_calls"),
+                func.sum(case((LLMCall.cache_hit.is_(True), 1), else_=0)).label("cached_calls"),
                 func.min(LLMCall.created_at).label("created_at"),
             )
             .where(LLMCall.analysis_id.isnot(None), LLMCall.run_id.is_(None))
@@ -100,16 +102,18 @@ async def get_cost_runs(
     for ar in anal_rows:
         agents = await _agent_breakdown(db, analysis_id=ar.analysis_id)
         p50 = await _p50_latency(db, analysis_id=ar.analysis_id)
-        runs.append(RunCost(
-            id=ar.analysis_id,
-            type="analysis",
-            created_at=ar.created_at,
-            total_cost_usd=float(ar.total_cost_usd or 0),
-            total_calls=ar.total_calls,
-            cached_calls=ar.cached_calls or 0,
-            latency_p50_ms=p50,
-            agents=agents,
-        ))
+        runs.append(
+            RunCost(
+                id=ar.analysis_id,
+                type="analysis",
+                created_at=ar.created_at,
+                total_cost_usd=float(ar.total_cost_usd or 0),
+                total_calls=ar.total_calls,
+                cached_calls=ar.cached_calls or 0,
+                latency_p50_ms=p50,
+                agents=agents,
+            )
+        )
 
     runs.sort(key=lambda r: r.created_at, reverse=True)
     return runs
