@@ -2,20 +2,13 @@ from backend.config import Settings
 
 
 def test_settings_defaults():
-    s = Settings(
-        anthropic_api_key="sk-test",
-        github_username="testuser",
-        cv_path="data/cv.pdf",
-        profile_yaml_path="data/candidate_profile.yaml",
-    )
+    s = Settings(anthropic_api_key="sk-test")
     assert s.api_prefix == "/api"
     assert "aiosqlite" in s.database_url
-    assert s.cv_path == "data/cv.pdf"
-    assert s.profile_yaml_path == "data/candidate_profile.yaml"
 
 
 def test_settings_override():
-    s = Settings(anthropic_api_key="sk-test", github_username="testuser", api_prefix="/v1")
+    s = Settings(anthropic_api_key="sk-test", api_prefix="/v1", _env_file=None)  # type: ignore[call-arg]
     assert s.api_prefix == "/v1"
 
 

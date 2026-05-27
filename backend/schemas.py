@@ -92,24 +92,8 @@ class ProfileResponse(BaseModel):
     id: str
     yaml_data: str
     cv_text: str
-    github_data: str
     merged_profile: str
     last_refreshed_at: datetime
-    github_last_fetched_at: datetime | None = None
-    warnings: list[str] = []
-
-
-class ProfileStatusResponse(BaseModel):
-    profile_last_built_at: datetime
-    github_last_fetched_at: datetime | None
-    github_is_stale: bool
-    github_stale_after_days: int
-
-
-class GitHubRefreshResponse(BaseModel):
-    repos_updated: int
-    github_last_fetched_at: datetime
-    profile: ProfileResponse
 
 
 class PipelineDoneData(BaseModel):
@@ -200,6 +184,7 @@ class UserCreate(BaseModel):
     email: str
     password: str
     invite_token: str | None = None
+    referral_code: str | None = None
 
 
 class UserLogin(BaseModel):
@@ -213,6 +198,14 @@ class UserResponse(BaseModel):
     email: str
     is_admin: bool
     created_at: datetime
+    referral_code: str
+
+
+class ReferralEntry(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    email: str
+    joined_at: datetime
 
 
 class InviteCreate(BaseModel):

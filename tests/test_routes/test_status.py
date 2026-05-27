@@ -50,7 +50,6 @@ async def seeded_analysis(test_engine):
             id="p1",
             yaml_data="x",
             cv_text="",
-            github_data="{}",
             merged_profile="",
             last_refreshed_at=datetime.now(timezone.utc),
         )

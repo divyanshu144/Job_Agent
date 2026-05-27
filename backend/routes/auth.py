@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import func, select
@@ -9,7 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models import InviteToken, User
-from backend.schemas import InviteCreate, InviteResponse, UserCreate, UserLogin, UserResponse
+from backend.schemas import (
+    InviteCreate,
+    InviteResponse,
+    ReferralEntry,
+    UserCreate,
+    UserLogin,
+    UserResponse,
+)
 from backend.services.auth_service import (
     create_access_token,
     get_current_user,
@@ -32,22 +40,31 @@ async def register(
     is_first_user = user_count == 0
 
     invite = None
+    referrer = None
+
     if not is_first_user:
-        if not data.invite_token:
-            raise HTTPException(status_code=400, detail="Invite token required")
-        invite = (
-            await db.execute(
-                select(InviteToken).where(
-                    InviteToken.token == data.invite_token,
-                    InviteToken.used_at.is_(None),
-                    InviteToken.expires_at > datetime.now(timezone.utc),
+        if data.invite_token:
+            invite = (
+                await db.execute(
+                    select(InviteToken).where(
+                        InviteToken.token == data.invite_token,
+                        InviteToken.used_at.is_(None),
+                        InviteToken.expires_at > datetime.now(timezone.utc),
+                    )
                 )
-            )
-        ).scalar_one_or_none()
-        if invite is None:
-            raise HTTPException(status_code=400, detail="Invalid or expired invite token")
-        if invite.email and invite.email.lower() != data.email.lower():
-            raise HTTPException(status_code=400, detail="Invite token is for a different email")
+            ).scalar_one_or_none()
+            if invite is None:
+                raise HTTPException(status_code=400, detail="Invalid or expired invite token")
+            if invite.email and invite.email.lower() != data.email.lower():
+                raise HTTPException(status_code=400, detail="Invite token is for a different email")
+        elif data.referral_code:
+            referrer = (
+                await db.execute(select(User).where(User.referral_code == data.referral_code))
+            ).scalar_one_or_none()
+            if referrer is None:
+                raise HTTPException(status_code=400, detail="Invalid referral code")
+        else:
+            raise HTTPException(status_code=400, detail="Invite token or referral code required")
 
     existing = (
         await db.execute(select(User).where(User.email == data.email.lower()))
@@ -59,11 +76,12 @@ async def register(
         email=data.email.lower(),
         hashed_password=hash_password(data.password),
         is_admin=is_first_user,
+        referred_by=referrer.id if referrer else None,
     )
     db.add(user)
     await db.flush()
 
-    if not is_first_user and invite:
+    if invite:
         invite.used_by = user.id
         invite.used_at = datetime.now(timezone.utc)
 
@@ -114,6 +132,23 @@ async def logout(response: Response) -> dict[str, bool]:
 @router.get("/auth/me", response_model=UserResponse)
 async def me(user: User = Depends(get_current_user)) -> UserResponse:
     return UserResponse.model_validate(user)
+
+
+@router.get("/auth/referrals", response_model=List[ReferralEntry])
+async def get_referrals(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> List[ReferralEntry]:
+    rows = (
+        (
+            await db.execute(
+                select(User).where(User.referred_by == user.id).order_by(User.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [ReferralEntry(id=r.id, email=r.email, joined_at=r.created_at) for r in rows]
 
 
 @router.post("/auth/invite", response_model=InviteResponse)

@@ -8,9 +8,7 @@ export interface GapAnalystOutput { critical_gaps: GapItem[]; nice_to_have_gaps:
 export interface ResourcePlannerOutput { gaps: ResourceItem[]; }
 export interface CoverLetterOutput { subject: string; body: string; tone_notes: string; }
 export interface ResumeTailorerOutput { tailored_bullets: BulletItem[]; }
-export interface ProfileResponse { id: string; yaml_data: string; cv_text: string; github_data: string; merged_profile: string; last_refreshed_at: string; github_last_fetched_at: string | null; warnings: string[]; }
-export interface ProfileStatusResponse { profile_last_built_at: string; github_last_fetched_at: string | null; github_is_stale: boolean; github_stale_after_days: number; }
-export interface GitHubRefreshResponse { repos_updated: number; github_last_fetched_at: string; profile: ProfileResponse; }
+export interface ProfileResponse { id: string; yaml_data: string; cv_text: string; merged_profile: string; last_refreshed_at: string; }
 export interface AnalysisSummary { id: string; jd_text: string; profile_id: string; created_at: string; partial: boolean; evaluate_only: boolean; }
 export interface AnalysisDetail {
   id: string; jd_text: string; profile_id: string; created_at: string; partial: boolean; evaluate_only: boolean;
@@ -92,6 +90,13 @@ export interface User {
   email: string;
   is_admin: boolean;
   created_at: string;
+  referral_code: string;
+}
+
+export interface ReferralEntry {
+  id: string;
+  email: string;
+  joined_at: string;
 }
 
 export interface AgentCost {
@@ -150,4 +155,10 @@ export interface Contact {
 export interface ColdEmailDraft {
   subject: string;
   body: string;
+}
+
+export interface InviteResponse {
+  invite_url: string;
+  token: string;
+  expires_at: string;
 }

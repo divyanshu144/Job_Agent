@@ -39,7 +39,6 @@ async def seeded_analysis(db_session):
         id="prof-1",
         yaml_data="",
         cv_text="",
-        github_data="{}",
         merged_profile="test profile",
         last_refreshed_at=datetime.now(timezone.utc),
     )

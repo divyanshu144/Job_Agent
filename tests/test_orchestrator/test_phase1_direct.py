@@ -31,7 +31,6 @@ async def test_run_phase1_creates_analysis_with_no_job_id(session):
         id="p-test",
         yaml_data="name: Test",
         cv_text="",
-        github_data="{}",
         merged_profile="merged",
         last_refreshed_at=datetime.now(timezone.utc),
     )
@@ -82,7 +81,6 @@ async def test_run_phase1_sets_job_id_when_provided(session):
         id="p-test2",
         yaml_data="name: Test",
         cv_text="",
-        github_data="{}",
         merged_profile="merged",
         last_refreshed_at=datetime.now(timezone.utc),
     )

@@ -1,3 +1,4 @@
+import secrets
 from typing import AsyncGenerator
 
 from sqlalchemy import text
@@ -23,6 +24,28 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+
+
+async def _migrate_columns() -> None:
+    """Add columns introduced after initial schema creation. Safe to run on every startup."""
+    migrations = [
+        "ALTER TABLE users ADD COLUMN referral_code TEXT",
+        "ALTER TABLE users ADD COLUMN referred_by TEXT REFERENCES users(id)",
+    ]
+    async with engine.begin() as conn:
+        for stmt in migrations:
+            try:
+                await conn.execute(text(stmt))
+            except Exception:
+                pass  # column already exists — SQLite has no ADD COLUMN IF NOT EXISTS
+
+        # Backfill referral_code for users who existed before this column was added
+        rows = await conn.execute(text("SELECT id FROM users WHERE referral_code IS NULL"))
+        for (user_id,) in rows.fetchall():
+            await conn.execute(
+                text("UPDATE users SET referral_code = :code WHERE id = :id"),
+                {"code": secrets.token_urlsafe(8), "id": user_id},
+            )
 
 
 async def init_db() -> None:
@@ -52,3 +75,4 @@ async def init_db() -> None:
                     "ALTER TABLE llm_calls ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0"
                 )
             )
+    await _migrate_columns()

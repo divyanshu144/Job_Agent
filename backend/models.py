@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
@@ -18,26 +19,11 @@ class Profile(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
     yaml_data: Mapped[str] = mapped_column(Text)
     cv_text: Mapped[str] = mapped_column(Text, default="")
-    github_data: Mapped[str] = mapped_column(Text, default="{}")
     merged_profile: Mapped[str] = mapped_column(Text, default="")
     last_refreshed_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    github_last_fetched_at: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True, default=None
-    )
     user_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("users.id"), nullable=True, default=None
     )
-
-
-class GithubCache(Base):
-    __tablename__ = "github_cache"
-    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
-    owner: Mapped[str] = mapped_column(String, nullable=False)
-    repo_name: Mapped[str] = mapped_column(String, nullable=False)
-    readme_content: Mapped[str] = mapped_column(Text, default="")
-    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    last_modified: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
-    __table_args__ = (UniqueConstraint("owner", "repo_name", name="uq_github_cache_repo"),)
 
 
 class User(Base):
@@ -48,6 +34,12 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    referral_code: Mapped[str] = mapped_column(
+        String, unique=True, index=True, default=lambda: secrets.token_urlsafe(8)
+    )
+    referred_by: Mapped[str | None] = mapped_column(
+        String, ForeignKey("users.id"), nullable=True, default=None
+    )
 
 
 class InviteToken(Base):
