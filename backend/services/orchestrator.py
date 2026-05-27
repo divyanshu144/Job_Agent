@@ -16,6 +16,7 @@ from backend.agents.job_parser import AgentError, JobParserAgent
 from backend.agents.match_scorer import MatchScorerAgent
 from backend.agents.resource_planner import ResourcePlannerAgent
 from backend.agents.resume_tailorer import ResumeTailorerAgent
+from backend.database import SessionLocal
 from backend.models import Analysis, JobResult, Profile
 from backend.schemas import (
     GapAnalystOutput,
@@ -70,6 +71,7 @@ async def _run_phase1(
     ).scalar_one_or_none()
     if cached is not None:
         from backend.services.instrumentation import log_cache_hit
+
         await log_cache_hit(db, "phase1_cache", model, run_id=run_id, analysis_id=cached.id)
         score_row = (
             await db.execute(
@@ -130,11 +132,13 @@ async def _run_phase1(
     finally:
         analysis.partial = partial
         for name, data in results.items():
-            db.add(JobResult(
-                analysis_id=analysis.id,
-                agent_name=name,
-                output_json=json.dumps(data),
-            ))
+            db.add(
+                JobResult(
+                    analysis_id=analysis.id,
+                    agent_name=name,
+                    output_json=json.dumps(data),
+                )
+            )
         await db.commit()
 
     score = results.get("match_scorer", {}).get("score", 0)
@@ -170,6 +174,7 @@ async def run_evaluate_pipeline(
     ).scalar_one_or_none()
     if cached is not None:
         from backend.services.instrumentation import log_cache_hit
+
         await log_cache_hit(db, "phase1_cache", SONNET, analysis_id=cached.id)
         score_row = (
             await db.execute(
@@ -202,8 +207,12 @@ async def run_evaluate_pipeline(
 
     # Create placeholder Analysis before agents so analysis_id is trackable
     analysis = Analysis(
-        jd_text=jd, profile_id=profile.id, partial=True,
-        evaluate_only=True, jd_hash=jd_hash, user_id=user_id
+        jd_text=jd,
+        profile_id=profile.id,
+        partial=True,
+        evaluate_only=True,
+        jd_hash=jd_hash,
+        user_id=user_id,
     )
     db.add(analysis)
     await db.flush()
@@ -233,11 +242,13 @@ async def run_evaluate_pipeline(
     finally:
         analysis.partial = partial
         for name, output in results.items():
-            db.add(JobResult(
-                analysis_id=analysis.id,
-                agent_name=name,
-                output_json=json.dumps(output),
-            ))
+            db.add(
+                JobResult(
+                    analysis_id=analysis.id,
+                    agent_name=name,
+                    output_json=json.dumps(output),
+                )
+            )
         await db.commit()
 
     score = results.get("match_scorer", {}).get("score", 0)
@@ -282,25 +293,23 @@ async def run_generate_pipeline(
 
     # Rebuild PriorOutputs from stored Phase 1 results
     stored = (
-        await db.execute(select(JobResult).where(JobResult.analysis_id == analysis_id))
-    ).scalars().all()
+        (await db.execute(select(JobResult).where(JobResult.analysis_id == analysis_id)))
+        .scalars()
+        .all()
+    )
     prior = PriorOutputs()
     for row in stored:
         if not row.output_json:
             continue
         data = json.loads(row.output_json)
         if row.agent_name == "job_parser":
-            prior = prior.model_copy(
-                update={"job_parser": JobParserOutput.model_validate(data)}
-            )
+            prior = prior.model_copy(update={"job_parser": JobParserOutput.model_validate(data)})
         elif row.agent_name == "match_scorer":
             prior = prior.model_copy(
                 update={"match_scorer": MatchScorerOutput.model_validate(data)}
             )
         elif row.agent_name == "gap_analyst":
-            prior = prior.model_copy(
-                update={"gap_analyst": GapAnalystOutput.model_validate(data)}
-            )
+            prior = prior.model_copy(update={"gap_analyst": GapAnalystOutput.model_validate(data)})
 
     yield SSEEvent("pipeline_start", {"total_agents": 3})
 
@@ -326,14 +335,18 @@ async def run_generate_pipeline(
     yield SSEEvent("agent_start", {"agent": "cover_letter"})
     yield SSEEvent("agent_start", {"agent": "resume_tailorer"})
 
-    cl_agent = CoverLetterAgent()
-    rt_agent = ResumeTailorerAgent()
-    # parallel agents share db session — skip tracking to avoid concurrent session writes
-    cl_result, rt_result = await asyncio.gather(
-        cl_agent.run(full, analysis.jd_text, prior),
-        rt_agent.run(full, analysis.jd_text, prior),
-        return_exceptions=True,
-    )
+    # Each parallel agent gets its own session — sharing one AsyncSession across
+    # concurrent coroutines is unsafe (concurrent commits corrupt session state).
+    async with SessionLocal() as cl_db, SessionLocal() as rt_db:
+        cl_agent = CoverLetterAgent()
+        rt_agent = ResumeTailorerAgent()
+        cl_agent.with_tracking(cl_db, analysis_id=analysis_id)
+        rt_agent.with_tracking(rt_db, analysis_id=analysis_id)
+        cl_result, rt_result = await asyncio.gather(
+            cl_agent.run(full, analysis.jd_text, prior),
+            rt_agent.run(full, analysis.jd_text, prior),
+            return_exceptions=True,
+        )
 
     for agent_name, result in [("cover_letter", cl_result), ("resume_tailorer", rt_result)]:
         if isinstance(result, BaseException):
@@ -341,9 +354,7 @@ async def run_generate_pipeline(
             yield SSEEvent("pipeline_error", {"agent": agent_name, "error": str(result)})
         else:
             results[agent_name] = result.model_dump()
-            yield SSEEvent(
-                "agent_done", {"agent": agent_name, "output": result.model_dump()}
-            )
+            yield SSEEvent("agent_done", {"agent": agent_name, "output": result.model_dump()})
 
     # Persist Phase 2 results and mark analysis complete
     for name, output in results.items():

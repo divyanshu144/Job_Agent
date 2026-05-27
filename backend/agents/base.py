@@ -44,16 +44,15 @@ class BaseAgent:
 
     def _inject(self, template: str, profile: str, jd: str, prior: PriorOutputs) -> str:
         result = template.replace("{profile}", profile).replace("{jd}", jd)
-        for field, value in prior.model_dump(exclude_none=True).items():
-            result = result.replace(f"{{prior.{field}}}", json.dumps(value, indent=2))
+        for field, value in prior.model_dump().items():
+            rendered = "" if value is None else json.dumps(value, indent=2)
+            result = result.replace(f"{{prior.{field}}}", rendered)
         return result
 
     async def _call(self, system: str, user: str) -> str:
         from backend.services.instrumentation import tracked_call
-        # Wrap system in a list block so Anthropic can cache the prefix.
-        # cache_control marks the stable system prompt for reuse across requests
-        # with the same profile (most impactful for job_parser in discovery runs).
-        # Silently no-ops if the prefix is below the model's minimum cacheable size.
+
+        # Cache-prefix the system prompt — highest ROI on discovery's job_parser batch calls.
         system_blocks = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
         msg = await tracked_call(
             self._client,
