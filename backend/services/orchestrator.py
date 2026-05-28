@@ -16,6 +16,7 @@ from backend.agents.job_parser import AgentError, JobParserAgent
 from backend.agents.match_scorer import MatchScorerAgent
 from backend.agents.resource_planner import ResourcePlannerAgent
 from backend.agents.resume_tailorer import ResumeTailorerAgent
+from backend.database import SessionLocal
 from backend.models import Analysis, JobResult, Profile
 from backend.schemas import (
     GapAnalystOutput,
@@ -334,12 +335,19 @@ async def run_generate_pipeline(
     yield SSEEvent("agent_start", {"agent": "cover_letter"})
     yield SSEEvent("agent_start", {"agent": "resume_tailorer"})
 
-    cl_agent = CoverLetterAgent()
-    rt_agent = ResumeTailorerAgent()
-    # parallel agents share db session — skip tracking to avoid concurrent session writes
+    # Each parallel agent gets its own session — sharing the route session across
+    # concurrent coroutines corrupts SQLAlchemy's unit-of-work state.
+    async def _tracked(AgentClass: type, profile_str: str, jd: str, p: PriorOutputs) -> Any:
+        async with SessionLocal() as own_db:
+            agent = AgentClass()
+            agent.with_tracking(own_db, analysis_id=analysis.id)
+            return await agent.run(profile_str, jd, p)
+
+    cl_result: Any
+    rt_result: Any
     cl_result, rt_result = await asyncio.gather(
-        cl_agent.run(full, analysis.jd_text, prior),
-        rt_agent.run(full, analysis.jd_text, prior),
+        _tracked(CoverLetterAgent, full, analysis.jd_text, prior),
+        _tracked(ResumeTailorerAgent, full, analysis.jd_text, prior),
         return_exceptions=True,
     )
 

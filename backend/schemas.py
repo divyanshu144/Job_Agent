@@ -251,6 +251,11 @@ class CostSummary(BaseModel):
     cache_hit_rate: float
     total_input_tokens: int
     total_output_tokens: int
+    # Model tiering: what Haiku calls would have cost at Sonnet rates
+    haiku_cost_usd: float = 0.0
+    counterfactual_sonnet_cost_usd: float = 0.0
+    tiering_savings_usd: float = 0.0
+    tiering_ratio: float = 1.0  # counterfactual / actual; 1.0 when no Haiku calls
 
 
 class ColdEmailOutput(BaseModel):

@@ -8,11 +8,10 @@ import httpx
 
 async def test_fetch_reed_jobs_returns_empty_when_key_missing():
     """Returns [] immediately if reed_api_key is empty — no HTTP call made."""
-    with patch("backend.config.settings") as mock_cfg:
-        mock_cfg.reed_api_key = ""
-        from backend.services.reed_client import fetch_reed_jobs
+    from backend.services import reed_client
 
-        jobs = await fetch_reed_jobs("python engineer", "london")
+    with patch.object(reed_client.settings, "reed_api_key", ""):
+        jobs = await reed_client.fetch_reed_jobs("python engineer", "london")
     assert jobs == []
 
 

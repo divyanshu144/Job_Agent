@@ -120,6 +120,11 @@ export interface CostSummary {
   cache_hit_rate: number;
   total_input_tokens: number;
   total_output_tokens: number;
+  // Model tiering: what Haiku calls would have cost at Sonnet rates
+  haiku_cost_usd: number;
+  counterfactual_sonnet_cost_usd: number;
+  tiering_savings_usd: number;
+  tiering_ratio: number;  // counterfactual / actual; 1.0 when no Haiku calls
 }
 
 export interface Contact {

@@ -8,12 +8,10 @@ import httpx
 
 async def test_fetch_adzuna_jobs_returns_empty_when_creds_missing():
     """Returns [] immediately if adzuna_app_id or adzuna_app_key is empty."""
-    with patch("backend.config.settings") as mock_cfg:
-        mock_cfg.adzuna_app_id = ""
-        mock_cfg.adzuna_app_key = "key"
-        from backend.services.adzuna_client import fetch_adzuna_jobs
+    from backend.services import adzuna_client
 
-        jobs = await fetch_adzuna_jobs("python", "london")
+    with patch.object(adzuna_client.settings, "adzuna_app_id", ""):
+        jobs = await adzuna_client.fetch_adzuna_jobs("python", "london")
     assert jobs == []
 
 

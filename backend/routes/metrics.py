@@ -4,10 +4,15 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.agents.base import HAIKU
 from backend.database import get_db
 from backend.models import LLMCall, User
 from backend.schemas import AgentCost, CostSummary, RunCost
 from backend.services.auth_service import get_current_user
+from backend.services.cost_calculator import COST_PER_MILLION
+
+_SONNET_INPUT_PER_M = COST_PER_MILLION["claude-sonnet-4-6"]["input"]
+_SONNET_OUTPUT_PER_M = COST_PER_MILLION["claude-sonnet-4-6"]["output"]
 
 router = APIRouter(tags=["metrics"])
 
@@ -29,6 +34,29 @@ async def get_cost_summary(
             )
         )
     ).one()
+
+    # Tiering: query Haiku-only calls to compute counterfactual at Sonnet rates
+    haiku_row = (
+        await db.execute(
+            select(
+                func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("haiku_cost"),
+                func.coalesce(func.sum(LLMCall.input_tokens), 0).label("haiku_input"),
+                func.coalesce(func.sum(LLMCall.output_tokens), 0).label("haiku_output"),
+            ).where(
+                LLMCall.cache_hit == False,  # noqa: E712
+                LLMCall.model == HAIKU,
+            )
+        )
+    ).one()
+
+    haiku_cost = float(haiku_row.haiku_cost or 0)
+    counterfactual = (
+        (haiku_row.haiku_input or 0) * _SONNET_INPUT_PER_M
+        + (haiku_row.haiku_output or 0) * _SONNET_OUTPUT_PER_M
+    ) / 1_000_000
+    savings = counterfactual - haiku_cost
+    ratio = counterfactual / haiku_cost if haiku_cost > 0 else 1.0
+
     total = row.total_calls or 0
     cached = row.cached_calls or 0
     return CostSummary(
@@ -39,6 +67,10 @@ async def get_cost_summary(
         cache_hit_rate=cached / total if total else 0.0,
         total_input_tokens=row.total_input_tokens or 0,
         total_output_tokens=row.total_output_tokens or 0,
+        haiku_cost_usd=haiku_cost,
+        counterfactual_sonnet_cost_usd=counterfactual,
+        tiering_savings_usd=savings,
+        tiering_ratio=ratio,
     )
 
 

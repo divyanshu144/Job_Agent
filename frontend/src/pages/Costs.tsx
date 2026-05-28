@@ -48,12 +48,39 @@ export function Costs() {
       )}
 
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Total Spent" value={`$${fmt(summary.total_cost_usd)}`} />
-          <StatCard label="LLM Calls" value={summary.total_calls.toLocaleString()} />
-          <StatCard label="Cache Hit Rate" value={`${(summary.cache_hit_rate * 100).toFixed(1)}%`} />
-          <StatCard label="Real Calls" value={summary.real_calls.toLocaleString()} />
-        </div>
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard label="Total Spent" value={`$${fmt(summary.total_cost_usd)}`} />
+            <StatCard label="LLM Calls" value={summary.total_calls.toLocaleString()} />
+            <StatCard label="Cache Hit Rate" value={`${(summary.cache_hit_rate * 100).toFixed(1)}%`} />
+            <StatCard label="Real Calls" value={summary.real_calls.toLocaleString()} />
+          </div>
+
+          {summary.tiering_ratio > 1.0 && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 space-y-3">
+              <h2 className="text-sm font-semibold text-emerald-800">Model Tiering Savings</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-emerald-700 mb-1">Haiku Actual Cost</p>
+                  <p className="text-xl font-bold text-emerald-900">${fmt(summary.haiku_cost_usd)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-emerald-700 mb-1">Sonnet Counterfactual</p>
+                  <p className="text-xl font-bold text-emerald-900">${fmt(summary.counterfactual_sonnet_cost_usd)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-emerald-700 mb-1">Savings</p>
+                  <p className="text-xl font-bold text-emerald-900">${fmt(summary.tiering_savings_usd)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-emerald-700 mb-1">Cost Ratio</p>
+                  <p className="text-xl font-bold text-emerald-900">{summary.tiering_ratio.toFixed(2)}×</p>
+                  <p className="text-xs text-emerald-600">cheaper vs all-Sonnet</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {runs.length > 0 && (
