@@ -24,8 +24,18 @@ async def tracked_call(
     start = time.monotonic()
     msg = cast(anthropic.types.Message, await client.messages.create(model=model, **create_kwargs))
     latency_ms = int((time.monotonic() - start) * 1000)
+
+    cache_creation_tokens = int(getattr(msg.usage, "cache_creation_input_tokens", None) or 0)
+    cache_read_tokens = int(getattr(msg.usage, "cache_read_input_tokens", None) or 0)
+
     if db is not None:
-        cost = calculate_cost(model, msg.usage.input_tokens, msg.usage.output_tokens)
+        cost = calculate_cost(
+            model,
+            msg.usage.input_tokens,
+            msg.usage.output_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+            cache_read_tokens=cache_read_tokens,
+        )
         await _write_llm_call(
             db,
             agent_name=agent_name,
@@ -35,6 +45,8 @@ async def tracked_call(
             cost_usd=cost,
             latency_ms=latency_ms,
             cache_hit=False,
+            cache_creation_tokens=cache_creation_tokens,
+            cache_read_tokens=cache_read_tokens,
             run_id=run_id,
             analysis_id=analysis_id,
         )
@@ -58,6 +70,8 @@ async def log_cache_hit(
         cost_usd=0.0,
         latency_ms=1,
         cache_hit=True,
+        cache_creation_tokens=0,
+        cache_read_tokens=0,
         run_id=run_id,
         analysis_id=analysis_id,
     )
@@ -73,6 +87,8 @@ async def _write_llm_call(
     cost_usd: float,
     latency_ms: int,
     cache_hit: bool,
+    cache_creation_tokens: int,
+    cache_read_tokens: int,
     run_id: str | None,
     analysis_id: str | None,
 ) -> None:
@@ -85,6 +101,8 @@ async def _write_llm_call(
             cost_usd=cost_usd,
             latency_ms=latency_ms,
             cache_hit=cache_hit,
+            cache_creation_tokens=cache_creation_tokens,
+            cache_read_tokens=cache_read_tokens,
             run_id=run_id,
             analysis_id=analysis_id,
             created_at=datetime.now(timezone.utc),
