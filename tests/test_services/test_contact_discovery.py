@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import json
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import backend.models  # noqa: F401
 from backend.database import Base
-from backend.models import Analysis, Contact, JobResult, Profile, User
+from backend.models import Analysis, JobResult, Profile
 from backend.services.contact_discovery import (
     ContactDiscoveryUnavailable,
     _title_rank,

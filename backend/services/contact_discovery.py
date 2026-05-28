@@ -74,25 +74,25 @@ async def discover_contacts(
             raise ContactDiscoveryUnavailable(str(e)) from e
 
     emails = (resp.json().get("data") or {}).get("emails", [])
-    emails = [e for e in emails if e.get("value")]
-    emails.sort(key=lambda e: _title_rank(e.get("position")))
+    emails = [em for em in emails if em.get("value")]
+    emails.sort(key=lambda em: _title_rank(em.get("position")))
 
     await db.execute(delete(Contact).where(Contact.analysis_id == analysis_id))
 
     contacts: list[Contact] = []
-    for e in emails:
-        first = e.get("first_name", "") or ""
-        last = e.get("last_name", "") or ""
+    for em in emails:
+        first = em.get("first_name", "") or ""
+        last = em.get("last_name", "") or ""
         full_name = f"{first} {last}".strip() or None
         contact = Contact(
             id=str(uuid4()),
             analysis_id=analysis_id,
-            email=e["value"],
+            email=em["value"],
             name=full_name,
-            title=e.get("position"),
+            title=em.get("position"),
             company=company,
             source="hunter",
-            confidence=float(e.get("confidence") or 0) / 100.0,
+            confidence=float(em.get("confidence") or 0) / 100.0,
             status="discovered",
             created_at=datetime.now(timezone.utc),
         )

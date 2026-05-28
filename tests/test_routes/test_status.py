@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -8,7 +10,6 @@ import backend.models  # noqa: F401
 from backend.database import Base, get_db
 from backend.models import Analysis, Profile, User
 from backend.services.auth_service import get_current_user
-from datetime import datetime, timezone
 
 _FAKE_USER = User(id="test-user-id", email="test@example.com", hashed_password="x", is_active=True)
 

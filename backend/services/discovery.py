@@ -101,7 +101,8 @@ async def _stage2_check(
         f"Candidate summary:\n{compact_profile[:1000]}\n\n"
         "Evaluate if the job posting is relevant to this candidate. "
         'Respond with ONLY valid JSON: {"relevant": true/false, "reason": "one sentence", '
-        '"title": "job title or empty string", "company": "company name or empty string", "location": "city/remote or null"}'
+        '"title": "job title or empty string", "company": "company name or empty string", '
+        '"location": "city/remote or null"}'
     )
     msg = await tracked_call(
         _anthropic_client,
@@ -231,6 +232,9 @@ async def _process_job(
         .values(jobs_scored=DiscoveryRun.jobs_scored + 1)
     )
     await db.commit()
+
+
+_DISCOVERY_CONCURRENCY = 5
 
 
 async def _run_discovery_task(run_id: str, source: str) -> None:

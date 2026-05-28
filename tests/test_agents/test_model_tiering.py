@@ -1,4 +1,4 @@
-from backend.agents.base import BaseAgent, HAIKU, SONNET
+from backend.agents.base import HAIKU, SONNET, BaseAgent
 from backend.agents.cover_letter import CoverLetterAgent
 from backend.agents.gap_analyst import GapAnalystAgent
 from backend.agents.job_parser import JobParserAgent

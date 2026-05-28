@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 from httpx import AsyncClient
+
 from backend.models import LLMCall, User
 from backend.services.auth_service import get_current_user
 

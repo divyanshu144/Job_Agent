@@ -1,7 +1,9 @@
 # tests/test_services/test_instrumentation.py
-import pytest
 from unittest.mock import AsyncMock, MagicMock
-from backend.services.instrumentation import tracked_call, log_cache_hit
+
+import pytest
+
+from backend.services.instrumentation import log_cache_hit, tracked_call
 
 
 @pytest.fixture

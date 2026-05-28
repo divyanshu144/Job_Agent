@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from backend.agents.cold_email_agent import ColdEmailAgent
 from backend.agents.job_parser import AgentError

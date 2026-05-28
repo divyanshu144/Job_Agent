@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
-import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from httpx import AsyncClient
 
 from backend.models import Analysis, Contact, JobResult, Profile, User
