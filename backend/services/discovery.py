@@ -111,7 +111,7 @@ async def _stage2_check(
         db=db,
         run_id=run_id,
         max_tokens=200,
-        system=system,
+        system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": f"Job posting:\n{raw_text[:3000]}"}],
     )
     if not msg.content:

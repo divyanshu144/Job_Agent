@@ -59,7 +59,7 @@ class BaseAgent:
             run_id=self._run_id,
             analysis_id=self._analysis_id,
             max_tokens=MAX_TOKENS,
-            system=system,
+            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": user}],
         )
         return msg.content[0].text  # type: ignore[union-attr]
