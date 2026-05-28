@@ -80,6 +80,49 @@ export function Costs() {
               </div>
             </div>
           )}
+
+          {summary.prompt_cache_read_tokens > 0 && (
+            <div className="bg-sky-50 border border-sky-200 rounded-xl p-5 space-y-3">
+              <h2 className="text-sm font-semibold text-sky-800">Prompt Cache Savings</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-sky-700 mb-1">Cache Reads</p>
+                  <p className="text-xl font-bold text-sky-900">
+                    {summary.prompt_cache_read_tokens.toLocaleString()}
+                  </p>
+                  <p className="text-xs text-sky-600">tokens</p>
+                </div>
+                <div>
+                  <p className="text-xs text-sky-700 mb-1">Cache Writes</p>
+                  <p className="text-xl font-bold text-sky-900">
+                    {summary.prompt_cache_creation_tokens.toLocaleString()}
+                  </p>
+                  <p className="text-xs text-sky-600">tokens</p>
+                </div>
+                <div>
+                  <p className="text-xs text-sky-700 mb-1">Net Savings</p>
+                  <p className="text-xl font-bold text-sky-900">
+                    ${fmt(summary.prompt_cache_savings_usd)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-sky-700 mb-1">Hit Rate (tokens)</p>
+                  <p className="text-xl font-bold text-sky-900">
+                    {summary.prompt_cache_read_tokens + summary.prompt_cache_creation_tokens > 0
+                      ? (
+                          (summary.prompt_cache_read_tokens /
+                            (summary.prompt_cache_read_tokens +
+                              summary.prompt_cache_creation_tokens)) *
+                          100
+                        ).toFixed(1)
+                      : "0.0"}
+                    %
+                  </p>
+                  <p className="text-xs text-sky-600">reads / (reads + writes)</p>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
 

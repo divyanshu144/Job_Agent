@@ -125,6 +125,10 @@ export interface CostSummary {
   counterfactual_sonnet_cost_usd: number;
   tiering_savings_usd: number;
   tiering_ratio: number;  // counterfactual / actual; 1.0 when no Haiku calls
+  // Anthropic prompt caching
+  prompt_cache_read_tokens: number;
+  prompt_cache_creation_tokens: number;
+  prompt_cache_savings_usd: number;
 }
 
 export interface Contact {
