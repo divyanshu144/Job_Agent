@@ -52,7 +52,7 @@ export function Costs() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard label="Total Spent" value={`$${fmt(summary.total_cost_usd)}`} />
             <StatCard label="LLM Calls" value={summary.total_calls.toLocaleString()} />
-            <StatCard label="Cache Hit Rate" value={`${(summary.cache_hit_rate * 100).toFixed(1)}%`} />
+            <StatCard label="Analysis Cache Rate" value={`${(summary.cache_hit_rate * 100).toFixed(1)}%`} />
             <StatCard label="Real Calls" value={summary.real_calls.toLocaleString()} />
           </div>
 
@@ -139,7 +139,7 @@ export function Costs() {
                 <th className="px-5 py-2">Calls</th>
                 <th className="px-5 py-2">Cost</th>
                 <th className="px-5 py-2">P50 Latency</th>
-                <th className="px-5 py-2">Cache Hits</th>
+                <th className="px-5 py-2">Analysis Hits</th>
               </tr>
             </thead>
             <tbody>
