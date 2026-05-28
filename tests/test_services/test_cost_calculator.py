@@ -29,3 +29,36 @@ def test_small_real_call():
     cost = calculate_cost("claude-haiku-4-5-20251001", 1000, 200)
     expected = (1000 * 0.80 + 200 * 4.00) / 1_000_000
     assert cost == pytest.approx(expected)
+
+
+def test_cache_write_costs_1_25x_input():
+    """Cache creation tokens are priced at 1.25× normal input rate."""
+    # Haiku input rate: $0.80/M → cache write: $1.00/M
+    cost = calculate_cost("claude-haiku-4-5-20251001", 0, 0, cache_creation_tokens=1_000_000)
+    assert cost == pytest.approx(1.00)
+
+
+def test_cache_read_costs_0_10x_input():
+    """Cache read tokens are priced at 0.10× normal input rate."""
+    # Haiku input rate: $0.80/M → cache read: $0.08/M
+    cost = calculate_cost("claude-haiku-4-5-20251001", 0, 0, cache_read_tokens=1_000_000)
+    assert cost == pytest.approx(0.08)
+
+
+def test_full_call_with_cache_mix():
+    """A call with input + cache_write + cache_read + output tokens prices correctly."""
+    # Sonnet: input $3/M, output $15/M, cache_write $3.75/M, cache_read $0.30/M
+    cost = calculate_cost(
+        "claude-sonnet-4-6",
+        input_tokens=1_000_000,      # $3.00
+        output_tokens=1_000_000,     # $15.00
+        cache_creation_tokens=1_000_000,  # $3.75
+        cache_read_tokens=1_000_000,      # $0.30
+    )
+    assert cost == pytest.approx(22.05)
+
+
+def test_unknown_model_cache_fallback():
+    """Unknown model falls back to Sonnet cache rates."""
+    cost = calculate_cost("unknown-model", 0, 0, cache_read_tokens=1_000_000)
+    assert cost == pytest.approx(0.30)  # Sonnet cache_read = $0.30/M
