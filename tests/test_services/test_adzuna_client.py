@@ -12,6 +12,7 @@ async def test_fetch_adzuna_jobs_returns_empty_when_creds_missing():
         mock_cfg.adzuna_app_id = ""
         mock_cfg.adzuna_app_key = "key"
         from backend.services.adzuna_client import fetch_adzuna_jobs
+
         jobs = await fetch_adzuna_jobs("python", "london")
     assert jobs == []
 
@@ -20,20 +21,24 @@ async def test_fetch_adzuna_jobs_happy_path():
     """One result on page 1, empty page 2 → one RawJob."""
     page1 = MagicMock()
     page1.raise_for_status = MagicMock()
-    page1.json = MagicMock(return_value={
-        "results": [{
-            "id": "adzuna-123",
-            "title": "Backend Engineer",
-            "company": {"display_name": "TechCo"},
-            "location": {"display_name": "London"},
-            "description": (
-                "We are looking for a backend engineer with Python, FastAPI, "
-                "PostgreSQL, and AWS experience to join our product team. "
-                "5+ years required. Remote-friendly within EU."
-            ),
-            "redirect_url": "https://www.adzuna.co.uk/jobs/details/adzuna-123",
-        }],
-    })
+    page1.json = MagicMock(
+        return_value={
+            "results": [
+                {
+                    "id": "adzuna-123",
+                    "title": "Backend Engineer",
+                    "company": {"display_name": "TechCo"},
+                    "location": {"display_name": "London"},
+                    "description": (
+                        "We are looking for a backend engineer with Python, FastAPI, "
+                        "PostgreSQL, and AWS experience to join our product team. "
+                        "5+ years required. Remote-friendly within EU."
+                    ),
+                    "redirect_url": "https://www.adzuna.co.uk/jobs/details/adzuna-123",
+                }
+            ],
+        }
+    )
     page2 = MagicMock()
     page2.raise_for_status = MagicMock()
     page2.json = MagicMock(return_value={"results": []})
@@ -57,6 +62,7 @@ async def test_fetch_adzuna_jobs_happy_path():
             import importlib
 
             from backend.services import adzuna_client
+
             importlib.reload(adzuna_client)
             jobs = await adzuna_client.fetch_adzuna_jobs("python", "london")
 
@@ -82,6 +88,7 @@ async def test_fetch_adzuna_jobs_http_error_returns_empty():
             import importlib
 
             from backend.services import adzuna_client
+
             importlib.reload(adzuna_client)
             jobs = await adzuna_client.fetch_adzuna_jobs("python", "london")
 
@@ -92,16 +99,20 @@ async def test_fetch_adzuna_jobs_skips_short_descriptions():
     """Jobs with combined text < 100 chars are dropped."""
     page1 = MagicMock()
     page1.raise_for_status = MagicMock()
-    page1.json = MagicMock(return_value={
-        "results": [{
-            "id": "short-1",
-            "title": "Dev",
-            "company": {"display_name": "Co"},
-            "location": {"display_name": "London"},
-            "description": "Short.",
-            "redirect_url": "https://www.adzuna.co.uk/jobs/details/short-1",
-        }],
-    })
+    page1.json = MagicMock(
+        return_value={
+            "results": [
+                {
+                    "id": "short-1",
+                    "title": "Dev",
+                    "company": {"display_name": "Co"},
+                    "location": {"display_name": "London"},
+                    "description": "Short.",
+                    "redirect_url": "https://www.adzuna.co.uk/jobs/details/short-1",
+                }
+            ],
+        }
+    )
     page2 = MagicMock()
     page2.raise_for_status = MagicMock()
     page2.json = MagicMock(return_value={"results": []})
@@ -125,6 +136,7 @@ async def test_fetch_adzuna_jobs_skips_short_descriptions():
             import importlib
 
             from backend.services import adzuna_client
+
             importlib.reload(adzuna_client)
             jobs = await adzuna_client.fetch_adzuna_jobs("python", "london")
 

@@ -65,10 +65,7 @@ async def trigger_discovery(
     if source not in _VALID_SOURCES:
         raise HTTPException(
             status_code=422,
-            detail=(
-                f"Invalid source '{source}'. "
-                f"Must be one of: {sorted(_VALID_SOURCES)}"
-            ),
+            detail=(f"Invalid source '{source}'. Must be one of: {sorted(_VALID_SOURCES)}"),
         )
     run_id = await run_discovery(source, db)
     return {"run_id": run_id}

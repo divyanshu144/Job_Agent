@@ -11,6 +11,7 @@ async def test_fetch_reed_jobs_returns_empty_when_key_missing():
     with patch("backend.config.settings") as mock_cfg:
         mock_cfg.reed_api_key = ""
         from backend.services.reed_client import fetch_reed_jobs
+
         jobs = await fetch_reed_jobs("python engineer", "london")
     assert jobs == []
 
@@ -19,19 +20,23 @@ async def test_fetch_reed_jobs_happy_path():
     """One result in first page, empty second page → one RawJob returned."""
     page1 = MagicMock()
     page1.raise_for_status = MagicMock()
-    page1.json = MagicMock(return_value={
-        "results": [{
-            "jobId": 42,
-            "jobTitle": "Senior Python Engineer",
-            "employerName": "Acme Corp",
-            "locationName": "London",
-            "jobDescription": (
-                "We need a Python engineer with FastAPI and PostgreSQL experience "
-                "for our platform team. 5+ years required. Remote friendly."
-            ),
-            "jobUrl": "https://www.reed.co.uk/jobs/senior-python-engineer/42",
-        }],
-    })
+    page1.json = MagicMock(
+        return_value={
+            "results": [
+                {
+                    "jobId": 42,
+                    "jobTitle": "Senior Python Engineer",
+                    "employerName": "Acme Corp",
+                    "locationName": "London",
+                    "jobDescription": (
+                        "We need a Python engineer with FastAPI and PostgreSQL experience "
+                        "for our platform team. 5+ years required. Remote friendly."
+                    ),
+                    "jobUrl": "https://www.reed.co.uk/jobs/senior-python-engineer/42",
+                }
+            ],
+        }
+    )
     page2 = MagicMock()
     page2.raise_for_status = MagicMock()
     page2.json = MagicMock(return_value={"results": []})
@@ -54,6 +59,7 @@ async def test_fetch_reed_jobs_happy_path():
             import importlib
 
             from backend.services import reed_client
+
             importlib.reload(reed_client)
             jobs = await reed_client.fetch_reed_jobs("python engineer", "london")
 
@@ -78,6 +84,7 @@ async def test_fetch_reed_jobs_http_error_returns_empty():
             import importlib
 
             from backend.services import reed_client
+
             importlib.reload(reed_client)
             jobs = await reed_client.fetch_reed_jobs("python", "")
 
@@ -88,16 +95,20 @@ async def test_fetch_reed_jobs_skips_short_descriptions():
     """Jobs whose combined text is < 100 chars are dropped."""
     page1 = MagicMock()
     page1.raise_for_status = MagicMock()
-    page1.json = MagicMock(return_value={
-        "results": [{
-            "jobId": 99,
-            "jobTitle": "Dev",
-            "employerName": "Co",
-            "locationName": "London",
-            "jobDescription": "Short.",
-            "jobUrl": "https://www.reed.co.uk/jobs/dev/99",
-        }],
-    })
+    page1.json = MagicMock(
+        return_value={
+            "results": [
+                {
+                    "jobId": 99,
+                    "jobTitle": "Dev",
+                    "employerName": "Co",
+                    "locationName": "London",
+                    "jobDescription": "Short.",
+                    "jobUrl": "https://www.reed.co.uk/jobs/dev/99",
+                }
+            ],
+        }
+    )
     page2 = MagicMock()
     page2.raise_for_status = MagicMock()
     page2.json = MagicMock(return_value={"results": []})
@@ -120,6 +131,7 @@ async def test_fetch_reed_jobs_skips_short_descriptions():
             import importlib
 
             from backend.services import reed_client
+
             importlib.reload(reed_client)
             jobs = await reed_client.fetch_reed_jobs("python", "london")
 

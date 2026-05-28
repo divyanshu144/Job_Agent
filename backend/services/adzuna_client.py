@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 ADZUNA_API = "https://api.adzuna.com/v1/api/jobs"
 _MIN_TEXT_LEN = 100
 _PER_PAGE = 50
-_MAX_PAGES = 4   # up to 200 results per run
+_MAX_PAGES = 4  # up to 200 results per run
 _COUNTRY = "gb"  # UK endpoint
 
 
@@ -44,9 +44,7 @@ async def fetch_adzuna_jobs(keywords: str, location: str) -> list[RawJob]:
                 params["where"] = location
 
             try:
-                resp = await client.get(
-                    f"{ADZUNA_API}/{_COUNTRY}/search/{page}", params=params
-                )
+                resp = await client.get(f"{ADZUNA_API}/{_COUNTRY}/search/{page}", params=params)
                 resp.raise_for_status()
             except httpx.HTTPError as exc:
                 logger.warning("Adzuna API error (page=%d): %s", page, exc)

@@ -19,10 +19,10 @@ from backend.database import SessionLocal
 from backend.models import DiscoveryRun, Job
 from backend.services.adzuna_client import fetch_adzuna_jobs
 from backend.services.hn_client import RawJob, fetch_hn_jobs
-from backend.services.reed_client import fetch_reed_jobs
 from backend.services.instrumentation import tracked_call
 from backend.services.orchestrator import _run_phase1
 from backend.services.profile_builder import build_compact_profile, get_or_build_profile
+from backend.services.reed_client import fetch_reed_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -287,9 +287,7 @@ async def _run_discovery_task(run_id: str, source: str) -> None:
     async def _bounded(raw: RawJob) -> None:
         async with sem:
             async with SessionLocal() as db:
-                await _process_job(
-                    db, run_id, raw, profiles, profile, compact, source_tag=source
-                )
+                await _process_job(db, run_id, raw, profiles, profile, compact, source_tag=source)
 
     await asyncio.gather(*[_bounded(raw) for raw in raw_jobs], return_exceptions=True)
 
