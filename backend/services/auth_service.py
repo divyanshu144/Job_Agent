@@ -17,16 +17,16 @@ _ALGORITHM = "HS256"
 
 
 def hash_password(password: str) -> str:
-    return _pwd_context.hash(password)
+    return _pwd_context.hash(password)  # type: ignore[no-any-return]
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd_context.verify(plain, hashed)
+    return _pwd_context.verify(plain, hashed)  # type: ignore[no-any-return]
 
 
 def create_access_token(user_id: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
-    return jwt.encode({"sub": user_id, "exp": expire}, settings.jwt_secret, algorithm=_ALGORITHM)
+    return jwt.encode({"sub": user_id, "exp": expire}, settings.jwt_secret, algorithm=_ALGORITHM)  # type: ignore[no-any-return]
 
 
 def decode_token(token: str) -> str:

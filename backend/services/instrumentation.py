@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 import anthropic
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +22,7 @@ async def tracked_call(
     **create_kwargs: Any,
 ) -> anthropic.types.Message:
     start = time.monotonic()
-    msg = await client.messages.create(model=model, **create_kwargs)  # type: ignore[arg-type]
+    msg = cast(anthropic.types.Message, await client.messages.create(model=model, **create_kwargs))
     latency_ms = int((time.monotonic() - start) * 1000)
     if db is not None:
         cost = calculate_cost(model, msg.usage.input_tokens, msg.usage.output_tokens)

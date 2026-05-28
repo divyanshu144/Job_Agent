@@ -68,8 +68,9 @@ async def test_fetch_hn_jobs_skips_short_comments():
     mock_client.get = fake_get
 
     with patch("httpx.AsyncClient", return_value=mock_client):
-        from backend.services import hn_client
         import importlib
+
+        from backend.services import hn_client
 
         importlib.reload(hn_client)
         jobs = await hn_client.fetch_hn_jobs()
@@ -81,6 +82,7 @@ async def test_fetch_hn_jobs_skips_short_comments():
 async def test_raw_job_has_correct_fields():
     """RawJob.dedup_hash is sha256 of raw_text."""
     import hashlib
+
     from backend.services.hn_client import RawJob
 
     text = "some job text here"

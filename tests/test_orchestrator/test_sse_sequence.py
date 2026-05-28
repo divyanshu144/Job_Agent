@@ -1,5 +1,6 @@
-from unittest.mock import AsyncMock, patch
 import json
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -15,7 +16,6 @@ from backend.schemas import (
     ResourcePlannerOutput,
     ResumeTailorerOutput,
 )
-from datetime import datetime, timezone
 
 JD = "Senior ML Engineer role requiring Python, PyTorch, AWS experience. " * 5
 

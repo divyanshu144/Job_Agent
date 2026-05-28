@@ -1,10 +1,10 @@
 # tests/test_services/test_discovery.py
 from __future__ import annotations
 
-import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -154,10 +154,9 @@ async def test_process_job_skips_duplicate_hash(session):
 
 async def test_process_job_scores_relevant_job(session):
     """Job reaching Phase 1 gets relevance_score set and state=scored."""
-    from backend.services.discovery import SearchProfile, Stage2Result, _process_job
-    from backend.schemas import GapAnalystOutput, JobParserOutput, MatchScorerOutput
-    from backend.services.orchestrator import Phase1Result
     from backend.schemas import PriorOutputs
+    from backend.services.discovery import SearchProfile, Stage2Result, _process_job
+    from backend.services.orchestrator import Phase1Result
 
     run = DiscoveryRun(source="hn", status="running", started_at=datetime.now(timezone.utc))
     profile = Profile(

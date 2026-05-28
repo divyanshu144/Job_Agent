@@ -4,8 +4,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 import backend.models  # noqa: F401
 
 
@@ -53,8 +51,9 @@ async def test_get_run_not_found_returns_404(app_client):
 
 
 async def test_list_runs_returns_recent_first(app_client, db_session):
-    from backend.models import DiscoveryRun
     from datetime import timedelta
+
+    from backend.models import DiscoveryRun
 
     now = datetime.now(timezone.utc)
     for i, status in enumerate(["complete", "failed", "complete"]):
@@ -125,3 +124,10 @@ async def test_feed_returns_scored_jobs(app_client, db_session):
     assert data["items"][0]["title"] == "Backend Engineer"
     assert data["items"][0]["relevance_score"] == 80
     assert data["items"][0]["analysis_id"] == analysis.id
+
+
+async def test_trigger_discovery_invalid_source_returns_422(app_client):
+    """Unknown source strings are rejected before any DB write."""
+    resp = await app_client.post("/api/discovery/run?source=linkedin")
+    assert resp.status_code == 422
+    assert "linkedin" in resp.json()["detail"]

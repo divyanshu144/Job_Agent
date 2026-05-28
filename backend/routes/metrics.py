@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from fastapi import APIRouter, Depends
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, Depends
 
 from backend.database import get_db
 from backend.models import LLMCall, User
@@ -21,8 +21,8 @@ async def get_cost_summary(
         await db.execute(
             select(
                 func.count(LLMCall.id).label("total_calls"),
-                func.sum(case((LLMCall.cache_hit == False, 1), else_=0)).label("real_calls"),
-                func.sum(case((LLMCall.cache_hit == True, 1), else_=0)).label("cached_calls"),
+                func.sum(case((LLMCall.cache_hit == False, 1), else_=0)).label("real_calls"),  # noqa: E712
+                func.sum(case((LLMCall.cache_hit == True, 1), else_=0)).label("cached_calls"),  # noqa: E712
                 func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("total_cost_usd"),
                 func.coalesce(func.sum(LLMCall.input_tokens), 0).label("total_input_tokens"),
                 func.coalesce(func.sum(LLMCall.output_tokens), 0).label("total_output_tokens"),
@@ -56,7 +56,7 @@ async def get_cost_runs(
                 LLMCall.run_id,
                 func.sum(LLMCall.cost_usd).label("total_cost_usd"),
                 func.count(LLMCall.id).label("total_calls"),
-                func.sum(case((LLMCall.cache_hit == True, 1), else_=0)).label("cached_calls"),
+                func.sum(case((LLMCall.cache_hit == True, 1), else_=0)).label("cached_calls"),  # noqa: E712
                 func.min(LLMCall.created_at).label("created_at"),
             )
             .where(LLMCall.run_id.isnot(None))
@@ -89,7 +89,7 @@ async def get_cost_runs(
                 LLMCall.analysis_id,
                 func.sum(LLMCall.cost_usd).label("total_cost_usd"),
                 func.count(LLMCall.id).label("total_calls"),
-                func.sum(case((LLMCall.cache_hit == True, 1), else_=0)).label("cached_calls"),
+                func.sum(case((LLMCall.cache_hit == True, 1), else_=0)).label("cached_calls"),  # noqa: E712
                 func.min(LLMCall.created_at).label("created_at"),
             )
             .where(LLMCall.analysis_id.isnot(None), LLMCall.run_id.is_(None))

@@ -17,10 +17,12 @@ from backend.agents.base import HAIKU
 from backend.config import settings
 from backend.database import SessionLocal
 from backend.models import DiscoveryRun, Job
+from backend.services.adzuna_client import fetch_adzuna_jobs
 from backend.services.hn_client import RawJob, fetch_hn_jobs
 from backend.services.instrumentation import tracked_call
 from backend.services.orchestrator import _run_phase1
 from backend.services.profile_builder import build_compact_profile, get_or_build_profile
+from backend.services.reed_client import fetch_reed_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +101,8 @@ async def _stage2_check(
         f"Candidate summary:\n{compact_profile[:1000]}\n\n"
         "Evaluate if the job posting is relevant to this candidate. "
         'Respond with ONLY valid JSON: {"relevant": true/false, "reason": "one sentence", '
-        '"title": "job title or empty string", "company": "company name or empty string", "location": "city/remote or null"}'
+        '"title": "job title or empty string", "company": "company name or empty string", '
+        '"location": "city/remote or null"}'
     )
     msg = await tracked_call(
         _anthropic_client,
@@ -138,14 +141,15 @@ async def _process_job(
     profiles: list[SearchProfile],
     profile: Any,
     compact: str,
+    source_tag: str = "hn",
 ) -> None:
     existing = (
         await db.execute(select(Job).where(Job.dedup_hash == raw.dedup_hash))
     ).scalar_one_or_none()
     if existing is not None:
         sources = json.loads(existing.sources)
-        if "hn" not in sources:
-            sources.append("hn")
+        if source_tag not in sources:
+            sources.append(source_tag)
             await db.execute(
                 update(Job).where(Job.id == existing.id).values(sources=json.dumps(sources))
             )
@@ -154,7 +158,7 @@ async def _process_job(
 
     # Commit immediately so filtered jobs persist in the DB
     job = Job(
-        sources='["hn"]',
+        sources=json.dumps([source_tag]),
         source_id=raw.source_id,
         source_url=raw.source_url,
         raw_text=raw.raw_text,
@@ -230,40 +234,46 @@ async def _process_job(
     await db.commit()
 
 
+_DISCOVERY_CONCURRENCY = 5
+
+
 async def _run_discovery_task(run_id: str, source: str) -> None:
     # Background task — must own its own session (cannot receive FastAPI DI)
-    async with SessionLocal() as db:
-        await db.execute(
-            update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(status="running")
-        )
-        await db.commit()
-        try:
-            raw_jobs = await fetch_hn_jobs()
+    # Phase 1: setup — load profiles, build compact profile, fetch jobs
+    try:
+        async with SessionLocal() as db:
+            await db.execute(
+                update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(status="running")
+            )
+            await db.commit()
+
+            # Load search profiles first so Reed/Adzuna can use target_roles as keywords
+            profiles = _load_search_profiles()
+            profile = await get_or_build_profile(db)
+            compact = build_compact_profile(profile.yaml_data, profile.cv_text)
+
+            # Derive keyword string and primary location from configured search profiles
+            all_roles = [r for p in profiles for r in p.target_roles]
+            keywords = " ".join(all_roles[:3]) if all_roles else "software engineer"
+            all_locations = [loc for p in profiles for loc in p.allowed_locations]
+            location = all_locations[0] if all_locations else ""
+
+            if source == "reed":
+                raw_jobs = await fetch_reed_jobs(keywords, location)
+            elif source == "adzuna":
+                raw_jobs = await fetch_adzuna_jobs(keywords, location)
+            else:  # "hn" — fetches the monthly "Who is Hiring" thread; no keywords needed
+                raw_jobs = await fetch_hn_jobs()
+
             await db.execute(
                 update(DiscoveryRun)
                 .where(DiscoveryRun.id == run_id)
                 .values(jobs_found=len(raw_jobs))
             )
             await db.commit()
-
-            profiles = _load_search_profiles()
-            profile = await get_or_build_profile(db)
-            compact = build_compact_profile(profile.yaml_data, profile.cv_text)
-
-            for raw in raw_jobs:
-                await _process_job(db, run_id, raw, profiles, profile, compact)
-
-            await db.execute(
-                update(DiscoveryRun)
-                .where(DiscoveryRun.id == run_id)
-                .values(
-                    status="complete",
-                    completed_at=datetime.now(timezone.utc),
-                )
-            )
-            await db.commit()
-        except Exception as e:
-            logger.error("Discovery run %s failed: %s", run_id, e, exc_info=True)
+    except Exception as e:
+        logger.error("Discovery run %s setup failed: %s", run_id, e, exc_info=True)
+        async with SessionLocal() as db:
             await db.execute(
                 update(DiscoveryRun)
                 .where(DiscoveryRun.id == run_id)
@@ -273,6 +283,28 @@ async def _run_discovery_task(run_id: str, source: str) -> None:
                 )
             )
             await db.commit()
+        return
+
+    # Phase 2: process jobs concurrently, each with its own session
+    sem = asyncio.Semaphore(_DISCOVERY_CONCURRENCY)
+
+    async def _bounded(raw: RawJob) -> None:
+        async with sem:
+            async with SessionLocal() as db:
+                await _process_job(db, run_id, raw, profiles, profile, compact, source_tag=source)
+
+    await asyncio.gather(*[_bounded(raw) for raw in raw_jobs], return_exceptions=True)
+
+    async with SessionLocal() as db:
+        await db.execute(
+            update(DiscoveryRun)
+            .where(DiscoveryRun.id == run_id)
+            .values(
+                status="complete",
+                completed_at=datetime.now(timezone.utc),
+            )
+        )
+        await db.commit()
 
 
 async def run_discovery(source: str, db: AsyncSession) -> str:

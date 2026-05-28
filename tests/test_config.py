@@ -2,7 +2,12 @@ from backend.config import Settings
 
 
 def test_settings_defaults():
-    s = Settings(anthropic_api_key="sk-test", github_username="testuser")
+    s = Settings(
+        anthropic_api_key="sk-test",
+        github_username="testuser",
+        cv_path="data/cv.pdf",
+        profile_yaml_path="data/candidate_profile.yaml",
+    )
     assert s.api_prefix == "/api"
     assert "aiosqlite" in s.database_url
     assert s.cv_path == "data/cv.pdf"

@@ -1,4 +1,5 @@
 import pytest
+
 from backend.services.cost_calculator import calculate_cost
 
 

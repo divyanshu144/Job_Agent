@@ -1,4 +1,5 @@
 import pytest
+
 from backend.services.discovery import SearchProfile, _location_allowed
 
 
