@@ -36,3 +36,14 @@ async def init_db() -> None:
             await conn.execute(
                 text("ALTER TABLE discovery_runs ADD COLUMN source_statuses TEXT DEFAULT '{}'")
             )
+        # Migration: prompt cache token columns on llm_calls
+        llm_col_result = await conn.execute(text("PRAGMA table_info(llm_calls)"))
+        llm_cols = {row[1] for row in llm_col_result.fetchall()}
+        if "cache_creation_tokens" not in llm_cols:
+            await conn.execute(
+                text("ALTER TABLE llm_calls ADD COLUMN cache_creation_tokens INTEGER NOT NULL DEFAULT 0")
+            )
+        if "cache_read_tokens" not in llm_cols:
+            await conn.execute(
+                text("ALTER TABLE llm_calls ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0")
+            )

@@ -48,3 +48,31 @@ async def test_analysis_with_results(engine):
         session.add(r)
         await session.commit()
         assert r.id is not None
+
+
+@pytest.mark.asyncio
+async def test_llm_call_has_cache_token_columns(engine):
+    """LLMCall model accepts and stores cache_creation_tokens and cache_read_tokens."""
+    from backend.models import LLMCall
+    from datetime import datetime, timezone
+
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as session:
+        row = LLMCall(
+            agent_name="test_agent",
+            model="claude-haiku-4-5-20251001",
+            input_tokens=100,
+            output_tokens=20,
+            cost_usd=0.0001,
+            latency_ms=500,
+            cache_hit=False,
+            cache_creation_tokens=800,
+            cache_read_tokens=0,
+            created_at=datetime.now(timezone.utc),
+        )
+        session.add(row)
+        await session.commit()
+
+        result = await session.get(LLMCall, row.id)
+        assert result.cache_creation_tokens == 800
+        assert result.cache_read_tokens == 0

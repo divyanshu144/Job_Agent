@@ -80,6 +80,8 @@ class LLMCall(Base):
     cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     cache_hit: Mapped[bool] = mapped_column(Boolean, default=False)
+    cache_creation_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cache_read_tokens: Mapped[int] = mapped_column(Integer, default=0)
     analysis_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("analyses.id"), nullable=True, default=None
     )

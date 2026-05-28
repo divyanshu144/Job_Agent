@@ -237,6 +237,30 @@ def main() -> None:
     )
     print("✓ contacts table ready")
 
+    # 18. Add cache_creation_tokens to llm_calls
+    try:
+        cur.execute(
+            "ALTER TABLE llm_calls ADD COLUMN cache_creation_tokens INTEGER NOT NULL DEFAULT 0"
+        )
+        print("✓ Added cache_creation_tokens to llm_calls")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" in str(e).lower():
+            print("- cache_creation_tokens already exists, skipping")
+        else:
+            raise
+
+    # 19. Add cache_read_tokens to llm_calls
+    try:
+        cur.execute(
+            "ALTER TABLE llm_calls ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0"
+        )
+        print("✓ Added cache_read_tokens to llm_calls")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" in str(e).lower():
+            print("- cache_read_tokens already exists, skipping")
+        else:
+            raise
+
     conn.commit()
     conn.close()
     print("Migration complete.")
