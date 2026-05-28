@@ -50,10 +50,10 @@ def test_full_call_with_cache_mix():
     # Sonnet: input $3/M, output $15/M, cache_write $3.75/M, cache_read $0.30/M
     cost = calculate_cost(
         "claude-sonnet-4-6",
-        input_tokens=1_000_000,      # $3.00
-        output_tokens=1_000_000,     # $15.00
+        input_tokens=1_000_000,  # $3.00
+        output_tokens=1_000_000,  # $15.00
         cache_creation_tokens=1_000_000,  # $3.75
-        cache_read_tokens=1_000_000,      # $0.30
+        cache_read_tokens=1_000_000,  # $0.30
     )
     assert cost == pytest.approx(22.05)
 

@@ -227,9 +227,10 @@ async def test_summary_prompt_cache_savings_computed_correctly(
     authed_client: AsyncClient, db_session
 ):
     """Cache read tokens produce positive savings vs baseline."""
-    from backend.models import LLMCall
-    from backend.agents.base import HAIKU
     from datetime import datetime, timezone
+
+    from backend.agents.base import HAIKU
+    from backend.models import LLMCall
 
     db_session.add(
         LLMCall(

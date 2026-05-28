@@ -73,7 +73,8 @@ async def get_cost_summary(
 
     cache_creation = cache_row.creation or 0
     cache_reads = cache_row.reads or 0
-    # Savings formula: read savings (input_rate - cache_read_rate) minus write overhead (cache_write_rate - input_rate)
+    # Savings: read savings (input_rate - cache_read_rate)
+    # minus write overhead (cache_write_rate - input_rate)
     # Using Haiku rates as primary driver (most cache tokens from Haiku discovery runs)
     prompt_cache_savings = (
         cache_reads * (_HAIKU_INPUT_PER_M - _HAIKU_CACHE_READ_PER_M)

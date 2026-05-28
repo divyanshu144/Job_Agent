@@ -4,14 +4,14 @@ COST_PER_MILLION: dict[str, dict[str, float]] = {
     "claude-haiku-4-5-20251001": {
         "input": 0.80,
         "output": 4.00,
-        "cache_write": 1.00,   # 1.25× input rate
-        "cache_read": 0.08,    # 0.10× input rate
+        "cache_write": 1.00,  # 1.25× input rate
+        "cache_read": 0.08,  # 0.10× input rate
     },
     "claude-sonnet-4-6": {
         "input": 3.00,
         "output": 15.00,
-        "cache_write": 3.75,   # 1.25× input rate
-        "cache_read": 0.30,    # 0.10× input rate
+        "cache_write": 3.75,  # 1.25× input rate
+        "cache_read": 0.30,  # 0.10× input rate
     },
 }
 

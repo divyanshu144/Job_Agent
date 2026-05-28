@@ -57,9 +57,11 @@ async def test_log_cache_hit_db_failure_does_not_raise():
 async def test_tracked_call_records_cache_creation_tokens(db_session):
     """cache_creation_input_tokens from response are stored in LLMCall row."""
     from unittest.mock import AsyncMock, MagicMock
+
+    from sqlalchemy import select
+
     from backend.models import LLMCall
     from backend.services.instrumentation import tracked_call
-    from sqlalchemy import select
 
     mock_usage = MagicMock()
     mock_usage.input_tokens = 100
@@ -88,18 +90,18 @@ async def test_tracked_call_records_cache_creation_tokens(db_session):
     assert row.cache_creation_tokens == 800
     assert row.cache_read_tokens == 0
     # Cost: 100 input ($0.80/M) + 20 output ($4.00/M) + 800 cache_write ($1.00/M)
-    assert row.cost_usd == pytest.approx(
-        (100 * 0.80 + 20 * 4.00 + 800 * 1.00) / 1_000_000
-    )
+    assert row.cost_usd == pytest.approx((100 * 0.80 + 20 * 4.00 + 800 * 1.00) / 1_000_000)
 
 
 @pytest.mark.asyncio
 async def test_tracked_call_records_cache_read_tokens(db_session):
     """cache_read_input_tokens from response are stored and discounted in cost."""
     from unittest.mock import AsyncMock, MagicMock
+
+    from sqlalchemy import select
+
     from backend.models import LLMCall
     from backend.services.instrumentation import tracked_call
-    from sqlalchemy import select
 
     mock_usage = MagicMock()
     mock_usage.input_tokens = 50
@@ -127,18 +129,18 @@ async def test_tracked_call_records_cache_read_tokens(db_session):
     row = (await db_session.execute(select(LLMCall))).scalar_one()
     assert row.cache_read_tokens == 600
     # Cost: 50 input + 10 output + 600 cache_read ($0.08/M)
-    assert row.cost_usd == pytest.approx(
-        (50 * 0.80 + 10 * 4.00 + 600 * 0.08) / 1_000_000
-    )
+    assert row.cost_usd == pytest.approx((50 * 0.80 + 10 * 4.00 + 600 * 0.08) / 1_000_000)
 
 
 @pytest.mark.asyncio
 async def test_tracked_call_handles_none_cache_usage(db_session):
     """If cache token fields are None (caching not used), store 0 without error."""
     from unittest.mock import AsyncMock, MagicMock
+
+    from sqlalchemy import select
+
     from backend.models import LLMCall
     from backend.services.instrumentation import tracked_call
-    from sqlalchemy import select
 
     mock_usage = MagicMock()
     mock_usage.input_tokens = 200

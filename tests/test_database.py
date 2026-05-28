@@ -53,8 +53,9 @@ async def test_analysis_with_results(engine):
 @pytest.mark.asyncio
 async def test_llm_call_has_cache_token_columns(engine):
     """LLMCall model accepts and stores cache_creation_tokens and cache_read_tokens."""
-    from backend.models import LLMCall
     from datetime import datetime, timezone
+
+    from backend.models import LLMCall
 
     Session = async_sessionmaker(engine, expire_on_commit=False)
     async with Session() as session:
