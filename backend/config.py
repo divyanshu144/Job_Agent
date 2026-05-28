@@ -18,9 +18,9 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me-in-production-use-long-random-string"
     jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
     hunter_api_key: str = ""
-    reed_api_key: str = ""        # reed.co.uk developer API key
-    adzuna_app_id: str = ""       # adzuna.co.uk application ID
-    adzuna_app_key: str = ""      # adzuna.co.uk application key
+    reed_api_key: str = ""  # reed.co.uk developer API key
+    adzuna_app_id: str = ""  # adzuna.co.uk application ID
+    adzuna_app_key: str = ""  # adzuna.co.uk application key
 
 
 settings = Settings()
