@@ -41,6 +41,14 @@ export interface FunnelMetrics {
   scored: number;
 }
 
+/** Per-source progress entry inside DiscoveryRun.source_statuses */
+export interface SourceStatusItem {
+  status: "pending" | "running" | "done" | "failed";
+  jobs_found: number;
+  jobs_scored: number;
+  error: string | null;
+}
+
 export interface DiscoveryRun {
   id: string;
   source: string;
@@ -49,6 +57,13 @@ export interface DiscoveryRun {
   started_at: string;
   completed_at: string | null;
   funnel: FunnelMetrics;
+  /** Populated for "all" runs; empty object for single-source runs */
+  source_statuses: Record<string, SourceStatusItem>;
+}
+
+/** Which sources have credentials configured (values are never actual keys) */
+export interface DiscoverySources {
+  sources: Record<string, boolean>;
 }
 
 export interface DiscoveryFeedItem {

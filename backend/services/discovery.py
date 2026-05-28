@@ -213,6 +213,8 @@ async def _process_job(
         )
     except Exception as e:
         logger.warning("Phase 1 failed for job %s: %s", job.id, e)
+        await db.execute(update(Job).where(Job.id == job.id).values(state="filtered"))
+        await db.commit()
         return
 
     matched = _match_profiles(result.score, profiles)
@@ -293,7 +295,10 @@ async def _run_discovery_task(run_id: str, source: str) -> None:
             async with SessionLocal() as db:
                 await _process_job(db, run_id, raw, profiles, profile, compact, source_tag=source)
 
-    await asyncio.gather(*[_bounded(raw) for raw in raw_jobs], return_exceptions=True)
+    results = await asyncio.gather(*[_bounded(raw) for raw in raw_jobs], return_exceptions=True)
+    for exc in results:
+        if isinstance(exc, BaseException):
+            logger.error("Unhandled exception in discovery Phase 2 (run %s): %s", run_id, exc)
 
     async with SessionLocal() as db:
         await db.execute(
@@ -318,4 +323,166 @@ async def run_discovery(source: str, db: AsyncSession) -> str:
     db.add(run)
     await db.commit()
     asyncio.create_task(_run_discovery_task(run.id, source))
+    return run.id
+
+
+# ---------------------------------------------------------------------------
+# Multi-source discovery
+# ---------------------------------------------------------------------------
+
+# Per-run asyncio.Lock prevents concurrent JSON read-modify-write races on the
+# source_statuses column when multiple source tasks update it simultaneously.
+_source_status_locks: dict[str, asyncio.Lock] = {}
+
+
+def _get_configured_sources() -> list[str]:
+    """Return source names whose credentials are present. HN is always included."""
+    sources: list[str] = ["hn"]
+    if settings.reed_api_key:
+        sources.append("reed")
+    if settings.adzuna_app_id and settings.adzuna_app_key:
+        sources.append("adzuna")
+    return sources
+
+
+async def _update_source_status(run_id: str, source: str, **fields: Any) -> None:
+    """Thread-safe update of one source's entry in the source_statuses JSON column."""
+    lock = _source_status_locks.setdefault(run_id, asyncio.Lock())
+    async with lock:
+        async with SessionLocal() as db:
+            run = (
+                await db.execute(select(DiscoveryRun).where(DiscoveryRun.id == run_id))
+            ).scalar_one()
+            statuses: dict[str, Any] = json.loads(run.source_statuses or "{}")
+            if source not in statuses:
+                statuses[source] = {
+                    "status": "pending",
+                    "jobs_found": 0,
+                    "jobs_scored": 0,
+                    "error": None,
+                }
+            statuses[source].update(fields)
+            await db.execute(
+                update(DiscoveryRun)
+                .where(DiscoveryRun.id == run_id)
+                .values(source_statuses=json.dumps(statuses))
+            )
+            await db.commit()
+
+
+async def _run_source_task(run_id: str, source: str) -> None:
+    """Fetch and process jobs from one source; update source_statuses[source] throughout."""
+    await _update_source_status(run_id, source, status="running")
+
+    # ── Setup: load profile + fetch raw jobs ──────────────────────────────
+    try:
+        async with SessionLocal() as db:
+            profiles = _load_search_profiles()
+            profile = await get_or_build_profile(db)
+            compact = build_compact_profile(profile.yaml_data, profile.cv_text)
+
+            all_roles = [r for p in profiles for r in p.target_roles]
+            keywords = " ".join(all_roles[:3]) if all_roles else "software engineer"
+            all_locations = [loc for p in profiles for loc in p.allowed_locations]
+            location = all_locations[0] if all_locations else ""
+
+            if source == "reed":
+                raw_jobs = await fetch_reed_jobs(keywords, location)
+            elif source == "adzuna":
+                raw_jobs = await fetch_adzuna_jobs(keywords, location)
+            else:
+                raw_jobs = await fetch_hn_jobs()
+
+            await db.execute(
+                update(DiscoveryRun)
+                .where(DiscoveryRun.id == run_id)
+                .values(jobs_found=DiscoveryRun.jobs_found + len(raw_jobs))
+            )
+            await db.commit()
+    except Exception as e:
+        logger.error(
+            "Source task setup failed (run=%s source=%s): %s", run_id, source, e, exc_info=True
+        )
+        await _update_source_status(run_id, source, status="failed", error=str(e))
+        return
+
+    await _update_source_status(run_id, source, jobs_found=len(raw_jobs))
+
+    # ── Phase 2: process jobs concurrently ───────────────────────────────
+    sem = asyncio.Semaphore(_DISCOVERY_CONCURRENCY)
+
+    async def _bounded(raw: RawJob) -> None:
+        async with sem:
+            async with SessionLocal() as db:
+                await _process_job(db, run_id, raw, profiles, profile, compact, source_tag=source)
+
+    results = await asyncio.gather(*[_bounded(raw) for raw in raw_jobs], return_exceptions=True)
+    for exc in results:
+        if isinstance(exc, BaseException):
+            logger.error(
+                "Unhandled exception in source task Phase 2 (run=%s source=%s): %s",
+                run_id,
+                source,
+                exc,
+            )
+
+    # Count jobs this source contributed (query is correct even with concurrent sources)
+    from sqlalchemy import func
+
+    async with SessionLocal() as db:
+        jobs_scored = (
+            await db.execute(
+                select(func.count(Job.id)).where(
+                    Job.discovery_run_id == run_id,
+                    Job.state == "scored",
+                    Job.sources.like(f'%"{source}"%'),
+                )
+            )
+        ).scalar_one()
+
+    await _update_source_status(run_id, source, status="done", jobs_scored=jobs_scored)
+
+
+async def _run_all_discovery_task(run_id: str, sources: list[str]) -> None:
+    """Background task: run all configured sources concurrently, then set final run status."""
+    async with SessionLocal() as db:
+        await db.execute(
+            update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(status="running")
+        )
+        await db.commit()
+
+    await asyncio.gather(*[_run_source_task(run_id, s) for s in sources], return_exceptions=True)
+
+    # Derive overall status: failed only if ALL sources failed, else complete.
+    async with SessionLocal() as db:
+        run = (await db.execute(select(DiscoveryRun).where(DiscoveryRun.id == run_id))).scalar_one()
+        statuses: dict[str, Any] = json.loads(run.source_statuses or "{}")
+        all_failed = bool(statuses) and all(v.get("status") == "failed" for v in statuses.values())
+        overall = "failed" if all_failed else "complete"
+        await db.execute(
+            update(DiscoveryRun)
+            .where(DiscoveryRun.id == run_id)
+            .values(status=overall, completed_at=datetime.now(timezone.utc))
+        )
+        await db.commit()
+
+    _source_status_locks.pop(run_id, None)
+
+
+async def run_all_discovery(db: AsyncSession) -> str:
+    """Create a combined DiscoveryRun for all configured sources; return run_id immediately."""
+    sources = _get_configured_sources()
+    initial_statuses = {
+        s: {"status": "pending", "jobs_found": 0, "jobs_scored": 0, "error": None} for s in sources
+    }
+    run = DiscoveryRun(
+        source="all",
+        triggered_by="manual",
+        status="pending",
+        started_at=datetime.now(timezone.utc),
+        source_statuses=json.dumps(initial_statuses),
+    )
+    db.add(run)
+    await db.commit()
+    asyncio.create_task(_run_all_discovery_task(run.id, sources))
     return run.id

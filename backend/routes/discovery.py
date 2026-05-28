@@ -12,10 +12,12 @@ from backend.schemas import (
     DiscoveryFeedItem,
     DiscoveryFeedResponse,
     DiscoveryRunResponse,
+    DiscoverySourcesResponse,
     FunnelMetrics,
+    SourceStatusItem,
 )
 from backend.services.auth_service import get_current_user
-from backend.services.discovery import run_discovery
+from backend.services.discovery import _get_configured_sources, run_all_discovery, run_discovery
 
 router = APIRouter(tags=["discovery"])
 
@@ -23,6 +25,10 @@ _VALID_SOURCES = {"hn", "reed", "adzuna"}
 
 
 def _run_to_response(run: DiscoveryRun) -> DiscoveryRunResponse:
+    raw_statuses: dict[str, object] = json.loads(run.source_statuses or "{}")
+    parsed_statuses = {
+        src: SourceStatusItem.model_validate(val) for src, val in raw_statuses.items()
+    }
     return DiscoveryRunResponse(
         id=run.id,
         source=run.source,
@@ -36,6 +42,7 @@ def _run_to_response(run: DiscoveryRun) -> DiscoveryRunResponse:
             passed_stage2=run.jobs_passed_stage2,
             scored=run.jobs_scored,
         ),
+        source_statuses=parsed_statuses,
     )
 
 
@@ -69,6 +76,31 @@ async def trigger_discovery(
         )
     run_id = await run_discovery(source, db)
     return {"run_id": run_id}
+
+
+@router.post("/discovery/run/all")
+async def trigger_all_discovery(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Start a background run that fetches from all configured sources concurrently."""
+    run_id = await run_all_discovery(db)
+    return {"run_id": run_id}
+
+
+@router.get("/discovery/sources", response_model=DiscoverySourcesResponse)
+async def get_discovery_sources(
+    current_user: User = Depends(get_current_user),
+) -> DiscoverySourcesResponse:
+    """Return which sources have credentials configured. Never exposes key values."""
+    configured = set(_get_configured_sources())
+    return DiscoverySourcesResponse(
+        sources={
+            "hn": "hn" in configured,
+            "reed": "reed" in configured,
+            "adzuna": "adzuna" in configured,
+        }
+    )
 
 
 @router.get("/discovery/runs/{run_id}", response_model=DiscoveryRunResponse)

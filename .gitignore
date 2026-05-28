@@ -63,6 +63,7 @@ logs/
 data/*.json
 data/*.yaml
 data/*.yml
+data/*.pdf
 data/cv/
 data/profiles/
 !data/.gitkeep

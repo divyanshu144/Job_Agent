@@ -17,6 +17,20 @@ from backend.services.github_client import fetch_readme_with_meta
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_PROFILE_YAML = """identity:
+  name: Candidate
+  headline: ""
+
+core_skills:
+  languages: []
+  frameworks: []
+  tools: []
+
+featured_projects: []
+
+search_profiles: []
+"""
+
 
 def _assemble_merged(yaml_data: str, cv_text: str, github_data: dict[str, str]) -> str:
     parts = ["## Candidate Profile (YAML)\n" + yaml_data]
@@ -42,8 +56,13 @@ def build_compact_profile(yaml_text: str, cv_text: str) -> str:
 
 def _read_repos(yaml_path: str) -> tuple[str, list[str]]:
     """Return (raw yaml text, list of 'owner/repo' strings from featured_projects)."""
-    yaml_text = Path(yaml_path).read_text()
-    profile_data = yaml.safe_load(yaml_text)
+    path = Path(yaml_path)
+    if not path.exists():
+        logger.warning("Profile YAML not found at %s; using starter profile", yaml_path)
+        yaml_text = _DEFAULT_PROFILE_YAML
+    else:
+        yaml_text = path.read_text()
+    profile_data = yaml.safe_load(yaml_text) or {}
     repos = [
         p["repo"]
         for p in profile_data.get("featured_projects", [])

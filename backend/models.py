@@ -101,6 +101,8 @@ class DiscoveryRun(Base):
     jobs_passed_stage1: Mapped[int] = mapped_column(Integer, default=0)
     jobs_passed_stage2: Mapped[int] = mapped_column(Integer, default=0)
     jobs_scored: Mapped[int] = mapped_column(Integer, default=0)
+    # JSON: {source: {status, jobs_found, jobs_scored, error}} — populated for "all" runs
+    source_statuses: Mapped[str] = mapped_column(Text, default="{}")
     jobs: Mapped[list[Job]] = relationship("Job", back_populates="run")
 
 

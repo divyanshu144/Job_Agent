@@ -148,6 +148,15 @@ class FunnelMetrics(BaseModel):
     scored: int
 
 
+class SourceStatusItem(BaseModel):
+    """Per-source progress entry inside DiscoveryRunResponse.source_statuses."""
+
+    status: str  # pending | running | done | failed
+    jobs_found: int = 0
+    jobs_scored: int = 0
+    error: str | None = None
+
+
 class DiscoveryRunResponse(BaseModel):
     id: str
     source: str
@@ -156,6 +165,14 @@ class DiscoveryRunResponse(BaseModel):
     started_at: datetime
     completed_at: datetime | None
     funnel: FunnelMetrics
+    # Empty dict for single-source runs; populated for "all" runs.
+    source_statuses: dict[str, SourceStatusItem] = {}
+
+
+class DiscoverySourcesResponse(BaseModel):
+    """Which sources are configured (credentials present). Values are never exposed."""
+
+    sources: dict[str, bool]
 
 
 class DiscoveryFeedItem(BaseModel):

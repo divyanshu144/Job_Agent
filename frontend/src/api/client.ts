@@ -1,10 +1,15 @@
-import type { ProfileResponse, ProfileStatusResponse, GitHubRefreshResponse, AnalysisDetail, AgentName, SSECallbacks, DiscoveryRun, DiscoveryFeedResponse, User, RunCost, CostSummary, Contact, ColdEmailDraft } from "../types";
+import type { ProfileResponse, ProfileStatusResponse, GitHubRefreshResponse, AnalysisDetail, AgentName, SSECallbacks, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft } from "../types";
 
 const BASE = "/api";
 
+async function _errorMessage(r: Response, method: string, path: string): Promise<never> {
+  const detail = await r.json().then((j) => j?.detail ?? null).catch(() => null);
+  throw new Error(detail ?? `${method} ${path} failed: ${r.status}`);
+}
+
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(`${BASE}${path}`, { credentials: "include" });
-  if (!r.ok) throw new Error(`GET ${path} failed: ${r.status}`);
+  if (!r.ok) return _errorMessage(r, "GET", path);
   return r.json() as Promise<T>;
 }
 
@@ -15,7 +20,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
     credentials: "include",
   });
-  if (!r.ok) throw new Error(`POST ${path} failed: ${r.status}`);
+  if (!r.ok) return _errorMessage(r, "POST", path);
   return r.json() as Promise<T>;
 }
 
@@ -41,10 +46,16 @@ export const api = {
   },
   getAnalysis: (id: string) => get<AnalysisDetail>(`/analysis/${id}`),
   triggerDiscovery: async (source: string): Promise<{ run_id: string }> => {
-    const r = await fetch(`${BASE}/discovery/run?source=${source}`, { method: "POST", credentials: "include" });
-    if (!r.ok) throw new Error(`Trigger discovery failed: ${r.status}`);
+    const r = await fetch(`${BASE}/discovery/run?source=${encodeURIComponent(source)}`, { method: "POST", credentials: "include" });
+    if (!r.ok) return _errorMessage(r, "POST", `/discovery/run?source=${source}`);
     return r.json() as Promise<{ run_id: string }>;
   },
+  triggerAllDiscovery: async (): Promise<{ run_id: string }> => {
+    const r = await fetch(`${BASE}/discovery/run/all`, { method: "POST", credentials: "include" });
+    if (!r.ok) return _errorMessage(r, "POST", "/discovery/run/all");
+    return r.json() as Promise<{ run_id: string }>;
+  },
+  getDiscoverySources: () => get<DiscoverySources>("/discovery/sources"),
   getDiscoveryRun: (runId: string) => get<DiscoveryRun>(`/discovery/runs/${runId}`),
   getDiscoveryRuns: () => get<DiscoveryRun[]>("/discovery/runs"),
   getDiscoveryFeed: (params: { profile?: string; location?: string; minScore?: number; limit?: number; offset?: number } = {}) => {

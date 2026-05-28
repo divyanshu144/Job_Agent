@@ -125,3 +125,27 @@ Fix: Treat CLAUDE.md as code. Update it in the same commit as the structural cha
 Avoid: Deferring documentation updates to "later". Architecture maps and convention docs drift by omission, not by error. Every new route/page/convention added without a corresponding CLAUDE.md update compounds the debt.
 
 See: `CLAUDE.md:55–76` (pre-Wave-1)
+
+---
+
+## [2026-05-28] _process_job commits 7–9 times per job; should be batched
+
+Pattern: `_process_job` in `backend/services/discovery.py` commits after every state transition (discovered → stage1-check → stage2-check → scored), totalling 7–9 commits per job. The orchestrator pattern (`_run_phase1`) uses a single `finally: await db.commit()`. Multiple commits on one session make intermediate states observable in the DB and increase SQLite lock contention during concurrent discovery.
+
+Fix (deferred — separate PR): Batch all writes for a single job into one commit at the end of `_process_job`, using flush() to get the job.id for FK references before the final commit. Model after the `_run_phase1` finally-block pattern.
+
+Avoid: Committing inside inner branches of a multi-step processing function. A single job's state transitions should be atomic from the caller's perspective.
+
+See: `backend/services/discovery.py:159–234`
+
+---
+
+## [2026-05-28] Docker containers cannot use host-only profile paths from .env
+
+Pattern: `.env` pointed `PROFILE_YAML_PATH` and `CV_PATH` at `/Users/divyanshu/...`. That works on the host, but inside Docker the app runs in a Linux filesystem where that path does not exist. Uploading a CV then rebuilt the profile and crashed with `FileNotFoundError` while reading the YAML.
+
+Fix: Override those paths in `docker-compose.yml` to the mounted container paths (`/app/data/candidate_profile.yaml`, `/app/data/cv.pdf`). Also make `profile_builder._read_repos()` fall back to a starter YAML when the profile file is missing, so an empty mounted data volume does not produce a 500.
+
+Avoid: Letting host-local absolute paths leak into container runtime config unless the host directory is explicitly bind-mounted at the same container path.
+
+See: `docker-compose.yml`, `backend/services/profile_builder.py:20–68`

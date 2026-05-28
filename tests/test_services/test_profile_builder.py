@@ -93,3 +93,20 @@ async def test_get_or_build_creates_when_none(session, tmp_path):
 
         p = await get_or_build_profile(session)
         assert p.id is not None
+
+
+async def test_build_profile_uses_starter_yaml_when_missing(session, tmp_path):
+    missing_yaml = tmp_path / "missing.yaml"
+
+    with patch(
+        "backend.services.profile_builder.extract_text_from_file",
+        new_callable=AsyncMock,
+        return_value="Uploaded CV text",
+    ):
+        from backend.services.profile_builder import build_profile
+
+        profile = await build_profile(session, str(missing_yaml), "fake/cv.pdf")
+
+    assert "name: Candidate" in profile.yaml_data
+    assert profile.cv_text == "Uploaded CV text"
+    assert "Uploaded CV text" in profile.merged_profile

@@ -49,7 +49,6 @@ backend/
 ├── services/
 │   ├── orchestrator.py     # two-phase pipeline runner + SSE event emitter
 │   ├── profile_builder.py  # merges YAML + CV text + GitHub READMEs into Profile
-│   ├── github_client.py    # httpx calls to api.github.com (unauthenticated)
 │   └── cv_parser.py        # pypdf text extraction
 │
 ├── routes/
@@ -57,7 +56,7 @@ backend/
 │   ├── analyse.py    # POST /api/analyse (SSE), POST /api/analyse/generate/{id}
 │   ├── history.py    # GET /api/history, GET /api/analysis/{id}
 │   ├── contacts.py   # GET /api/contacts, POST /contacts/discover, /{id}/draft, /{id}/send
-│   ├── discovery.py  # POST /api/discovery/run, GET /runs, /feed, /saved, PATCH /jobs/{id}/save
+│   ├── discovery.py  # POST /api/discovery/run, /run/all; GET /runs, /sources, /feed, /saved; PATCH /jobs/{id}/save
 │   ├── auth.py       # POST /api/auth/register, /login, /logout, /invite; GET /me
 │   └── metrics.py    # GET /api/metrics/costs/summary, /runs
 │
