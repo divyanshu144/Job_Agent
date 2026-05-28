@@ -256,6 +256,10 @@ class CostSummary(BaseModel):
     counterfactual_sonnet_cost_usd: float = 0.0
     tiering_savings_usd: float = 0.0
     tiering_ratio: float = 1.0  # counterfactual / actual; 1.0 when no Haiku calls
+    # Anthropic prompt caching: tokens served from cache vs baseline cost
+    prompt_cache_read_tokens: int = 0
+    prompt_cache_creation_tokens: int = 0
+    prompt_cache_savings_usd: float = 0.0  # net: read savings minus write overhead
 
 
 class ColdEmailOutput(BaseModel):

@@ -14,6 +14,10 @@ from backend.services.cost_calculator import COST_PER_MILLION
 _SONNET_INPUT_PER_M = COST_PER_MILLION["claude-sonnet-4-6"]["input"]
 _SONNET_OUTPUT_PER_M = COST_PER_MILLION["claude-sonnet-4-6"]["output"]
 
+_HAIKU_INPUT_PER_M = COST_PER_MILLION["claude-haiku-4-5-20251001"]["input"]
+_HAIKU_CACHE_WRITE_PER_M = COST_PER_MILLION["claude-haiku-4-5-20251001"]["cache_write"]
+_HAIKU_CACHE_READ_PER_M = COST_PER_MILLION["claude-haiku-4-5-20251001"]["cache_read"]
+
 router = APIRouter(tags=["metrics"])
 
 
@@ -57,6 +61,25 @@ async def get_cost_summary(
     savings = counterfactual - haiku_cost
     ratio = counterfactual / haiku_cost if haiku_cost > 0 else 1.0
 
+    # Prompt caching: aggregate cache token counts across all real calls
+    cache_row = (
+        await db.execute(
+            select(
+                func.coalesce(func.sum(LLMCall.cache_creation_tokens), 0).label("creation"),
+                func.coalesce(func.sum(LLMCall.cache_read_tokens), 0).label("reads"),
+            ).where(LLMCall.cache_hit == False)  # noqa: E712
+        )
+    ).one()
+
+    cache_creation = cache_row.creation or 0
+    cache_reads = cache_row.reads or 0
+    # Savings formula: read savings (input_rate - cache_read_rate) minus write overhead (cache_write_rate - input_rate)
+    # Using Haiku rates as primary driver (most cache tokens from Haiku discovery runs)
+    prompt_cache_savings = (
+        cache_reads * (_HAIKU_INPUT_PER_M - _HAIKU_CACHE_READ_PER_M)
+        - cache_creation * (_HAIKU_CACHE_WRITE_PER_M - _HAIKU_INPUT_PER_M)
+    ) / 1_000_000
+
     total = row.total_calls or 0
     cached = row.cached_calls or 0
     return CostSummary(
@@ -71,6 +94,9 @@ async def get_cost_summary(
         counterfactual_sonnet_cost_usd=counterfactual,
         tiering_savings_usd=savings,
         tiering_ratio=ratio,
+        prompt_cache_read_tokens=cache_reads,
+        prompt_cache_creation_tokens=cache_creation,
+        prompt_cache_savings_usd=prompt_cache_savings,
     )
 
 

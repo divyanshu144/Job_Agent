@@ -209,3 +209,69 @@ async def test_runs_returns_analysis_run(authed_client: AsyncClient, db_session)
     assert run["total_cost_usd"] == pytest.approx(0.0008)
     assert len(run["agents"]) == 1
     assert run["agents"][0]["agent_name"] == "stage2_haiku"
+
+
+@pytest.mark.asyncio
+async def test_summary_prompt_cache_fields_empty_db(authed_client: AsyncClient):
+    """Empty DB: prompt cache fields return zero defaults."""
+    r = await authed_client.get("/api/metrics/costs/summary")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["prompt_cache_read_tokens"] == 0
+    assert data["prompt_cache_creation_tokens"] == 0
+    assert data["prompt_cache_savings_usd"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_summary_prompt_cache_savings_computed_correctly(
+    authed_client: AsyncClient, db_session
+):
+    """Cache read tokens produce positive savings vs baseline."""
+    from backend.models import LLMCall
+    from backend.agents.base import HAIKU
+    from datetime import datetime, timezone
+
+    db_session.add(
+        LLMCall(
+            agent_name="stage2_haiku",
+            model=HAIKU,
+            input_tokens=100,
+            output_tokens=20,
+            cost_usd=0.0,
+            latency_ms=800,
+            cache_hit=False,
+            cache_creation_tokens=500,
+            cache_read_tokens=0,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        LLMCall(
+            agent_name="stage2_haiku",
+            model=HAIKU,
+            input_tokens=50,
+            output_tokens=20,
+            cost_usd=0.0,
+            latency_ms=400,
+            cache_hit=False,
+            cache_creation_tokens=0,
+            cache_read_tokens=500,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    await db_session.commit()
+
+    r = await authed_client.get("/api/metrics/costs/summary")
+    assert r.status_code == 200
+    data = r.json()
+
+    assert data["prompt_cache_creation_tokens"] == 500
+    assert data["prompt_cache_read_tokens"] == 500
+
+    # Savings = cache_read * 0.90 * input_rate - cache_creation * 0.25 * input_rate
+    # Haiku input_rate = $0.80/M
+    # read savings: 500 * 0.90 * 0.80 / 1_000_000 = $0.00000036
+    # write overhead: 500 * 0.25 * 0.80 / 1_000_000 = $0.00000010
+    # net: $0.00000026
+    expected = (500 * 0.90 * 0.80 - 500 * 0.25 * 0.80) / 1_000_000
+    assert data["prompt_cache_savings_usd"] == pytest.approx(expected, rel=1e-3)
