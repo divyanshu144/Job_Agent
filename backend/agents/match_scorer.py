@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from backend.agents.base import HAIKU, BaseAgent
 from backend.agents.job_parser import AgentError, _parse_json
+from backend.evals.validators import validate_match_scorer
 from backend.schemas import MatchScorerOutput, PriorOutputs
 
 
@@ -17,6 +18,8 @@ class MatchScorerAgent(BaseAgent):
         system = self._inject(template, profile, jd, prior)
         raw = await self._call(system, jd)
         try:
-            return MatchScorerOutput.model_validate(_parse_json(raw))
+            output = MatchScorerOutput.model_validate(_parse_json(raw))
+            output.validation_warnings = validate_match_scorer(output, prior)
+            return output
         except (json.JSONDecodeError, ValidationError, AgentError) as e:
             raise AgentError(f"match_scorer: {e}") from e

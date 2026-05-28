@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -25,6 +26,17 @@ class BulletItem(BaseModel):
     rationale: str
 
 
+class ValidationWarning(BaseModel):
+    """Produced by backend/evals/validators.py after each agent run.
+    exclude=True on the field means it is stripped from model_dump() and
+    never enters PriorOutputs or downstream prompt context."""
+
+    agent: str
+    rule: str
+    detail: str
+    severity: Literal["warn", "error"]
+
+
 class JobParserOutput(BaseModel):
     required_skills: list[str]
     nice_to_have: list[str]
@@ -32,6 +44,7 @@ class JobParserOutput(BaseModel):
     role_type: str
     seniority: str
     company: str | None = None
+    validation_warnings: list[ValidationWarning] = Field(default_factory=list, exclude=True)
 
 
 class MatchScorerOutput(BaseModel):
@@ -39,25 +52,30 @@ class MatchScorerOutput(BaseModel):
     matched_skills: list[str]
     missing_skills: list[str]
     partial_matches: list[str]
+    validation_warnings: list[ValidationWarning] = Field(default_factory=list, exclude=True)
 
 
 class GapAnalystOutput(BaseModel):
     critical_gaps: list[GapItem]
     nice_to_have_gaps: list[GapItem]
+    validation_warnings: list[ValidationWarning] = Field(default_factory=list, exclude=True)
 
 
 class ResourcePlannerOutput(BaseModel):
     gaps: list[ResourceItem]
+    validation_warnings: list[ValidationWarning] = Field(default_factory=list, exclude=True)
 
 
 class CoverLetterOutput(BaseModel):
     subject: str
     body: str
     tone_notes: str
+    validation_warnings: list[ValidationWarning] = Field(default_factory=list, exclude=True)
 
 
 class ResumeTailorerOutput(BaseModel):
     tailored_bullets: list[BulletItem]
+    validation_warnings: list[ValidationWarning] = Field(default_factory=list, exclude=True)
 
 
 class PriorOutputs(BaseModel):
