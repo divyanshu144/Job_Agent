@@ -486,3 +486,257 @@ async def run_all_discovery(db: AsyncSession) -> str:
     await db.commit()
     asyncio.create_task(_run_all_discovery_task(run.id, sources))
     return run.id
+
+
+# ---------------------------------------------------------------------------
+# Batch API discovery
+# ---------------------------------------------------------------------------
+
+
+async def run_batch_discovery(source: str, db: AsyncSession) -> str:
+    """Create a DiscoveryRun for a Batch API run; fire background task; return run_id."""
+    run = DiscoveryRun(
+        source=source,
+        triggered_by="batch",
+        status="pending",
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(run)
+    await db.commit()
+    asyncio.create_task(_run_batch_discovery_task(run.id, source))
+    return run.id
+
+
+async def _run_batch_discovery_task(run_id: str, source: str) -> None:
+    """Background task: fetch → stage1 filter → batch submit → poll → process results."""
+    import anthropic as _anthropic
+
+    from backend.models import DiscoveryBatch
+    from backend.services.batch_processor import (
+        iter_batch_results,
+        poll_batch_until_done,
+        submit_stage2_batch,
+    )
+    from backend.services.instrumentation import log_batch_llm_call
+
+    batch_client = _anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+
+    # ── Setup: load profiles + fetch raw jobs (same as _run_discovery_task) ─
+    try:
+        async with SessionLocal() as db:
+            await db.execute(
+                update(DiscoveryRun).where(DiscoveryRun.id == run_id).values(status="running")
+            )
+            await db.commit()
+
+            profiles = _load_search_profiles()
+            profile = await get_or_build_profile(db)
+            compact = build_compact_profile(profile.yaml_data, profile.cv_text)
+
+            all_roles = [r for p in profiles for r in p.target_roles]
+            keywords = " ".join(all_roles[:3]) if all_roles else "software engineer"
+            all_locations = [loc for p in profiles for loc in p.allowed_locations]
+            location = all_locations[0] if all_locations else ""
+
+            if source == "reed":
+                raw_jobs = await fetch_reed_jobs(keywords, location)
+            elif source == "adzuna":
+                raw_jobs = await fetch_adzuna_jobs(keywords, location)
+            else:
+                raw_jobs = await fetch_hn_jobs()
+
+            await db.execute(
+                update(DiscoveryRun)
+                .where(DiscoveryRun.id == run_id)
+                .values(jobs_found=len(raw_jobs))
+            )
+            await db.commit()
+    except Exception as e:
+        logger.error("Batch discovery run %s setup failed: %s", run_id, e, exc_info=True)
+        async with SessionLocal() as db:
+            await db.execute(
+                update(DiscoveryRun)
+                .where(DiscoveryRun.id == run_id)
+                .values(status="failed", completed_at=datetime.now(timezone.utc))
+            )
+            await db.commit()
+        return
+
+    # ── Stage 1 filter: persist all jobs, collect stage1-passing ids ─────────
+    # stage1_raw maps job_id → raw_text so Phase 1 doesn't need a DB re-fetch
+    stage1_jobs: list[tuple[str, str]] = []  # (job_id, raw_text) for batch submission
+    stage1_raw: dict[str, str] = {}
+
+    async with SessionLocal() as db:
+        for raw in raw_jobs:
+            # Skip duplicates
+            existing = (
+                await db.execute(select(Job).where(Job.dedup_hash == raw.dedup_hash))
+            ).scalar_one_or_none()
+            if existing is not None:
+                continue
+
+            state = "discovered" if _stage1_pass(raw.raw_text, profiles) else "filtered"
+            job = Job(
+                sources=json.dumps([source]),
+                source_id=raw.source_id,
+                source_url=raw.source_url,
+                raw_text=raw.raw_text,
+                dedup_hash=raw.dedup_hash,
+                state=state,
+                discovery_run_id=run_id,
+            )
+            db.add(job)
+            await db.flush()
+
+            if state == "discovered":
+                stage1_jobs.append((job.id, raw.raw_text))
+                stage1_raw[job.id] = raw.raw_text
+
+        await db.commit()
+
+    if not stage1_jobs:
+        async with SessionLocal() as db:
+            await db.execute(
+                update(DiscoveryRun)
+                .where(DiscoveryRun.id == run_id)
+                .values(
+                    jobs_passed_stage1=0,
+                    status="complete",
+                    completed_at=datetime.now(timezone.utc),
+                )
+            )
+            await db.commit()
+        logger.info("Batch run %s: no jobs passed Stage 1 — run complete", run_id)
+        return
+
+    # ── Submit Batch API ──────────────────────────────────────────────────────
+    try:
+        batch_id = await submit_stage2_batch(batch_client, stage1_jobs, compact)
+    except Exception as e:
+        logger.error("Batch API submission failed for run %s: %s", run_id, e, exc_info=True)
+        async with SessionLocal() as db:
+            await db.execute(
+                update(DiscoveryRun)
+                .where(DiscoveryRun.id == run_id)
+                .values(status="failed", completed_at=datetime.now(timezone.utc))
+            )
+            await db.commit()
+        return
+
+    async with SessionLocal() as db:
+        db_batch = DiscoveryBatch(
+            run_id=run_id,
+            anthropic_batch_id=batch_id,
+            status="submitted",
+            request_count=len(stage1_jobs),
+        )
+        db.add(db_batch)
+        await db.execute(
+            update(DiscoveryRun)
+            .where(DiscoveryRun.id == run_id)
+            .values(jobs_passed_stage1=len(stage1_jobs))
+        )
+        await db.commit()
+
+    # ── Poll until complete ───────────────────────────────────────────────────
+    try:
+        await poll_batch_until_done(batch_client, batch_id)
+    except (TimeoutError, RuntimeError) as e:
+        logger.error("Batch %s polling failed (run %s): %s", batch_id, run_id, e)
+        async with SessionLocal() as db:
+            await db.execute(
+                update(DiscoveryRun)
+                .where(DiscoveryRun.id == run_id)
+                .values(status="failed", completed_at=datetime.now(timezone.utc))
+            )
+            await db.commit()
+        return
+
+    # ── Process results ───────────────────────────────────────────────────────
+    passed_stage2 = 0
+    scored = 0
+
+    async for job_id, s2, in_toks, out_toks in iter_batch_results(batch_client, batch_id):
+        async with SessionLocal() as db:
+            job = (await db.execute(select(Job).where(Job.id == job_id))).scalar_one_or_none()
+            if job is None:
+                logger.warning("Batch result references unknown job_id %s — skipping", job_id)
+                continue
+
+            # Log cost for this result even if irrelevant
+            if in_toks > 0 or out_toks > 0:
+                await log_batch_llm_call(
+                    db,
+                    agent_name="stage2_haiku_batch",
+                    model=HAIKU,
+                    input_tokens=in_toks,
+                    output_tokens=out_toks,
+                    run_id=run_id,
+                )
+
+            if s2 is None or not s2.relevant or not _location_allowed(s2.location, profiles):
+                title = s2.title if s2 else ""
+                company = s2.company if s2 else ""
+                await db.execute(
+                    update(Job)
+                    .where(Job.id == job_id)
+                    .values(title=title, company=company, state="filtered")
+                )
+                await db.commit()
+                continue
+
+            await db.execute(
+                update(Job)
+                .where(Job.id == job_id)
+                .values(title=s2.title, company=s2.company, location=s2.location)
+            )
+            await db.commit()
+            passed_stage2 += 1
+
+        # Phase 1 remains real-time — typically 10–20 jobs after Stage 2 filter
+        raw_text = stage1_raw.get(job_id, "")
+        try:
+            async with SessionLocal() as db:
+                result = await _run_phase1(
+                    raw_text, profile, db, job_id=job_id, run_id=run_id, model=HAIKU
+                )
+                matched = _match_profiles(result.score, profiles)
+                await db.execute(
+                    update(Job)
+                    .where(Job.id == job_id)
+                    .values(
+                        relevance_score=result.score,
+                        matched_profiles=json.dumps(matched),
+                        state="scored",
+                    )
+                )
+                await db.commit()
+                scored += 1
+        except Exception as e:
+            logger.warning("Phase 1 failed for batch job %s: %s", job_id, e)
+            async with SessionLocal() as db:
+                await db.execute(update(Job).where(Job.id == job_id).values(state="filtered"))
+                await db.commit()
+
+    # ── Finalise ──────────────────────────────────────────────────────────────
+    async with SessionLocal() as db:
+        await db.execute(
+            update(DiscoveryBatch)
+            .where(DiscoveryBatch.anthropic_batch_id == batch_id)
+            .values(status="ended", completed_at=datetime.now(timezone.utc))
+        )
+        await db.execute(
+            update(DiscoveryRun)
+            .where(DiscoveryRun.id == run_id)
+            .values(
+                jobs_passed_stage2=passed_stage2,
+                jobs_scored=scored,
+                status="complete",
+                completed_at=datetime.now(timezone.utc),
+            )
+        )
+        await db.commit()
+    logger.info(
+        "Batch run %s complete: stage2_passed=%d scored=%d", run_id, passed_stage2, scored
+    )
