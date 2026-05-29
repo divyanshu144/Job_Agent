@@ -193,3 +193,38 @@ async def test_iter_batch_results_yields_none_on_errored():
     assert s2 is None
     assert in_toks == 0
     assert out_toks == 0
+
+
+async def test_log_batch_llm_call_writes_at_batch_rates():
+    """log_batch_llm_call writes LLMCall with 50% cost and latency_ms=0."""
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    import backend.models  # noqa: F401
+    from backend.database import Base
+    from backend.models import LLMCall
+    from backend.services.instrumentation import log_batch_llm_call
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with Session() as db:
+        await log_batch_llm_call(
+            db,
+            agent_name="stage2_haiku_batch",
+            model="claude-haiku-4-5-20251001",
+            input_tokens=1_000_000,
+            output_tokens=0,
+        )
+
+    async with Session() as db:
+        call = (await db.execute(select(LLMCall))).scalar_one()
+
+    assert call.agent_name == "stage2_haiku_batch"
+    assert call.latency_ms == 0
+    assert call.cache_hit is False
+    # Batch rate: $0.40/M (50% of Haiku $0.80/M input)
+    assert call.cost_usd == pytest.approx(0.40)
+    await engine.dispose()
