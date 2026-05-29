@@ -24,12 +24,19 @@ def calculate_cost(
     output_tokens: int,
     cache_creation_tokens: int = 0,
     cache_read_tokens: int = 0,
+    *,
+    batch: bool = False,
 ) -> float:
-    """Compute total cost in USD including optional prompt cache tokens."""
+    """Compute total cost in USD including optional prompt cache tokens.
+
+    batch=True applies the Anthropic Batch API 50% discount to input and output tokens.
+    Cache token rates are unchanged (Batch API does not support prompt caching).
+    """
     rates = COST_PER_MILLION.get(model, _FALLBACK)
+    multiplier = 0.5 if batch else 1.0
     return (
-        input_tokens * rates["input"]
-        + output_tokens * rates["output"]
+        input_tokens * rates["input"] * multiplier
+        + output_tokens * rates["output"] * multiplier
         + cache_creation_tokens * rates["cache_write"]
         + cache_read_tokens * rates["cache_read"]
     ) / 1_000_000
