@@ -106,6 +106,7 @@ class DiscoveryRun(Base):
     # JSON: {source: {status, jobs_found, jobs_scored, error}} — populated for "all" runs
     source_statuses: Mapped[str] = mapped_column(Text, default="{}")
     jobs: Mapped[list[Job]] = relationship("Job", back_populates="run")
+    batches: Mapped[list[DiscoveryBatch]] = relationship("DiscoveryBatch", back_populates="run")
 
 
 class Job(Base):
@@ -186,3 +187,4 @@ class DiscoveryBatch(Base):
     request_count: Mapped[int] = mapped_column(Integer, default=0)
     submitted_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    run: Mapped[DiscoveryRun] = relationship("DiscoveryRun", back_populates="batches")
