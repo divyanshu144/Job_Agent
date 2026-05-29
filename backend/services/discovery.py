@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.agents.base import HAIKU
 from backend.config import settings
 from backend.database import SessionLocal
-from backend.models import DiscoveryRun, Job
+from backend.models import DiscoveryBatch, DiscoveryRun, Job
 from backend.services.adzuna_client import fetch_adzuna_jobs
 from backend.services.hn_client import RawJob, fetch_hn_jobs
 from backend.services.instrumentation import tracked_call
@@ -511,7 +511,6 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
     """Background task: fetch → stage1 filter → batch submit → poll → process results."""
     import anthropic as _anthropic
 
-    from backend.models import DiscoveryBatch
     from backend.services.batch_processor import (
         iter_batch_results,
         poll_batch_until_done,
@@ -642,7 +641,7 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
     # ── Poll until complete ───────────────────────────────────────────────────
     try:
         await poll_batch_until_done(batch_client, batch_id)
-    except (TimeoutError, RuntimeError) as e:
+    except Exception as e:
         logger.error("Batch %s polling failed (run %s): %s", batch_id, run_id, e)
         async with SessionLocal() as db:
             await db.execute(
@@ -663,6 +662,9 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
             if job is None:
                 logger.warning("Batch result references unknown job_id %s — skipping", job_id)
                 continue
+
+            # Capture raw_text while job is in scope (used for Phase 1 below)
+            job_raw_text = job.raw_text
 
             # Log cost for this result even if irrelevant
             if in_toks > 0 or out_toks > 0:
@@ -695,7 +697,7 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
             passed_stage2 += 1
 
         # Phase 1 remains real-time — typically 10–20 jobs after Stage 2 filter
-        raw_text = stage1_raw.get(job_id, "")
+        raw_text = stage1_raw.get(job_id) or job_raw_text
         try:
             async with SessionLocal() as db:
                 result = await _run_phase1(
@@ -720,23 +722,34 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
                 await db.commit()
 
     # ── Finalise ──────────────────────────────────────────────────────────────
-    async with SessionLocal() as db:
-        await db.execute(
-            update(DiscoveryBatch)
-            .where(DiscoveryBatch.anthropic_batch_id == batch_id)
-            .values(status="ended", completed_at=datetime.now(timezone.utc))
-        )
-        await db.execute(
-            update(DiscoveryRun)
-            .where(DiscoveryRun.id == run_id)
-            .values(
-                jobs_passed_stage2=passed_stage2,
-                jobs_scored=scored,
-                status="complete",
-                completed_at=datetime.now(timezone.utc),
+    try:
+        async with SessionLocal() as db:
+            await db.execute(
+                update(DiscoveryBatch)
+                .where(DiscoveryBatch.anthropic_batch_id == batch_id)
+                .values(status="ended", completed_at=datetime.now(timezone.utc))
             )
+            await db.execute(
+                update(DiscoveryRun)
+                .where(DiscoveryRun.id == run_id)
+                .values(
+                    jobs_passed_stage2=passed_stage2,
+                    jobs_scored=scored,
+                    status="complete",
+                    completed_at=datetime.now(timezone.utc),
+                )
+            )
+            await db.commit()
+    except Exception as e:
+        logger.error("Batch run %s finalise failed: %s", run_id, e, exc_info=True)
+        async with SessionLocal() as db:
+            await db.execute(
+                update(DiscoveryRun)
+                .where(DiscoveryRun.id == run_id)
+                .values(status="failed", completed_at=datetime.now(timezone.utc))
+            )
+            await db.commit()
+    else:
+        logger.info(
+            "Batch run %s complete: stage2_passed=%d scored=%d", run_id, passed_stage2, scored
         )
-        await db.commit()
-    logger.info(
-        "Batch run %s complete: stage2_passed=%d scored=%d", run_id, passed_stage2, scored
-    )
