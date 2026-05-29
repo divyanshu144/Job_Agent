@@ -104,6 +104,28 @@ async def test_poll_raises_timeout_after_max_polls():
             await poll_batch_until_done(mock_client, "msgbatch_test001", max_polls=3)
 
 
+async def test_poll_continues_through_canceling():
+    """poll_batch_until_done keeps polling when status is 'canceling' (transient, not terminal)."""
+    from backend.services.batch_processor import poll_batch_until_done
+
+    canceling = MagicMock(processing_status="canceling")
+    ended = MagicMock(processing_status="ended")
+    mock_client = MagicMock()
+    mock_client.beta.messages.batches.retrieve = AsyncMock(side_effect=[canceling, ended])
+
+    sleep_calls = []
+
+    async def fake_sleep(n):
+        sleep_calls.append(n)
+
+    import unittest.mock as _m
+    with _m.patch("backend.services.batch_processor.asyncio.sleep", fake_sleep):
+        await poll_batch_until_done(mock_client, "msgbatch_test001")
+
+    assert mock_client.beta.messages.batches.retrieve.call_count == 2
+    assert len(sleep_calls) == 1  # slept once between the two polls
+
+
 async def test_iter_batch_results_yields_stage2result_on_success():
     """iter_batch_results yields (job_id, Stage2Result, input_tokens, output_tokens) on success."""
     from backend.services.batch_processor import iter_batch_results

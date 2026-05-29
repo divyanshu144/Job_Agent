@@ -62,18 +62,22 @@ async def poll_batch_until_done(
 ) -> None:
     """Poll Anthropic until processing_status == 'ended'.
 
+    Valid processing_status values: 'in_progress', 'canceling', 'ended'.
+    'canceling' is transient — in-flight requests are still finishing and the batch
+    will transition to 'ended' with partial results. Keep polling rather than raising.
     Raises TimeoutError after max_polls attempts.
-    Raises RuntimeError if the batch enters a terminal error state (canceling/expired).
     """
     for attempt in range(max_polls):
         batch = await client.beta.messages.batches.retrieve(batch_id)
         if batch.processing_status == "ended":
             logger.info("Batch %s completed (poll %d)", batch_id, attempt + 1)
             return
-        if batch.processing_status in ("canceling", "expired"):
-            raise RuntimeError(
-                f"Batch {batch_id} entered terminal state: {batch.processing_status}"
+        if batch.processing_status == "canceling":
+            logger.warning(
+                "Batch %s is canceling — continuing to poll for partial results (poll %d)",
+                batch_id, attempt + 1,
             )
+        # "in_progress" and "canceling" both fall through to sleep
         logger.debug(
             "Batch %s: %s (poll %d/%d)", batch_id, batch.processing_status, attempt + 1, max_polls
         )
@@ -101,6 +105,10 @@ async def iter_batch_results(
             yield job_id, None, 0, 0
             continue
         try:
+            if not item.result.message.content:
+                logger.warning("Batch result for job %s: empty content list", job_id)
+                yield job_id, None, 0, 0
+                continue
             raw = item.result.message.content[0].text.strip()
             start, end = raw.find("{"), raw.rfind("}") + 1
             if start == -1 or end == 0:
