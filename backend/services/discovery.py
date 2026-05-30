@@ -26,6 +26,9 @@ from backend.services.reed_client import fetch_reed_jobs
 
 logger = logging.getLogger(__name__)
 
+# Holds strong references to background tasks to prevent GC from cancelling them.
+_background_tasks: set[asyncio.Task[None]] = set()
+
 # Shared client for Stage 2 Haiku calls across the batch
 # must use tracked_call() — not raw _anthropic_client.messages.create()
 _anthropic_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -322,7 +325,9 @@ async def run_discovery(source: str, db: AsyncSession) -> str:
     )
     db.add(run)
     await db.commit()
-    asyncio.create_task(_run_discovery_task(run.id, source))
+    task = asyncio.create_task(_run_discovery_task(run.id, source))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
     return run.id
 
 
@@ -484,7 +489,9 @@ async def run_all_discovery(db: AsyncSession) -> str:
     )
     db.add(run)
     await db.commit()
-    asyncio.create_task(_run_all_discovery_task(run.id, sources))
+    task = asyncio.create_task(_run_all_discovery_task(run.id, sources))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
     return run.id
 
 
@@ -503,7 +510,9 @@ async def run_batch_discovery(source: str, db: AsyncSession) -> str:
     )
     db.add(run)
     await db.commit()
-    asyncio.create_task(_run_batch_discovery_task(run.id, source))
+    task = asyncio.create_task(_run_batch_discovery_task(run.id, source))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
     return run.id
 
 
@@ -609,6 +618,15 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
         logger.info("Batch run %s: no jobs passed Stage 1 — run complete", run_id)
         return
 
+    # ── Record jobs_passed_stage1 before submitting (captured even if submission fails) ──
+    async with SessionLocal() as db:
+        await db.execute(
+            update(DiscoveryRun)
+            .where(DiscoveryRun.id == run_id)
+            .values(jobs_passed_stage1=len(stage1_jobs))
+        )
+        await db.commit()
+
     # ── Submit Batch API ──────────────────────────────────────────────────────
     try:
         batch_id = await submit_stage2_batch(batch_client, stage1_jobs, compact)
@@ -631,11 +649,6 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
             request_count=len(stage1_jobs),
         )
         db.add(db_batch)
-        await db.execute(
-            update(DiscoveryRun)
-            .where(DiscoveryRun.id == run_id)
-            .values(jobs_passed_stage1=len(stage1_jobs))
-        )
         await db.commit()
 
     # ── Poll until complete ───────────────────────────────────────────────────
@@ -644,6 +657,11 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
     except Exception as e:
         logger.error("Batch %s polling failed (run %s): %s", batch_id, run_id, e)
         async with SessionLocal() as db:
+            await db.execute(
+                update(DiscoveryBatch)
+                .where(DiscoveryBatch.anthropic_batch_id == batch_id)
+                .values(status="failed", completed_at=datetime.now(timezone.utc))
+            )
             await db.execute(
                 update(DiscoveryRun)
                 .where(DiscoveryRun.id == run_id)

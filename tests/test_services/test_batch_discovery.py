@@ -44,6 +44,8 @@ async def test_run_batch_discovery_creates_run_with_batch_trigger(mem_session):
 
 async def test_run_batch_discovery_fires_background_task(mem_session):
     """run_batch_discovery calls asyncio.create_task with a coroutine."""
+    from unittest.mock import MagicMock
+
     from backend.services.discovery import run_batch_discovery
 
     task_args = []
@@ -52,6 +54,8 @@ async def test_run_batch_discovery_fires_background_task(mem_session):
         task_args.append(coro)
         # Close the coroutine to prevent ResourceWarning
         coro.close()
+        # Return a mock task so .add_done_callback() doesn't raise
+        return MagicMock()
 
     with patch("backend.services.discovery.asyncio.create_task", side_effect=capture_task):
         await run_batch_discovery("hn", mem_session)
