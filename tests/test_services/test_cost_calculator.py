@@ -62,3 +62,39 @@ def test_unknown_model_cache_fallback():
     """Unknown model falls back to Sonnet cache rates."""
     cost = calculate_cost("unknown-model", 0, 0, cache_read_tokens=1_000_000)
     assert cost == pytest.approx(0.30)  # Sonnet cache_read = $0.30/M
+
+
+def test_batch_pricing_halves_input_tokens():
+    from backend.services.cost_calculator import calculate_cost
+
+    normal = calculate_cost("claude-haiku-4-5-20251001", 1_000_000, 0)
+    batched = calculate_cost("claude-haiku-4-5-20251001", 1_000_000, 0, batch=True)
+    assert batched == pytest.approx(normal * 0.5)
+
+
+def test_batch_pricing_halves_output_tokens():
+    from backend.services.cost_calculator import calculate_cost
+
+    normal = calculate_cost("claude-haiku-4-5-20251001", 0, 1_000_000)
+    batched = calculate_cost("claude-haiku-4-5-20251001", 0, 1_000_000, batch=True)
+    assert batched == pytest.approx(normal * 0.5)
+
+
+def test_batch_pricing_does_not_affect_cache_tokens():
+    from backend.services.cost_calculator import calculate_cost
+
+    normal = calculate_cost("claude-haiku-4-5-20251001", 0, 0, cache_creation_tokens=1_000_000)
+    batched = calculate_cost(
+        "claude-haiku-4-5-20251001", 0, 0, cache_creation_tokens=1_000_000, batch=True
+    )
+    assert batched == pytest.approx(normal)
+
+
+def test_batch_false_is_default_and_unchanged():
+    from backend.services.cost_calculator import calculate_cost
+
+    explicit_false = calculate_cost("claude-haiku-4-5-20251001", 800_000, 200_000, batch=False)
+    default = calculate_cost("claude-haiku-4-5-20251001", 800_000, 200_000)
+    assert explicit_false == pytest.approx(default)
+    # Verify absolute value: (800k * $0.80 + 200k * $4.00) / 1M = $1.44
+    assert default == pytest.approx(1.44)

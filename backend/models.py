@@ -106,6 +106,7 @@ class DiscoveryRun(Base):
     # JSON: {source: {status, jobs_found, jobs_scored, error}} — populated for "all" runs
     source_statuses: Mapped[str] = mapped_column(Text, default="{}")
     jobs: Mapped[list[Job]] = relationship("Job", back_populates="run")
+    batches: Mapped[list[DiscoveryBatch]] = relationship("DiscoveryBatch", back_populates="run")
 
 
 class Job(Base):
@@ -173,3 +174,17 @@ class Contact(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     analysis: Mapped[Analysis] = relationship("Analysis", back_populates="contacts")
+
+
+class DiscoveryBatch(Base):
+    """Tracks a single Anthropic Batch API submission for a discovery run's Stage 2 phase."""
+
+    __tablename__ = "discovery_batches"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    run_id: Mapped[str] = mapped_column(String, ForeignKey("discovery_runs.id"), index=True)
+    anthropic_batch_id: Mapped[str] = mapped_column(String)  # "msgbatch_01..."
+    status: Mapped[str] = mapped_column(String, default="submitted")  # submitted | ended | failed
+    request_count: Mapped[int] = mapped_column(Integer, default=0)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    run: Mapped[DiscoveryRun] = relationship("DiscoveryRun", back_populates="batches")

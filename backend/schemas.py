@@ -296,3 +296,12 @@ class DraftResponse(BaseModel):
 
 class SendResponse(BaseModel):
     sent: bool
+
+
+class BatchDiscoveryResponse(BaseModel):
+    run_id: str
+    mode: str = "batch"
+    note: str = (
+        "Batch run submitted. Results appear in /discovery/feed when processing completes "
+        "(typically 1–60 minutes). Check /discovery/runs/{run_id} for status."
+    )

@@ -114,3 +114,36 @@ async def _write_llm_call(
             await db.rollback()
         except Exception:
             pass  # never break an LLM call due to tracking failure
+
+
+async def log_batch_llm_call(
+    db: AsyncSession,
+    agent_name: str,
+    model: str,
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    run_id: str | None = None,
+    analysis_id: str | None = None,
+) -> None:
+    """Write an LLMCall row for a completed Anthropic Batch API result.
+
+    Uses batch=True pricing (50% off input/output). latency_ms is 0 — wall-clock
+    latency is not meaningful for async batch requests. cache_hit is always False
+    because Batch API does not support prompt caching.
+    """
+    cost = calculate_cost(model, input_tokens, output_tokens, batch=True)
+    await _write_llm_call(
+        db,
+        agent_name=agent_name,
+        model=model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=cost,
+        latency_ms=0,
+        cache_hit=False,
+        cache_creation_tokens=0,
+        cache_read_tokens=0,
+        run_id=run_id,
+        analysis_id=analysis_id,
+    )

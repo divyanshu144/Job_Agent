@@ -8,6 +8,16 @@ Fix: what the correct approach is
 Avoid: what not to do next time
 -->
 
+## [2026-05-28] Anthropic prompt caching: token threshold and field semantics
+
+Pattern: Adding `cache_control: {type: ephemeral}` to system prompts does nothing if the prompt is under the model's minimum cacheable length. Haiku requires ≥2048 tokens. `input_tokens` in the response **excludes** cached portions — it is mutually exclusive with `cache_creation_input_tokens` and `cache_read_input_tokens`. SUM = input + creation + read across calls for the same prompt.
+
+Fix: Measure actual system prompt token counts using `client.messages.count_tokens()` before assuming caching is active. For Haiku 4.5, the `cache_creation` nested object (`cache_creation.ephemeral_5m_input_tokens`) mirrors the flat `cache_creation_input_tokens` field — read the flat field in `getattr(msg.usage, "cache_creation_input_tokens", None) or 0`.
+
+Avoid: Assuming caching fires just because `cache_control` is in the payload. Expanding a small system prompt to cross the threshold (e.g., Stage 2 compact[:1000] at 314 tokens → merged_profile at 2782 tokens) only pays off when ≥90 calls hit cache in one 5-minute window — not economical for typical Stage 2 batches. Keep Stage 2 compact; the merged_profile agents (gap_analyst, resource_planner, cover_letter, resume_tailorer) already exceed 2916 tokens and cache correctly.
+
+Also: When multiple cache mechanisms exist on one dashboard, give each a distinct label. "Cache Hit Rate" is ambiguous alongside "Prompt Cache Savings". Use "Analysis Cache Rate" (JD-level dedup) vs "Prompt Cache Savings" (Anthropic token caching).
+
 ## [2026-05-26] Hunter.io returns explicit null, not missing key
 
 Pattern: Writing `resp.json().get("data", {}).get("emails", [])` crashes when the API returns `{"data": null}`. `.get("data", {})` returns `null` (the fallback only triggers when the key is absent), and calling `.get()` on `None` throws `AttributeError`.
