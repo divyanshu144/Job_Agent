@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database import get_db
 from backend.models import Analysis, DiscoveryRun, Job, SavedJob, User
 from backend.schemas import (
+    BatchDiscoveryResponse,
     DiscoveryFeedItem,
     DiscoveryFeedResponse,
     DiscoveryRunResponse,
@@ -17,7 +18,12 @@ from backend.schemas import (
     SourceStatusItem,
 )
 from backend.services.auth_service import get_current_user
-from backend.services.discovery import _get_configured_sources, run_all_discovery, run_discovery
+from backend.services.discovery import (
+    _get_configured_sources,
+    run_all_discovery,
+    run_batch_discovery,
+    run_discovery,
+)
 
 router = APIRouter(tags=["discovery"])
 
@@ -86,6 +92,26 @@ async def trigger_all_discovery(
     """Start a background run that fetches from all configured sources concurrently."""
     run_id = await run_all_discovery(db)
     return {"run_id": run_id}
+
+
+@router.post("/discovery/run/batch", response_model=BatchDiscoveryResponse)
+async def trigger_batch_discovery(
+    source: str = Query(default="hn"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BatchDiscoveryResponse:
+    """Submit a discovery run via Anthropic Batch API (50% cost discount).
+
+    Returns immediately. Results appear in /discovery/feed when the batch completes
+    (typically 1–60 minutes). Poll /discovery/runs/{run_id} for status.
+    """
+    if source not in _VALID_SOURCES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid source '{source}'. Must be one of: {sorted(_VALID_SOURCES)}",
+        )
+    run_id = await run_batch_discovery(source, db)
+    return BatchDiscoveryResponse(run_id=run_id)
 
 
 @router.get("/discovery/sources", response_model=DiscoverySourcesResponse)
