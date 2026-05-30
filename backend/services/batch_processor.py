@@ -6,6 +6,8 @@ import logging
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
+from anthropic.types.beta import BetaTextBlock
+
 from backend.agents.base import HAIKU
 from backend.services.discovery import Stage2Result
 
@@ -49,7 +51,7 @@ async def submit_stage2_batch(
         }
         for job_id, raw_text in jobs
     ]
-    batch = await client.beta.messages.batches.create(requests=requests)
+    batch = await client.beta.messages.batches.create(requests=requests)  # type: ignore[arg-type]
     logger.info("Submitted Batch API request: %d jobs → %s", len(jobs), batch.id)
     return batch.id
 
@@ -75,7 +77,8 @@ async def poll_batch_until_done(
         if batch.processing_status == "canceling":
             logger.warning(
                 "Batch %s is canceling — continuing to poll for partial results (poll %d)",
-                batch_id, attempt + 1,
+                batch_id,
+                attempt + 1,
             )
         # "in_progress" and "canceling" both fall through to sleep
         logger.debug(
@@ -109,7 +112,14 @@ async def iter_batch_results(
                 logger.warning("Batch result for job %s: empty content list", job_id)
                 yield job_id, None, 0, 0
                 continue
-            raw = item.result.message.content[0].text.strip()
+            block = item.result.message.content[0]
+            if not isinstance(block, BetaTextBlock):
+                logger.warning(
+                    "Batch result for job %s: unexpected block type %s", job_id, type(block)
+                )
+                yield job_id, None, 0, 0
+                continue
+            raw = block.text.strip()
             start, end = raw.find("{"), raw.rfind("}") + 1
             if start == -1 or end == 0:
                 raise ValueError(f"No JSON object in response: {raw!r}")

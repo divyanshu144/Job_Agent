@@ -84,7 +84,9 @@ def test_batch_pricing_does_not_affect_cache_tokens():
     from backend.services.cost_calculator import calculate_cost
 
     normal = calculate_cost("claude-haiku-4-5-20251001", 0, 0, cache_creation_tokens=1_000_000)
-    batched = calculate_cost("claude-haiku-4-5-20251001", 0, 0, cache_creation_tokens=1_000_000, batch=True)
+    batched = calculate_cost(
+        "claude-haiku-4-5-20251001", 0, 0, cache_creation_tokens=1_000_000, batch=True
+    )
     assert batched == pytest.approx(normal)
 
 

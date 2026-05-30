@@ -6,9 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 async def test_trigger_batch_discovery_returns_run_id(app_client):
     """POST /api/discovery/run/batch returns run_id and mode='batch'."""
-    with patch(
-        "backend.routes.discovery.run_batch_discovery", new_callable=AsyncMock
-    ) as mock_run:
+    with patch("backend.routes.discovery.run_batch_discovery", new_callable=AsyncMock) as mock_run:
         mock_run.return_value = "batch-run-id-999"
         resp = await app_client.post("/api/discovery/run/batch", params={"source": "hn"})
 
@@ -25,7 +23,5 @@ async def test_trigger_batch_discovery_rejects_invalid_source(app_client):
 
 
 async def test_trigger_batch_discovery_requires_auth(unauthenticated_client):
-    resp = await unauthenticated_client.post(
-        "/api/discovery/run/batch", params={"source": "hn"}
-    )
+    resp = await unauthenticated_client.post("/api/discovery/run/batch", params={"source": "hn"})
     assert resp.status_code == 401

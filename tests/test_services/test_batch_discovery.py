@@ -1,7 +1,6 @@
 # tests/test_services/test_batch_discovery.py
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -55,6 +54,6 @@ async def test_run_batch_discovery_fires_background_task(mem_session):
         coro.close()
 
     with patch("backend.services.discovery.asyncio.create_task", side_effect=capture_task):
-        run_id = await run_batch_discovery("hn", mem_session)
+        await run_batch_discovery("hn", mem_session)
 
     assert len(task_args) == 1

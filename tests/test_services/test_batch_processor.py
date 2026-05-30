@@ -58,6 +58,7 @@ async def test_poll_returns_immediately_when_ended():
         sleep_calls.append(n)
 
     import unittest.mock as _m
+
     with _m.patch("backend.services.batch_processor.asyncio.sleep", fake_sleep):
         await poll_batch_until_done(mock_client, "msgbatch_test001")
 
@@ -80,6 +81,7 @@ async def test_poll_retries_while_in_progress():
         sleep_calls.append(n)
 
     import unittest.mock as _m
+
     with _m.patch("backend.services.batch_processor.asyncio.sleep", fake_sleep):
         await poll_batch_until_done(mock_client, "msgbatch_test001")
 
@@ -99,6 +101,7 @@ async def test_poll_raises_timeout_after_max_polls():
         pass
 
     import unittest.mock as _m
+
     with _m.patch("backend.services.batch_processor.asyncio.sleep", fake_sleep):
         with pytest.raises(TimeoutError, match="msgbatch_test001"):
             await poll_batch_until_done(mock_client, "msgbatch_test001", max_polls=3)
@@ -119,6 +122,7 @@ async def test_poll_continues_through_canceling():
         sleep_calls.append(n)
 
     import unittest.mock as _m
+
     with _m.patch("backend.services.batch_processor.asyncio.sleep", fake_sleep):
         await poll_batch_until_done(mock_client, "msgbatch_test001")
 
@@ -128,6 +132,8 @@ async def test_poll_continues_through_canceling():
 
 async def test_iter_batch_results_yields_stage2result_on_success():
     """iter_batch_results yields (job_id, Stage2Result, input_tokens, output_tokens) on success."""
+    from anthropic.types.beta import BetaTextBlock
+
     from backend.services.batch_processor import iter_batch_results
     from backend.services.discovery import Stage2Result
 
@@ -135,9 +141,10 @@ async def test_iter_batch_results_yields_stage2result_on_success():
     succeeded.custom_id = "job_xyz"
     succeeded.result.type = "succeeded"
     succeeded.result.message.content = [
-        MagicMock(
+        BetaTextBlock(
+            type="text",
             text='{"relevant": true, "reason": "good fit", "title": "Python Engineer", '
-                 '"company": "Acme", "location": "London"}'
+            '"company": "Acme", "location": "London"}',
         )
     ]
     succeeded.result.message.usage.input_tokens = 120
@@ -146,6 +153,7 @@ async def test_iter_batch_results_yields_stage2result_on_success():
     async def mock_results(batch_id):
         async def _gen():
             yield succeeded
+
         return _gen()
 
     mock_client = MagicMock()
@@ -158,7 +166,6 @@ async def test_iter_batch_results_yields_stage2result_on_success():
     assert len(collected) == 1
     job_id, s2, in_toks, out_toks = collected[0]
     assert job_id == "job_xyz"
-    from backend.services.discovery import Stage2Result
     assert isinstance(s2, Stage2Result)
     assert s2.relevant is True
     assert s2.title == "Python Engineer"
@@ -179,6 +186,7 @@ async def test_iter_batch_results_yields_none_on_errored():
     async def mock_results(batch_id):
         async def _gen():
             yield errored
+
         return _gen()
 
     mock_client = MagicMock()

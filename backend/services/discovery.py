@@ -658,13 +658,13 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
 
     async for job_id, s2, in_toks, out_toks in iter_batch_results(batch_client, batch_id):
         async with SessionLocal() as db:
-            job = (await db.execute(select(Job).where(Job.id == job_id))).scalar_one_or_none()
-            if job is None:
+            found_job = (await db.execute(select(Job).where(Job.id == job_id))).scalar_one_or_none()
+            if found_job is None:
                 logger.warning("Batch result references unknown job_id %s — skipping", job_id)
                 continue
 
             # Capture raw_text while job is in scope (used for Phase 1 below)
-            job_raw_text = job.raw_text
+            job_raw_text = found_job.raw_text
 
             # Log cost for this result even if irrelevant
             if in_toks > 0 or out_toks > 0:
