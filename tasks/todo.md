@@ -49,3 +49,25 @@ Full plan: `docs/superpowers/plans/2026-05-23-feature-improvements.md`
 - [ ] Task 6: Cover letter tone picker (backend) — {tone} prompt slot, GenerateRequest, tone param in pipeline
 - [ ] Task 7: Cover letter tone picker (frontend) — tone dropdown in AnalyseJob + Results
 - [ ] Task 8: Profile compression — _summarise_profile() Haiku call, profile_summary field, use in Phase 1
+
+## Observability & Instrumentation
+Full plan: `~/.claude/plans/atomic-beaming-hamming.md` (approved 2026-06-01)
+
+### Wave 5 — Docs correction (first)
+- [ ] Correct `observability-audit.md` #8 (evals scaffolded-but-lost) + Open Question (pipeline_events growth)
+
+### Wave 0 — Foundation: structured logging keyed on trace_id
+- [ ] `trace_id_var` contextvar + `new_trace_id()`/`get_trace_id()` (instrumentation.py)
+- [ ] JSON log formatter + trace_id filter; `configure_logging()` + `log_level` (config.py); call in main.py lifespan
+
+### Wave 1 — Events table + write helper
+- [ ] `PipelineEvent` model + index on (trace_id, kind); `log_event()` (fail-open) + `span()` ctx manager
+
+### Wave 2 — Stamp signals
+- [ ] trace_id at entry points; per-agent spans; failure capture + JobResult.error; tool-call logs; explicit max_retries
+
+### Wave 3 — Unify ids
+- [ ] Verify trace_id in logs + events; events join LLMCall via analysis_id/run_id
+
+### Wave 4 — Feedback track
+- [ ] `Feedback` model + schemas + `routes/feedback.py` + register; frontend control; `backend/evals/__init__.py` hook stub

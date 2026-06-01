@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     github_username: str = ""
     database_url: str = "sqlite+aiosqlite:///./data/jobfit.db"
     api_prefix: str = "/api"
+    log_level: str = "INFO"
     cv_path: str = "data/cv.pdf"
     profile_yaml_path: str = "data/candidate_profile.yaml"
     github_stale_days: int = 3

@@ -3,7 +3,17 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
@@ -89,6 +99,27 @@ class LLMCall(Base):
         String, ForeignKey("discovery_runs.id"), nullable=True, default=None
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class PipelineEvent(Base):
+    """Structured observability event (span | failure | tool | retry) for one pipeline run.
+
+    Correlated by trace_id (a fresh uuid per entry point); also carries the domain
+    keys analysis_id / run_id (nullable) so events join back to LLMCall cost rows.
+    """
+
+    __tablename__ = "pipeline_events"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    trace_id: Mapped[str] = mapped_column(String, index=True)
+    kind: Mapped[str] = mapped_column(String)  # span | failure | tool | retry
+    name: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default="ok")
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)  # JSON
+    analysis_id: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    run_id: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    __table_args__ = (Index("ix_pipeline_events_trace_kind", "trace_id", "kind"),)
 
 
 class DiscoveryRun(Base):

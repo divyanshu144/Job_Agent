@@ -18,10 +18,12 @@ from backend.routes.discovery import router as discovery_router
 from backend.routes.history import router as history_router
 from backend.routes.metrics import router as metrics_router
 from backend.routes.profile import router as profile_router
+from backend.services.instrumentation import configure_logging
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    configure_logging()
     await init_db()
     # Reset any runs left in "running" state due to server crash
     async with SessionLocal() as db:
