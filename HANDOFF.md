@@ -10,7 +10,21 @@
 Implementing the approved Observability & Instrumentation plan
 (`~/.claude/plans/atomic-beaming-hamming.md`). TDD throughout.
 
-**Done this checkpoint:**
+**Wave 2 done (this checkpoint, on top of 0/1/5 committed in `0d0fccd`):**
+- trace_id set at entry points: `run_evaluate_pipeline`, `run_generate_pipeline`, per-job in
+  discovery `_process_job`, and run-level in `_run_discovery_task`/`_run_source_task`.
+- Per-agent `span()` around every `agent.run()` in `_run_phase1`, `run_evaluate_pipeline`, and
+  Phase-2 of `run_generate_pipeline` (parallel agents wrapped inside `_tracked`).
+- Failure capture: agent failures now write `JobResult.error` (was unused) and an error span;
+  discovery stage2/phase1 failures emit `kind="failure"` events with run_id.
+- Tool-call logs: discovery source fetches wrapped in `span(kind="tool", name="fetch_<src>")`.
+  **Deferred:** tool-logging for `contact_discovery` (Hunter) and `github_client` — they're on
+  non-pipeline entry paths with no established trace; lower value, follow-up if wanted.
+- Retry: explicit `max_retries=settings.anthropic_max_retries` (default 3) on both Anthropic
+  clients (base.py, discovery.py). Final failures surface via the error spans/failure events.
+- Tests: +4 (`test_pipeline_events.py` ×3, retry assert ×1). Full suite **177 passed**, lint clean.
+
+**Previously done:**
 - **Wave 5 (docs):** corrected `tasks/observability-audit.md` #8 to "evals scaffolded-but-lost"
   (the eval source `backend/evals/validators.py` + `test_evals/` existed locally per 2026-05-30
   bytecode but was never committed / is unrecoverable). Added Open Questions
@@ -30,29 +44,28 @@ Implementing the approved Observability & Instrumentation plan
 
 ## Next Action
 
-**Wave 2 — stamp signals onto the spine.** In order:
-1. `new_trace_id()` at entry points: `run_evaluate_pipeline`, `run_generate_pipeline`
-   (orchestrator.py), `run_discovery` / `_run_all_discovery_task` (discovery.py).
-2. Per-agent `span(kind="span", name=agent_name)` around each `agent.run()` in `_run_phase1`,
-   `run_evaluate_pipeline`, and Phase-2 of `run_generate_pipeline`.
-3. Failure capture: in `except AgentError` arms also `log_event(kind="failure", ...)` AND set
-   `JobResult.error = str(e)`; convert discovery `logger.warning` arms to also emit failure events.
-4. Tool-call logs: one shared httpx helper wrapping client calls (hn/reed/adzuna/contact/github).
-5. Retry: explicit `max_retries` on `AsyncAnthropic(...)` in base.py:25 + discovery.py:31; log
-   final failure.
-
-Then Wave 3 (verify unify) and Wave 4 (feedback model/route/frontend + `backend/evals/__init__.py`
-hook stub).
+**Wave 4 — feedback track** (Wave 3 "unify" is satisfied: trace_id flows to logs + every event,
+and events carry analysis_id/run_id to join LLMCall — verify with a quick query if desired):
+1. `Feedback` model (`models.py`): id, analysis_id FK, agent_name nullable, rating int, note
+   nullable, trace_id nullable, created_at. Created by `create_all` (no migration needed for fresh
+   DB; add an `init_db` ALTER only if a pre-existing DB must gain it — table is new so create_all
+   covers it).
+2. `FeedbackCreate` / `FeedbackResponse` in `schemas.py` (+ TS mirror in `frontend/src/types`).
+3. `backend/routes/feedback.py`: `POST {api_prefix}/feedback` (auth) + `GET ?analysis_id=`;
+   register in `main.py`.
+4. Frontend: thumbs/rating on `Results.tsx`; `submitFeedback` in `api/client.ts`.
+5. `backend/evals/__init__.py` stub documenting the hook (reconstructable validators consume Feedback).
+6. Tests: `tests/test_routes/test_feedback.py` happy + auth (401 unauth).
 
 ## Why It Stopped
 
-Checkpoint after Waves 5/0/1 green. Committing to keep the tree clean.
+Checkpoint after Wave 2 green. Committing to keep the tree clean.
 
 ## In-Flight
 
-Committing now: `tasks/observability-audit.md`, `tasks/todo.md`, `backend/config.py`,
-`backend/main.py`, `backend/models.py`, `backend/services/instrumentation.py`,
-`tests/test_services/test_observability.py`, this HANDOFF. After commit the tree is clean.
+Committing now: orchestrator.py, discovery.py, base.py, config.py, models.py (no new model this
+wave), instrumentation.py (no change this wave), test_pipeline_events.py, test_observability.py,
+this HANDOFF. After commit the tree is clean.
 
 ## Open Questions
 
@@ -66,4 +79,4 @@ Committing now: `tasks/observability-audit.md`, `tasks/todo.md`, `backend/config
 |---|---|
 | `make fmt` | ✓ 78 files unchanged |
 | `make lint` | ✓ ruff + mypy + schema drift (9 classes) pass |
-| `make test` | ✓ 173 passed (full `pytest`, run with `--no-cov`) |
+| `make test` | ✓ 177 passed (full `pytest`, run with `--no-cov`) |

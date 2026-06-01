@@ -33,6 +33,14 @@ def test_get_trace_id_defaults_to_none_without_set():
     assert ctx.run(get_trace_id) is None
 
 
+def test_base_agent_client_uses_configured_max_retries():
+    from backend.agents.base import BaseAgent
+    from backend.config import settings
+
+    agent = BaseAgent()
+    assert agent._client.max_retries == settings.anthropic_max_retries
+
+
 def test_json_formatter_includes_trace_id_and_message():
     import logging
 
