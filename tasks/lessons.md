@@ -173,3 +173,17 @@ Fix: First line of logic — if stdin contains `"stop_hook_active": true`, `exit
 Avoid: Blocking session end on every stop regardless of whether anything changed — it nags read-only/Q&A sessions. Tie the gate to a dirty working tree.
 
 See: `.claude/hooks/stop.sh`, `.claude/settings.json` (Stop)
+
+---
+
+## [2026-06-01] A dirty-tree Stop hook must tell the user to COMMIT, not just edit the gated file
+
+Pattern: The HANDOFF Stop hook gates on `git status --porcelain` (dirty tree) AND `HANDOFF.md` mtime > 30 min. When `HANDOFF.md` is the *only* uncommitted file (the common session-end case), the block message said "Overwrite HANDOFF.md … then stop again" — so following it literally refreshes mtime, suppresses the block for 30 min, then re-fires because the tree is still dirty. The remediation the hook prints can never durably satisfy the hook; only committing/cleaning can. Hit live ~4 times in one session.
+
+Fix: A gate keyed on a *condition* (dirty tree) must, in its remediation text, name the action that clears the *condition* — here, COMMIT or otherwise clean the tree — not just the sub-step (edit the file). The message now says to commit and explains the 30-min suppression. Also dropped the inlined schema in favour of pointing at `HANDOFF.template.md` (schema lived in two places → drift), and removed a redundant `git rev-parse` probe (`git status --porcelain` already returns empty on a non-repo).
+
+Decision (deliberately NOT done): do not add a "HANDOFF.md must be committed" *block* to the hook. It would be the one fail-closed path in an otherwise fail-open script and would trap a session after a perfectly good HANDOFF was written but not `git add`-ed. If ever revisited, implement as a warning (`exit 0`), never a block.
+
+Avoid: Writing remediation text that addresses the symptom step instead of the gating condition. Avoid duplicating a schema between a hook and its template file.
+
+See: `.claude/hooks/stop.sh`, `HANDOFF.template.md`
