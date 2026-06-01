@@ -188,6 +188,22 @@ class JobResult(Base):
     analysis: Mapped[Analysis] = relationship("Analysis", back_populates="results")
 
 
+class Feedback(Base):
+    """User rating of a generated analysis/agent output.
+
+    Capture-only for now; a future evals scorer (backend/evals/) consumes these.
+    """
+
+    __tablename__ = "feedback"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    analysis_id: Mapped[str] = mapped_column(String, ForeignKey("analyses.id"), index=True)
+    agent_name: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    rating: Mapped[int] = mapped_column(Integer)  # e.g. -1 / +1, or 1–5
+    note: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    trace_id: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 class Contact(Base):
     __tablename__ = "contacts"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))

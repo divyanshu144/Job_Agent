@@ -7,10 +7,22 @@
 
 ## Current State
 
-Implementing the approved Observability & Instrumentation plan
-(`~/.claude/plans/atomic-beaming-hamming.md`). TDD throughout.
+Approved Observability & Instrumentation plan (`~/.claude/plans/atomic-beaming-hamming.md`)
+**COMPLETE** — all waves done, TDD throughout. `make check` green (180 passed, 78.60% cov).
 
-**Wave 2 done (this checkpoint, on top of 0/1/5 committed in `0d0fccd`):**
+**Wave 4 done (this checkpoint, on top of `0d0fccd` Waves 0/1/5 and `77dbc80` Wave 2):**
+- `Feedback` model (`models.py`); `FeedbackCreate`/`FeedbackResponse` schemas; `routes/feedback.py`
+  (`POST`/`GET /api/feedback`, auth-gated, stamps trace_id) registered in `main.py`.
+- Frontend: `Feedback` type, `api.submitFeedback`, thumbs 👍/👎 control on `Results.tsx`
+  (frontend `tsc --noEmit` clean).
+- `backend/evals/__init__.py` stub documenting the evals hook (reconstructable validators consume
+  `Feedback` + correlate with `PipelineEvent`).
+- Tests: `tests/test_routes/test_feedback.py` (happy 201, auth 401, GET filter).
+
+**Wave 3 (unify):** satisfied by design — trace_id flows to logs + every event; events carry
+analysis_id/run_id to join `LLMCall`.
+
+**Wave 2 done (`77dbc80`):**
 - trace_id set at entry points: `run_evaluate_pipeline`, `run_generate_pipeline`, per-job in
   discovery `_process_job`, and run-level in `_run_discovery_task`/`_run_source_task`.
 - Per-agent `span()` around every `agent.run()` in `_run_phase1`, `run_evaluate_pipeline`, and
@@ -44,28 +56,26 @@ Implementing the approved Observability & Instrumentation plan
 
 ## Next Action
 
-**Wave 4 — feedback track** (Wave 3 "unify" is satisfied: trace_id flows to logs + every event,
-and events carry analysis_id/run_id to join LLMCall — verify with a quick query if desired):
-1. `Feedback` model (`models.py`): id, analysis_id FK, agent_name nullable, rating int, note
-   nullable, trace_id nullable, created_at. Created by `create_all` (no migration needed for fresh
-   DB; add an `init_db` ALTER only if a pre-existing DB must gain it — table is new so create_all
-   covers it).
-2. `FeedbackCreate` / `FeedbackResponse` in `schemas.py` (+ TS mirror in `frontend/src/types`).
-3. `backend/routes/feedback.py`: `POST {api_prefix}/feedback` (auth) + `GET ?analysis_id=`;
-   register in `main.py`.
-4. Frontend: thumbs/rating on `Results.tsx`; `submitFeedback` in `api/client.ts`.
-5. `backend/evals/__init__.py` stub documenting the hook (reconstructable validators consume Feedback).
-6. Tests: `tests/test_routes/test_feedback.py` happy + auth (401 unauth).
+Observability work is complete and committed. Options:
+1. **Pre-existing-DB migration:** new tables (`pipeline_events`, `feedback`) are created by
+   `Base.metadata.create_all` in `init_db()` — fine for fresh DBs. If a deployed SQLite DB exists,
+   confirm `create_all` picks them up (it does for new tables; only ALTERs need explicit
+   migrations, none here).
+2. **Optional follow-ups** (deferred, not required): tool-logging for `contact_discovery`/
+   `github_client`; a `/metrics/trace/{id}` route to surface a trace's spans+events+cost; revisit
+   `pipeline_events` retention.
+3. Consider opening a PR for branch `chore/harness-hooks` (now also carries the observability work)
+   — or split observability onto its own branch if cleaner.
 
 ## Why It Stopped
 
-Checkpoint after Wave 2 green. Committing to keep the tree clean.
+Plan fully implemented; `make check` green. Committing the final wave to keep the tree clean.
 
 ## In-Flight
 
-Committing now: orchestrator.py, discovery.py, base.py, config.py, models.py (no new model this
-wave), instrumentation.py (no change this wave), test_pipeline_events.py, test_observability.py,
-this HANDOFF. After commit the tree is clean.
+Committing now: models.py, schemas.py, main.py, routes/feedback.py, backend/evals/__init__.py,
+frontend (types/index.ts, api/client.ts, pages/Results.tsx), tests/test_routes/test_feedback.py,
+tasks/todo.md, this HANDOFF. After commit the tree is clean.
 
 ## Open Questions
 
@@ -79,4 +89,5 @@ this HANDOFF. After commit the tree is clean.
 |---|---|
 | `make fmt` | ✓ 78 files unchanged |
 | `make lint` | ✓ ruff + mypy + schema drift (9 classes) pass |
-| `make test` | ✓ 177 passed (full `pytest`, run with `--no-cov`) |
+| `make check` | ✓ fmt + lint + test in sequence; **180 passed, 78.60% coverage** (≥70 gate) |
+| frontend | ✓ `tsc --noEmit` clean |

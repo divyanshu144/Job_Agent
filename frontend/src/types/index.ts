@@ -151,3 +151,13 @@ export interface ColdEmailDraft {
   subject: string;
   body: string;
 }
+
+export interface Feedback {
+  id: string;
+  analysis_id: string;
+  agent_name: string | null;
+  rating: number;
+  note: string | null;
+  trace_id: string | null;
+  created_at: string;
+}

@@ -296,3 +296,21 @@ class DraftResponse(BaseModel):
 
 class SendResponse(BaseModel):
     sent: bool
+
+
+class FeedbackCreate(BaseModel):
+    analysis_id: str
+    agent_name: str | None = None
+    rating: int
+    note: str | None = None
+
+
+class FeedbackResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    analysis_id: str
+    agent_name: str | None
+    rating: int
+    note: str | None
+    trace_id: str | None
+    created_at: datetime

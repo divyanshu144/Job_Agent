@@ -24,6 +24,7 @@ export function Results() {
   const [tab, setTab] = useState<Tab>("score");
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
   const [genStates, setGenStates] = useState<Partial<Record<AgentName, AgentStatus>>>({});
   const cancelRef = useRef<(() => void) | null>(null);
 
@@ -127,13 +128,44 @@ export function Results() {
       .finally(() => setSending(false));
   };
 
+  const sendFeedback = (rating: number) => {
+    if (!data) return;
+    setFeedbackRating(rating);
+    api.submitFeedback(data.id, rating).catch(() => setFeedbackRating(null));
+  };
+
   if (error) return <p className="p-6 text-red-600">{error}</p>;
   if (!data) return <p className="p-6 text-slate-500">Loading…</p>;
   const r = data.results;
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-4">
-      <h1 className="text-2xl font-bold text-slate-900">Results</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-slate-900">Results</h1>
+        <div className="flex items-center gap-2 text-sm">
+          {feedbackRating === null ? (
+            <>
+              <span className="text-slate-400">Helpful?</span>
+              <button
+                onClick={() => sendFeedback(1)}
+                aria-label="Thumbs up"
+                className="px-2 py-1 rounded hover:bg-slate-100"
+              >
+                👍
+              </button>
+              <button
+                onClick={() => sendFeedback(-1)}
+                aria-label="Thumbs down"
+                className="px-2 py-1 rounded hover:bg-slate-100"
+              >
+                👎
+              </button>
+            </>
+          ) : (
+            <span className="text-slate-400">Thanks for the feedback!</span>
+          )}
+        </div>
+      </div>
       {data.partial && (
         <p className="text-amber-600 text-sm">⚠ Partial results — some agents failed.</p>
       )}

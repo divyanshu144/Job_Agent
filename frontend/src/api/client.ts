@@ -1,4 +1,4 @@
-import type { ProfileResponse, ProfileStatusResponse, GitHubRefreshResponse, AnalysisDetail, AgentName, SSECallbacks, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft } from "../types";
+import type { ProfileResponse, ProfileStatusResponse, GitHubRefreshResponse, AnalysisDetail, AgentName, SSECallbacks, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback } from "../types";
 
 const BASE = "/api";
 
@@ -45,6 +45,8 @@ export const api = {
     return r.json() as Promise<GitHubRefreshResponse>;
   },
   getAnalysis: (id: string) => get<AnalysisDetail>(`/analysis/${id}`),
+  submitFeedback: (analysisId: string, rating: number, agentName?: string, note?: string) =>
+    post<Feedback>("/feedback", { analysis_id: analysisId, rating, agent_name: agentName ?? null, note: note ?? null }),
   triggerDiscovery: async (source: string): Promise<{ run_id: string }> => {
     const r = await fetch(`${BASE}/discovery/run?source=${encodeURIComponent(source)}`, { method: "POST", credentials: "include" });
     if (!r.ok) return _errorMessage(r, "POST", `/discovery/run?source=${source}`);
