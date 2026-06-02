@@ -17,6 +17,24 @@ async def test_trigger_batch_discovery_returns_run_id(app_client):
     mock_run.assert_called_once()
 
 
+async def test_trigger_batch_all_discovery_returns_run_id(app_client):
+    """POST /api/discovery/run/batch/all fetches every configured source in one batch."""
+    with patch("backend.routes.discovery.run_batch_discovery", new_callable=AsyncMock) as mock_run:
+        mock_run.return_value = "batch-all-id-1"
+        resp = await app_client.post("/api/discovery/run/batch/all")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["run_id"] == "batch-all-id-1"
+    assert data["mode"] == "batch"
+    mock_run.assert_called_once_with("all", mock_run.call_args.args[1])
+
+
+async def test_trigger_batch_all_discovery_requires_auth(unauthenticated_client):
+    resp = await unauthenticated_client.post("/api/discovery/run/batch/all")
+    assert resp.status_code == 401
+
+
 async def test_trigger_batch_discovery_rejects_invalid_source(app_client):
     resp = await app_client.post("/api/discovery/run/batch", params={"source": "not_a_source"})
     assert resp.status_code == 422
