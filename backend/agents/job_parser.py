@@ -5,6 +5,7 @@ import json
 from pydantic import ValidationError
 
 from backend.agents.base import HAIKU, BaseAgent
+from backend.evals.validators import validate_job_parser
 from backend.schemas import JobParserOutput, PriorOutputs
 
 
@@ -32,6 +33,8 @@ class JobParserAgent(BaseAgent):
         raw = await self._call(system, jd)
         try:
             data = _parse_json(raw)
-            return JobParserOutput.model_validate(data)
+            output = JobParserOutput.model_validate(data)
+            output.validation_warnings = validate_job_parser(output, prior)
+            return output
         except (json.JSONDecodeError, ValidationError, AgentError) as e:
             raise AgentError(f"job_parser: {e}") from e

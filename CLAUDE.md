@@ -121,6 +121,8 @@ frontend/src/
 
 **JD hash caching** — `orchestrator.py` caches Phase 1 results keyed on `sha256(jd_text + "::" + profile.id)`. The key uses `profile.id`, not profile content. If a user updates their profile and re-submits the same JD, the cache returns the stale result. This is a known limitation — profile content changes do not invalidate the cache.
 
+**`validation_warnings` is a meta field** — every agent output model carries `validation_warnings: list[ValidationWarning] = Field(default_factory=list, exclude=True)`. `exclude=True` strips it from `model_dump()`, so it never enters `PriorOutputs` or gets injected into downstream prompts. It lives only in memory during a request and is surfaced via `logger.warning()` calls in `backend/evals/validators.py`.
+
 ---
 
 ## Workflow Orchestration

@@ -2,12 +2,14 @@
 export interface GapItem { skill: string; impact: string; rationale: string; }
 export interface ResourceItem { skill: string; courses: string[]; books: string[]; projects: string[]; estimated_hours: number; }
 export interface BulletItem { original: string; rewritten: string; rationale: string; }
-export interface JobParserOutput { required_skills: string[]; nice_to_have: string[]; years_experience: number | null; role_type: string; seniority: string; company?: string | null; }
-export interface MatchScorerOutput { score: number; matched_skills: string[]; missing_skills: string[]; partial_matches: string[]; }
-export interface GapAnalystOutput { critical_gaps: GapItem[]; nice_to_have_gaps: GapItem[]; }
-export interface ResourcePlannerOutput { gaps: ResourceItem[]; }
-export interface CoverLetterOutput { subject: string; body: string; tone_notes: string; }
-export interface ResumeTailorerOutput { tailored_bullets: BulletItem[]; }
+// validation_warnings is a meta-field (exclude=True in Python) — never present in API responses
+export interface ValidationWarning { agent: string; rule: string; detail: string; severity: 'warn' | 'error'; }
+export interface JobParserOutput { required_skills: string[]; nice_to_have: string[]; years_experience: number | null; role_type: string; seniority: string; company?: string | null; validation_warnings?: ValidationWarning[]; }
+export interface MatchScorerOutput { score: number; matched_skills: string[]; missing_skills: string[]; partial_matches: string[]; validation_warnings?: ValidationWarning[]; }
+export interface GapAnalystOutput { critical_gaps: GapItem[]; nice_to_have_gaps: GapItem[]; validation_warnings?: ValidationWarning[]; }
+export interface ResourcePlannerOutput { gaps: ResourceItem[]; validation_warnings?: ValidationWarning[]; }
+export interface CoverLetterOutput { subject: string; body: string; tone_notes: string; validation_warnings?: ValidationWarning[]; }
+export interface ResumeTailorerOutput { tailored_bullets: BulletItem[]; validation_warnings?: ValidationWarning[]; }
 export interface ProfileResponse { id: string; yaml_data: string; cv_text: string; github_data: string; merged_profile: string; last_refreshed_at: string; github_last_fetched_at: string | null; warnings: string[]; }
 export interface ProfileStatusResponse { profile_last_built_at: string; github_last_fetched_at: string | null; github_is_stale: boolean; github_stale_after_days: number; }
 export interface GitHubRefreshResponse { repos_updated: number; github_last_fetched_at: string; profile: ProfileResponse; }

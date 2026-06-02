@@ -1,7 +1,10 @@
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "--cov=backend --cov-report=term-missing --cov-fail-under=70"
+addopts = "--cov=backend --cov-report=term-missing --cov-fail-under=70 -m 'not integration'"
+markers = [
+    "integration: tests that call the real Anthropic API (deselected by default)",
+]
 
 [tool.ruff]
 line-length = 100
