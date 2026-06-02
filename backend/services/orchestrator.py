@@ -253,6 +253,11 @@ async def run_evaluate_pipeline(
                 yield SSEEvent("pipeline_error", {"agent": agent_name, "error": str(e)})
     finally:
         analysis.partial = partial
+        # Denormalize role/company/score onto the Analysis for the History list.
+        jp_out = results.get("job_parser", {})
+        analysis.role_type = jp_out.get("role_type")
+        analysis.company = jp_out.get("company")
+        analysis.match_score = results.get("match_scorer", {}).get("score")
         for name, output in results.items():
             db.add(
                 JobResult(

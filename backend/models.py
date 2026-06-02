@@ -168,6 +168,11 @@ class Analysis(Base):
     evaluate_only: Mapped[bool] = mapped_column(Boolean, default=False)
     jd_hash: Mapped[str] = mapped_column(String, default="", index=True)
     status: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    # Denormalized from job_parser/match_scorer outputs for the History list (and
+    # future application-tracker sort/filter). Populated at write time + backfill.
+    role_type: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    company: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    match_score: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     job_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("jobs.id"), nullable=True, default=None
     )

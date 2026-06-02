@@ -128,6 +128,9 @@ class AnalysisSummary(BaseModel):
     partial: bool
     evaluate_only: bool
     status: str | None = None
+    role_type: str | None = None
+    company: str | None = None
+    match_score: int | None = None
 
 
 class AnalysisDetail(BaseModel):

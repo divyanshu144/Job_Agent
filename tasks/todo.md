@@ -72,3 +72,14 @@ Full plan: `~/.claude/plans/atomic-beaming-hamming.md` (approved 2026-06-01)
 
 ### Wave 4 — Feedback track
 - [x] `Feedback` model + schemas + `routes/feedback.py` + register; frontend thumbs control; `backend/evals/__init__.py` hook stub
+
+## Analysed-jobs list (A scope: visibility only — surfaced on Analyse page)
+Plan: `~/.claude/plans/atomic-beaming-hamming.md` (approved 2026-06-02)
+- [x] Denormalize role_type/company/match_score onto Analysis (+ init_db ALTER migration)
+- [x] Populate at write-time in run_evaluate_pipeline; AnalysisSummary + TS type gain the fields
+- [x] `scripts/backfill_analysis_meta.py` (backfill meta + `--claim-orphans`) — USER runs it
+- [x] `api.listHistory`; list rendered on `AnalyseJob.tsx` (loaded on mount, refreshed after analyse).
+      NO separate page/route/nav (per user: visible on Analyse page only).
+- [x] Tests: history endpoint (meta + auth), orchestrator denorm, backfill script. make check green (185)
+- [ ] (user) run backfill against data/jobfit.db to recover the 4 rows (2 owned + 2 orphaned)
+- [ ] (deferred B) status/application-stage UI + filters

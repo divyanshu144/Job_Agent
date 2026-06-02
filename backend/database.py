@@ -52,3 +52,12 @@ async def init_db() -> None:
                     "ALTER TABLE llm_calls ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0"
                 )
             )
+        # Migration: denormalized role_type/company/match_score on analyses (History list)
+        anal_col_result = await conn.execute(text("PRAGMA table_info(analyses)"))
+        anal_cols = {row[1] for row in anal_col_result.fetchall()}
+        if "role_type" not in anal_cols:
+            await conn.execute(text("ALTER TABLE analyses ADD COLUMN role_type VARCHAR"))
+        if "company" not in anal_cols:
+            await conn.execute(text("ALTER TABLE analyses ADD COLUMN company VARCHAR"))
+        if "match_score" not in anal_cols:
+            await conn.execute(text("ALTER TABLE analyses ADD COLUMN match_score INTEGER"))
