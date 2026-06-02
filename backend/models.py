@@ -3,7 +3,17 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
@@ -91,6 +101,27 @@ class LLMCall(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
+class PipelineEvent(Base):
+    """Structured observability event (span | failure | tool | retry) for one pipeline run.
+
+    Correlated by trace_id (a fresh uuid per entry point); also carries the domain
+    keys analysis_id / run_id (nullable) so events join back to LLMCall cost rows.
+    """
+
+    __tablename__ = "pipeline_events"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    trace_id: Mapped[str] = mapped_column(String, index=True)
+    kind: Mapped[str] = mapped_column(String)  # span | failure | tool | retry
+    name: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default="ok")
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)  # JSON
+    analysis_id: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    run_id: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    __table_args__ = (Index("ix_pipeline_events_trace_kind", "trace_id", "kind"),)
+
+
 class DiscoveryRun(Base):
     __tablename__ = "discovery_runs"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
@@ -138,6 +169,11 @@ class Analysis(Base):
     evaluate_only: Mapped[bool] = mapped_column(Boolean, default=False)
     jd_hash: Mapped[str] = mapped_column(String, default="", index=True)
     status: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    # Denormalized from job_parser/match_scorer outputs for the History list (and
+    # future application-tracker sort/filter). Populated at write time + backfill.
+    role_type: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    company: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    match_score: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     job_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("jobs.id"), nullable=True, default=None
     )
@@ -156,6 +192,22 @@ class JobResult(Base):
     output_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     analysis: Mapped[Analysis] = relationship("Analysis", back_populates="results")
+
+
+class Feedback(Base):
+    """User rating of a generated analysis/agent output.
+
+    Capture-only for now; a future evals scorer (backend/evals/) consumes these.
+    """
+
+    __tablename__ = "feedback"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    analysis_id: Mapped[str] = mapped_column(String, ForeignKey("analyses.id"), index=True)
+    agent_name: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    rating: Mapped[int] = mapped_column(Integer)  # e.g. -1 / +1, or 1–5
+    note: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    trace_id: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class Contact(Base):

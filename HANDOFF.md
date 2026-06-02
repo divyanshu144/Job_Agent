@@ -1,100 +1,62 @@
 # Session Handoff
 
-**Updated:** 2026-05-28  
-**Branch:** feat/prompt-caching  
+**Updated:** 2026-06-02  
+**Branch:** feat/history (stacks on feat/observability → chore/harness-hooks; nothing merged to main yet)
 
 ---
 
 ## Current State
 
-Two major milestones completed this session:
+**Past analysed jobs surfaced on the Analyse page (A scope — visibility only) COMPLETE.**
+TDD throughout; `make check` green (**185 passed, 78.39% cov**), frontend `tsc --noEmit` clean.
 
-**1. Docker fixes (prerequisite):**
-- Added `python-multipart>=0.0.9` to `requirements.txt` — required for FastAPI `UploadFile` routes
-- Pinned `bcrypt>=3.2.0,<4.0.0` — `passlib` is incompatible with bcrypt 4.x (`__about__` removed, 72-byte password limit hit by `detect_wrap_bug()`)
-- Added docker-compose path overrides for `PROFILE_YAML_PATH` and `CV_PATH` so container runs don't crash with host-local absolute paths
-- Added fallback starter YAML in `profile_builder._read_repos()` when the profile file is missing
+- Denormalized `role_type` / `company` / `match_score` (nullable) onto `Analysis` (`models.py`) +
+  `init_db()` ALTER migration (`database.py`) so the existing `data/jobfit.db` gains them.
+- Populated at write-time in `run_evaluate_pipeline` (orchestrator persist block). `AnalysisSummary`
+  schema + TS type gained the fields (`/history` returns them; not in schema-drift PAIRS so no gate
+  impact).
+- `scripts/backfill_analysis_meta.py` — one-time, **user-run**: `backfill_meta` populates the new
+  columns from `job_results` JSON; `--claim-orphans` assigns the 2 orphaned pre-auth manual analyses
+  (user_id NULL & job_id NULL) to the sole user (or `--email`).
+- Frontend (per user revision — **no separate page**): the analysed-jobs list now renders on
+  `AnalyseJob.tsx` (loaded on mount via `api.listHistory`, refreshed after each analyse) — role_type ·
+  company · score badge · date · partial, JD-snippet fallback, links to `/results/:id`. The
+  standalone `History.tsx` page + `/history` route + nav link were removed. The `GET /api/history`
+  endpoint stays (the Analyse page consumes it).
+- Tests: `test_routes/test_history.py` (+meta, +auth 401), `test_orchestrator/test_analysis_meta.py`,
+  `test_services/test_backfill_analysis_meta.py`.
 
-**2. Multi-source discovery feature + bug audit:**
-
-Bug fixes (B1–B5, B7; B6 deferred per user instruction; I2 deferred to separate PR):
-- **B1**: Phase 1 failure now sets `state="filtered"` instead of leaving job stranded in `"discovered"` (zombie state)
-- **B2**: `asyncio.gather` exceptions now logged; were previously swallowed silently by discarding return value
-- **B3/B4**: `_errorMessage()` helper reads FastAPI `detail` from error response body; all `get()`/`post()` helpers use it
-- **B5**: `triggerDiscovery` now uses `encodeURIComponent(source)` 
-- **B7**: `triggerFetch`, `loadFeed`, and polling interval all wrapped in try/catch with error banner in UI
-- **I4**: Removed stale `github_client.py` line from CLAUDE.md architecture map
-
-Multi-source feature:
-- `DiscoveryRun.source_statuses` JSON column added (model + startup migration in `init_db()`)
-- `_get_configured_sources()` — HN always; Reed if `reed_api_key`; Adzuna if both `adzuna_app_id` + `adzuna_app_key`
-- `_update_source_status()` — asyncio.Lock-protected read-modify-write on the JSON column (one lock per run_id)
-- `_run_source_task()` — per-source background task that updates status throughout: pending → running → done/failed
-- `_run_all_discovery_task()` — fires all source tasks concurrently via `asyncio.gather`, derives overall status
-- `run_all_discovery()` — public entry point, creates DiscoveryRun with `source="all"`, returns run_id immediately
-- `POST /discovery/run/all` and `GET /discovery/sources` routes added
-- `SourceStatusItem`, `DiscoverySourcesResponse` schemas added; `DiscoveryRunResponse.source_statuses` added
-- Frontend: `SourceBadges` component (per-source pills: pending/running/done/failed with pulse animation, error tooltip, greyed unconfigured); `FunnelBar` updated for multi-source; button changed to "Fetch All Jobs"; `configuredSources` loaded on mount
-- `source_statuses[source].error` is populated with `str(e)` on failure — UI tooltip depends on it
-
-10 new tests added (4 service, 6 route), 150 total passing.
-
-**3. Comprehensive engineering handoff document produced** — full 15-section technical reference for the entire codebase, committed to this conversation (not a file on disk; see conversation transcript).
+Findings that shaped it: `job_parser` has `company` (often null) + `role_type` (used as the title;
+no `title` field exists); the 2 orphaned analyses are both the "Senior Python Engineer — Remote" JD
+(role_type Backend Engineer, score 62), confirmed to the user as likely theirs.
 
 ## Next Action
 
-Commit everything on `feat/prompt-caching` and open a PR to merge into `main`:
-
-```bash
-git add -A
-git commit -m "feat(discovery): multi-source support + bug fixes (B1-B5, B7, I4)"
-git push origin feat/prompt-caching
-gh pr create --title "Multi-source discovery + bug fixes" --body "..."
-```
-
-After merge, the next feature wave is **Feature Improvements** (`tasks/todo.md` items 1–8), starting at Task 1: analysis caching (`jd_hash` on Analysis, cache check in `run_evaluate_pipeline`). Note: this was already built on the `feat/prompt-caching` branch — review `orchestrator.py:62–93` before re-implementing.
+1. **USER runs the backfill** to recover the 4 rows (no `make run` was done):
+   `python scripts/backfill_analysis_meta.py --claim-orphans`
+   (sole user is exeter792@gmail.com; verify the 2 orphans shown earlier are yours first).
+2. Commit is on `feat/history`. Decide PR/branch strategy — three stacked branches exist
+   (`chore/harness-hooks` → `feat/observability` → `feat/history`); nothing merged to main.
+3. (Deferred B) application-tracker status UI + filters.
 
 ## Why It Stopped
 
-All planned work complete. User requested HANDOFF.md. Natural end of session.
+History feature complete, committed, verified. Clean stopping point.
 
 ## In-Flight
 
-All changes are uncommitted on `feat/prompt-caching`. No partial work — everything is complete and verified.
-
-Modified files (uncommitted, all changes are intentional and tested):
-- `CLAUDE.md` — I4 fix (stale line removed), discovery route line updated
-- `backend/database.py` — startup migration for `source_statuses` column
-- `backend/models.py` — `source_statuses` column on `DiscoveryRun`
-- `backend/routes/discovery.py` — `/run/all`, `/sources` routes; `_run_to_response` updated
-- `backend/schemas.py` — `SourceStatusItem`, `DiscoverySourcesResponse`, `source_statuses` on `DiscoveryRunResponse`
-- `backend/services/discovery.py` — B1/B2 fixes + full multi-source machinery (165 lines added)
-- `backend/services/profile_builder.py` — Docker fallback YAML
-- `docker-compose.yml` — container path overrides
-- `frontend/src/api/client.ts` — `_errorMessage`, B3/B4/B5 fixes, `triggerAllDiscovery`, `getDiscoverySources`
-- `frontend/src/pages/Discover.tsx` — `SourceBadges`, multi-source UI, B7 fix
-- `frontend/src/types/index.ts` — `SourceStatusItem`, `DiscoverySources`, `source_statuses` field
-- `requirements.txt` — `python-multipart`, `bcrypt` pin
-- `tasks/lessons.md` — two new entries (multi-commit pattern, Docker path leakage)
-- `tests/test_routes/test_discovery_routes.py` — 7 new tests
-- `tests/test_services/test_discovery.py` — 4 new tests
-- `tests/test_services/test_profile_builder.py` — fallback YAML tests
+Committed on `feat/history`. Working tree clean after commit. `data/jobfit.db` NOT yet
+backfilled (intentional — user runs the script).
 
 ## Open Questions
 
-1. **I2 deferred**: `_process_job` commits 7–9 times per job (once per state transition). Should be batched into a single `finally: await db.commit()` per the `_run_phase1` pattern. Documented in `tasks/lessons.md`. Separate PR when ready.
-
-2. **Phase 2 cost tracking gap**: `cover_letter` and `resume_tailorer` skip `with_tracking()` because they share the route's DB session. Fix requires giving each parallel agent its own `SessionLocal()` session. Not blocking; Phase 1 and `resource_planner` are tracked correctly.
-
-3. **JD hash cache stale on profile update**: Cache key is `sha256(jd_text + "::" + profile.id)`. Profile content changes don't invalidate it. Documented in `tasks/lessons.md`. Fix: hash profile content instead of ID.
-
-4. **Feature Improvements wave**: `tasks/todo.md` Tasks 1–8 are all pending. Task 1 (analysis caching) was already implemented on this branch — verify before reimplementing.
+1. PR strategy for the three stacked branches (merge order / squash?).
+2. When to build the deferred B slice (status tracking + filters).
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make fmt` | ✓ clean (77 files unchanged) |
-| `make lint` | ✓ clean (ruff + mypy + schema drift all pass) |
-| `make test` | ✓ 150 passing · 77.83% coverage |
-| `make check` | ✓ clean |
+| `make check` | ✓ **185 passed, 78.39% coverage** (fmt + lint + mypy + schema-drift + pytest) |
+| frontend | ✓ `tsc --noEmit` clean |
+| backfill on live DB | ⏳ deferred to user (`scripts/backfill_analysis_meta.py`) |

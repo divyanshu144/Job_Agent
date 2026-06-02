@@ -146,6 +146,9 @@ class AnalysisSummary(BaseModel):
     partial: bool
     evaluate_only: bool
     status: str | None = None
+    role_type: str | None = None
+    company: str | None = None
+    match_score: int | None = None
 
 
 class AnalysisDetail(BaseModel):
@@ -323,3 +326,21 @@ class BatchDiscoveryResponse(BaseModel):
         "Batch run submitted. Results appear in /discovery/feed when processing completes "
         "(typically 1–60 minutes). Check /discovery/runs/{run_id} for status."
     )
+
+
+class FeedbackCreate(BaseModel):
+    analysis_id: str
+    agent_name: str | None = None
+    rating: int
+    note: str | None = None
+
+
+class FeedbackResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    analysis_id: str
+    agent_name: str | None
+    rating: int
+    note: str | None
+    trace_id: str | None
+    created_at: datetime

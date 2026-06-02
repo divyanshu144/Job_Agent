@@ -19,7 +19,7 @@ from backend.database import SessionLocal
 from backend.models import DiscoveryBatch, DiscoveryRun, Job
 from backend.services.adzuna_client import fetch_adzuna_jobs
 from backend.services.hn_client import RawJob, fetch_hn_jobs
-from backend.services.instrumentation import tracked_call
+from backend.services.instrumentation import log_event, new_trace_id, span, tracked_call
 from backend.services.orchestrator import _run_phase1
 from backend.services.profile_builder import build_compact_profile, get_or_build_profile
 from backend.services.reed_client import fetch_reed_jobs
@@ -31,7 +31,10 @@ _background_tasks: set[asyncio.Task[None]] = set()
 
 # Shared client for Stage 2 Haiku calls across the batch
 # must use tracked_call() — not raw _anthropic_client.messages.create()
-_anthropic_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+_anthropic_client = anthropic.AsyncAnthropic(
+    api_key=settings.anthropic_api_key,
+    max_retries=settings.anthropic_max_retries,
+)
 
 
 @dataclass
@@ -146,6 +149,7 @@ async def _process_job(
     compact: str,
     source_tag: str = "hn",
 ) -> None:
+    new_trace_id()  # one trace per job: groups its stage2 + phase1 spans/events
     existing = (
         await db.execute(select(Job).where(Job.dedup_hash == raw.dedup_hash))
     ).scalar_one_or_none()
@@ -188,6 +192,14 @@ async def _process_job(
         s2 = await _stage2_check(raw.raw_text, compact, db=db, run_id=run_id)
     except Exception as e:
         logger.warning("Stage 2 failed for job %s: %s", job.id, e)
+        await log_event(
+            db,
+            kind="failure",
+            name="stage2_check",
+            status="error",
+            detail={"type": type(e).__name__, "msg": str(e), "job_id": job.id},
+            run_id=run_id,
+        )
         await db.execute(update(Job).where(Job.id == job.id).values(state="filtered"))
         await db.commit()
         return
@@ -216,6 +228,14 @@ async def _process_job(
         )
     except Exception as e:
         logger.warning("Phase 1 failed for job %s: %s", job.id, e)
+        await log_event(
+            db,
+            kind="failure",
+            name="phase1",
+            status="error",
+            detail={"type": type(e).__name__, "msg": str(e), "job_id": job.id},
+            run_id=run_id,
+        )
         await db.execute(update(Job).where(Job.id == job.id).values(state="filtered"))
         await db.commit()
         return
@@ -244,6 +264,7 @@ _DISCOVERY_CONCURRENCY = 5
 
 async def _run_discovery_task(run_id: str, source: str) -> None:
     # Background task — must own its own session (cannot receive FastAPI DI)
+    new_trace_id()  # run-level trace for setup/fetch; each job gets its own later
     # Phase 1: setup — load profiles, build compact profile, fetch jobs
     try:
         async with SessionLocal() as db:
@@ -263,12 +284,13 @@ async def _run_discovery_task(run_id: str, source: str) -> None:
             all_locations = [loc for p in profiles for loc in p.allowed_locations]
             location = all_locations[0] if all_locations else ""
 
-            if source == "reed":
-                raw_jobs = await fetch_reed_jobs(keywords, location)
-            elif source == "adzuna":
-                raw_jobs = await fetch_adzuna_jobs(keywords, location)
-            else:  # "hn" — fetches the monthly "Who is Hiring" thread; no keywords needed
-                raw_jobs = await fetch_hn_jobs()
+            async with span(db, kind="tool", name=f"fetch_{source}", run_id=run_id):
+                if source == "reed":
+                    raw_jobs = await fetch_reed_jobs(keywords, location)
+                elif source == "adzuna":
+                    raw_jobs = await fetch_adzuna_jobs(keywords, location)
+                else:  # "hn" — fetches the monthly "Who is Hiring" thread; no keywords needed
+                    raw_jobs = await fetch_hn_jobs()
 
             await db.execute(
                 update(DiscoveryRun)
@@ -377,6 +399,7 @@ async def _update_source_status(run_id: str, source: str, **fields: Any) -> None
 
 async def _run_source_task(run_id: str, source: str) -> None:
     """Fetch and process jobs from one source; update source_statuses[source] throughout."""
+    new_trace_id()  # run-level trace for this source's setup/fetch
     await _update_source_status(run_id, source, status="running")
 
     # ── Setup: load profile + fetch raw jobs ──────────────────────────────
@@ -391,12 +414,13 @@ async def _run_source_task(run_id: str, source: str) -> None:
             all_locations = [loc for p in profiles for loc in p.allowed_locations]
             location = all_locations[0] if all_locations else ""
 
-            if source == "reed":
-                raw_jobs = await fetch_reed_jobs(keywords, location)
-            elif source == "adzuna":
-                raw_jobs = await fetch_adzuna_jobs(keywords, location)
-            else:
-                raw_jobs = await fetch_hn_jobs()
+            async with span(db, kind="tool", name=f"fetch_{source}", run_id=run_id):
+                if source == "reed":
+                    raw_jobs = await fetch_reed_jobs(keywords, location)
+                elif source == "adzuna":
+                    raw_jobs = await fetch_adzuna_jobs(keywords, location)
+                else:
+                    raw_jobs = await fetch_hn_jobs()
 
             await db.execute(
                 update(DiscoveryRun)

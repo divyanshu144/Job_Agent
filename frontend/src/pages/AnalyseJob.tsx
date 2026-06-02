@@ -1,9 +1,9 @@
-import { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { streamAnalysis, streamGenerate } from "../api/client";
+import { useState, useRef, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { streamAnalysis, streamGenerate, api } from "../api/client";
 import { AgentProgress } from "../components/AgentProgress";
 import { AGENT_ORDER } from "../types";
-import type { AgentName, AgentStatus, PipelineDoneData } from "../types";
+import type { AgentName, AgentStatus, PipelineDoneData, AnalysisSummary } from "../types";
 
 const initStates = () =>
   Object.fromEntries(AGENT_ORDER.map((a) => [a, "pending"])) as Record<AgentName, AgentStatus>;
@@ -16,10 +16,16 @@ export function AnalyseJob() {
   const [states, setStates] = useState<Record<AgentName, AgentStatus>>(initStates());
   const [evalResult, setEvalResult] = useState<PipelineDoneData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<AnalysisSummary[]>([]);
   const cancelRef = useRef<(() => void) | null>(null);
   const navigate = useNavigate();
 
   const running = phase === "evaluating" || phase === "generating";
+
+  const loadHistory = () => {
+    api.listHistory().then(setHistory).catch(() => {});
+  };
+  useEffect(() => { loadHistory(); }, []);
 
   const submit = () => {
     if (jd.trim().length < 50) { setError("JD must be at least 50 characters."); return; }
@@ -31,7 +37,7 @@ export function AnalyseJob() {
       onAgentStart: ({ agent }) => setStates((p) => ({ ...p, [agent]: "running" })),
       onAgentDone: ({ agent }) => setStates((p) => ({ ...p, [agent]: "done" })),
       onPipelineError: ({ agent }) => setStates((p) => ({ ...p, [agent]: "error" })),
-      onPipelineDone: (data) => { setPhase("evaluated"); setEvalResult(data); },
+      onPipelineDone: (data) => { setPhase("evaluated"); setEvalResult(data); loadHistory(); },
     });
   };
 
@@ -101,6 +107,39 @@ export function AnalyseJob() {
       )}
 
       {phase !== "idle" && <AgentProgress agentStates={states} />}
+
+      {history.length > 0 && (
+        <div className="space-y-2 pt-6 border-t border-slate-200">
+          <h2 className="text-sm font-semibold text-slate-700">Your analysed jobs</h2>
+          {history.map((item) => (
+            <Link
+              key={item.id}
+              to={`/results/${item.id}`}
+              className="block p-3 rounded-lg border hover:bg-slate-50"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900 truncate">
+                    {item.role_type ?? "Analysed job"}
+                    {item.company ? <span className="text-slate-500 font-normal"> · {item.company}</span> : null}
+                  </p>
+                  <p className="text-xs text-slate-400 truncate mt-0.5">{item.jd_text.slice(0, 100)}…</p>
+                </div>
+                {item.match_score != null && (
+                  <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                    {item.match_score}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-xs text-slate-400">{new Date(item.created_at).toLocaleString()}</span>
+                {item.partial && <span className="text-xs text-amber-600">partial</span>}
+                {item.evaluate_only && <span className="text-xs text-slate-400">· evaluation only</span>}
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -33,7 +33,13 @@ async def client_with_data():
         s.add(p)
         await s.flush()
         a = Analysis(
-            jd_text="Senior ML Engineer " * 5, profile_id=p.id, partial=False, user_id=_FAKE_USER.id
+            jd_text="Senior ML Engineer " * 5,
+            profile_id=p.id,
+            partial=False,
+            user_id=_FAKE_USER.id,
+            role_type="ML Engineer",
+            company="Acme Corp",
+            match_score=80,
         )
         s.add(a)
         await s.flush()
@@ -85,3 +91,19 @@ async def test_history_pagination(client_with_data):
     resp = await client.get("/api/history?limit=0&offset=0")
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+async def test_history_includes_denormalized_meta(client_with_data):
+    client, _ = client_with_data
+    resp = await client.get("/api/history")
+    assert resp.status_code == 200
+    item = resp.json()[0]
+    assert item["role_type"] == "ML Engineer"
+    assert item["company"] == "Acme Corp"
+    assert item["match_score"] == 80
+
+
+@pytest.mark.asyncio
+async def test_history_requires_auth(unauthenticated_client):
+    resp = await unauthenticated_client.get("/api/history")
+    assert resp.status_code == 401

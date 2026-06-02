@@ -49,3 +49,37 @@ Full plan: `docs/superpowers/plans/2026-05-23-feature-improvements.md`
 - [ ] Task 6: Cover letter tone picker (backend) — {tone} prompt slot, GenerateRequest, tone param in pipeline
 - [ ] Task 7: Cover letter tone picker (frontend) — tone dropdown in AnalyseJob + Results
 - [ ] Task 8: Profile compression — _summarise_profile() Haiku call, profile_summary field, use in Phase 1
+
+## Observability & Instrumentation
+Full plan: `~/.claude/plans/atomic-beaming-hamming.md` (approved 2026-06-01)
+
+### Wave 5 — Docs correction (first)
+- [x] Correct `observability-audit.md` #8 (evals scaffolded-but-lost) + Open Question (pipeline_events growth)
+
+### Wave 0 — Foundation: structured logging keyed on trace_id
+- [x] `trace_id_var` contextvar + `new_trace_id()`/`get_trace_id()` (instrumentation.py)
+- [x] JSON log formatter + trace_id filter; `configure_logging()` + `log_level` (config.py); call in main.py lifespan
+
+### Wave 1 — Events table + write helper
+- [x] `PipelineEvent` model + index on (trace_id, kind); `log_event()` (fail-open) + `span()` ctx manager
+
+### Wave 2 — Stamp signals
+- [x] trace_id at entry points; per-agent spans; failure capture + JobResult.error; tool-call logs (discovery fetches); explicit max_retries
+- [ ] (deferred) tool-call logs for contact_discovery / github_client (non-pipeline paths)
+
+### Wave 3 — Unify ids
+- [x] trace_id in logs + every event; events carry analysis_id/run_id to join LLMCall (satisfied by design)
+
+### Wave 4 — Feedback track
+- [x] `Feedback` model + schemas + `routes/feedback.py` + register; frontend thumbs control; `backend/evals/__init__.py` hook stub
+
+## Analysed-jobs list (A scope: visibility only — surfaced on Analyse page)
+Plan: `~/.claude/plans/atomic-beaming-hamming.md` (approved 2026-06-02)
+- [x] Denormalize role_type/company/match_score onto Analysis (+ init_db ALTER migration)
+- [x] Populate at write-time in run_evaluate_pipeline; AnalysisSummary + TS type gain the fields
+- [x] `scripts/backfill_analysis_meta.py` (backfill meta + `--claim-orphans`) — USER runs it
+- [x] `api.listHistory`; list rendered on `AnalyseJob.tsx` (loaded on mount, refreshed after analyse).
+      NO separate page/route/nav (per user: visible on Analyse page only).
+- [x] Tests: history endpoint (meta + auth), orchestrator denorm, backfill script. make check green (185)
+- [ ] (user) run backfill against data/jobfit.db to recover the 4 rows (2 owned + 2 orphaned)
+- [ ] (deferred B) status/application-stage UI + filters

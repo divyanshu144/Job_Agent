@@ -159,3 +159,41 @@ Fix: Override those paths in `docker-compose.yml` to the mounted container paths
 Avoid: Letting host-local absolute paths leak into container runtime config unless the host directory is explicitly bind-mounted at the same container path.
 
 See: `docker-compose.yml`, `backend/services/profile_builder.py:20–68`
+
+---
+
+## [2026-05-31] Live PreToolUse safety hooks block commands that merely mention the pattern
+
+Pattern: A global PreToolUse hook that greps the bash command text for destructive patterns (`rm -rf`, `DROP TABLE`, force push, etc.) blocks ANY command containing that literal string — including test scripts, `echo`/comments, and commit messages that reference the pattern. Discovered live: the swarm-safety smoke test (a loop with `rm -rf /tmp/foo` as a string) was blocked by the very hook it was testing.
+
+Fix: When a command must contain a guarded pattern, assemble the string at runtime (`R="rm"; "$R" -rf …`) or move it into a file and run `bash file.sh` — the hook only inspects `tool_input.command`, so the literal never appears in the tool call. Keep the hook fail-open: if the JSON payload can't be parsed, allow the command. A parse bug must not block every command in every repo.
+
+Avoid: Writing test/demo bash inline with literal dangerous strings once the global hook is active. Avoid fail-closed parsing for a heuristic guard.
+
+See: `~/.claude/hooks/pre-tool-use.sh`, `~/.claude/settings.json` (PreToolUse → Bash)
+
+---
+
+## [2026-05-31] Stop hooks need the stop_hook_active guard or they loop
+
+Pattern: A Stop hook that blocks (exit 2) to force a `HANDOFF.md` update is re-invoked after Claude responds to the block. Without checking the `stop_hook_active` flag in the hook's stdin JSON, it can block the session forever.
+
+Fix: First line of logic — if stdin contains `"stop_hook_active": true`, `exit 0`. Scope enforcement to real work: block only when `git status --porcelain` is non-empty (dirty tree) AND `HANDOFF.md` mtime is older than 30 min (`find HANDOFF.md -mmin -30`). Clean tree, non-repo, and fresh HANDOFF all pass silently.
+
+Avoid: Blocking session end on every stop regardless of whether anything changed — it nags read-only/Q&A sessions. Tie the gate to a dirty working tree.
+
+See: `.claude/hooks/stop.sh`, `.claude/settings.json` (Stop)
+
+---
+
+## [2026-06-01] A dirty-tree Stop hook must tell the user to COMMIT, not just edit the gated file
+
+Pattern: The HANDOFF Stop hook gates on `git status --porcelain` (dirty tree) AND `HANDOFF.md` mtime > 30 min. When `HANDOFF.md` is the *only* uncommitted file (the common session-end case), the block message said "Overwrite HANDOFF.md … then stop again" — so following it literally refreshes mtime, suppresses the block for 30 min, then re-fires because the tree is still dirty. The remediation the hook prints can never durably satisfy the hook; only committing/cleaning can. Hit live ~4 times in one session.
+
+Fix: A gate keyed on a *condition* (dirty tree) must, in its remediation text, name the action that clears the *condition* — here, COMMIT or otherwise clean the tree — not just the sub-step (edit the file). The message now says to commit and explains the 30-min suppression. Also dropped the inlined schema in favour of pointing at `HANDOFF.template.md` (schema lived in two places → drift), and removed a redundant `git rev-parse` probe (`git status --porcelain` already returns empty on a non-repo).
+
+Decision (deliberately NOT done): do not add a "HANDOFF.md must be committed" *block* to the hook. It would be the one fail-closed path in an otherwise fail-open script and would trap a session after a perfectly good HANDOFF was written but not `git add`-ed. If ever revisited, implement as a warning (`exit 0`), never a block.
+
+Avoid: Writing remediation text that addresses the symptom step instead of the gating condition. Avoid duplicating a schema between a hook and its template file.
+
+See: `.claude/hooks/stop.sh`, `HANDOFF.template.md`

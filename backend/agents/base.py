@@ -22,7 +22,10 @@ class BaseAgent:
     model: str = SONNET
 
     def __init__(self) -> None:
-        self._client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        self._client = anthropic.AsyncAnthropic(
+            api_key=settings.anthropic_api_key,
+            max_retries=settings.anthropic_max_retries,
+        )
         self._db: AsyncSession | None = None
         self._run_id: str | None = None
         self._analysis_id: str | None = None

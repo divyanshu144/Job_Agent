@@ -15,13 +15,16 @@ from backend.routes.analyse import router as analyse_router
 from backend.routes.auth import router as auth_router
 from backend.routes.contacts import router as contacts_router
 from backend.routes.discovery import router as discovery_router
+from backend.routes.feedback import router as feedback_router
 from backend.routes.history import router as history_router
 from backend.routes.metrics import router as metrics_router
 from backend.routes.profile import router as profile_router
+from backend.services.instrumentation import configure_logging
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    configure_logging()
     await init_db()
     # Reset any runs left in "running" state due to server crash
     async with SessionLocal() as db:
@@ -51,6 +54,7 @@ app.include_router(history_router, prefix=settings.api_prefix)
 app.include_router(discovery_router, prefix=settings.api_prefix)
 app.include_router(contacts_router, prefix=settings.api_prefix)
 app.include_router(metrics_router, prefix=settings.api_prefix)
+app.include_router(feedback_router, prefix=settings.api_prefix)
 
 
 @app.get("/health")
