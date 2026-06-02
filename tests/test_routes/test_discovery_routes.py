@@ -126,6 +126,57 @@ async def test_feed_returns_scored_jobs(app_client, db_session):
     assert data["items"][0]["analysis_id"] == analysis.id
 
 
+async def test_feed_dedupes_to_latest_analysis(app_client, db_session):
+    """A job with >1 Analysis row appears once, joined to the most recent Analysis."""
+    from datetime import timedelta
+
+    from backend.models import Analysis, DiscoveryRun, Job, Profile
+
+    profile = Profile(
+        id="pd",
+        yaml_data="x",
+        cv_text="",
+        github_data="{}",
+        merged_profile="m",
+        last_refreshed_at=datetime.now(timezone.utc),
+    )
+    run = DiscoveryRun(source="hn", status="complete", started_at=datetime.now(timezone.utc))
+    db_session.add_all([profile, run])
+    await db_session.flush()
+
+    job = Job(
+        sources='["hn"]',
+        source_id="9",
+        source_url="https://hn.com/9",
+        title="Backend Engineer",
+        company="Acme",
+        location="Remote",
+        raw_text="Python backend " * 10,
+        dedup_hash="h-dedupe",
+        state="scored",
+        relevance_score=80,
+        matched_profiles='["AI-focused"]',
+        discovery_run_id=run.id,
+    )
+    db_session.add(job)
+    await db_session.flush()
+
+    now = datetime.now(timezone.utc)
+    older = Analysis(
+        jd_text="x", profile_id=profile.id, job_id=job.id, created_at=now - timedelta(hours=1)
+    )
+    newer = Analysis(jd_text="x", profile_id=profile.id, job_id=job.id, created_at=now)
+    db_session.add_all([older, newer])
+    await db_session.commit()
+
+    resp = await app_client.get("/api/discovery/feed")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert len(data["items"]) == 1
+    assert data["items"][0]["analysis_id"] == newer.id
+
+
 async def test_trigger_discovery_invalid_source_returns_422(app_client):
     """Unknown source strings are rejected before any DB write."""
     resp = await app_client.post("/api/discovery/run?source=linkedin")

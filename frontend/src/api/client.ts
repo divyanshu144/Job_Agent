@@ -58,6 +58,11 @@ export const api = {
     if (!r.ok) return _errorMessage(r, "POST", "/discovery/run/all");
     return r.json() as Promise<{ run_id: string }>;
   },
+  triggerBatchDiscovery: async (): Promise<{ run_id: string }> => {
+    const r = await fetch(`${BASE}/discovery/run/batch/all`, { method: "POST", credentials: "include" });
+    if (!r.ok) return _errorMessage(r, "POST", "/discovery/run/batch/all");
+    return r.json() as Promise<{ run_id: string }>;
+  },
   getDiscoverySources: () => get<DiscoverySources>("/discovery/sources"),
   getDiscoveryRun: (runId: string) => get<DiscoveryRun>(`/discovery/runs/${runId}`),
   getDiscoveryRuns: () => get<DiscoveryRun[]>("/discovery/runs"),

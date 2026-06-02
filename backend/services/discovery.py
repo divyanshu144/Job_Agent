@@ -570,17 +570,25 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
             all_locations = [loc for p in profiles for loc in p.allowed_locations]
             location = all_locations[0] if all_locations else ""
 
-            if source == "reed":
-                raw_jobs = await fetch_reed_jobs(keywords, location)
-            elif source == "adzuna":
-                raw_jobs = await fetch_adzuna_jobs(keywords, location)
-            else:
-                raw_jobs = await fetch_hn_jobs()
+            # source == "all" fans out across every configured source; otherwise a single source.
+            fetch_sources = _get_configured_sources() if source == "all" else [source]
+            raw_by_source: list[tuple[str, RawJob]] = []
+            for src in fetch_sources:
+                try:
+                    if src == "reed":
+                        jobs = await fetch_reed_jobs(keywords, location)
+                    elif src == "adzuna":
+                        jobs = await fetch_adzuna_jobs(keywords, location)
+                    else:
+                        jobs = await fetch_hn_jobs()
+                    raw_by_source.extend((src, j) for j in jobs)
+                except Exception as e:
+                    logger.warning("Batch fetch failed (run=%s source=%s): %s", run_id, src, e)
 
             await db.execute(
                 update(DiscoveryRun)
                 .where(DiscoveryRun.id == run_id)
-                .values(jobs_found=len(raw_jobs))
+                .values(jobs_found=len(raw_by_source))
             )
             await db.commit()
     except Exception as e:
@@ -600,7 +608,7 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
     stage1_raw: dict[str, str] = {}
 
     async with SessionLocal() as db:
-        for raw in raw_jobs:
+        for src, raw in raw_by_source:
             # Skip duplicates
             existing = (
                 await db.execute(select(Job).where(Job.dedup_hash == raw.dedup_hash))
@@ -610,7 +618,7 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
 
             state = "discovered" if _stage1_pass(raw.raw_text, profiles) else "filtered"
             job = Job(
-                sources=json.dumps([source]),
+                sources=json.dumps([src]),
                 source_id=raw.source_id,
                 source_url=raw.source_url,
                 raw_text=raw.raw_text,

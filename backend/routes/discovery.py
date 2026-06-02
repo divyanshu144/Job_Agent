@@ -114,6 +114,16 @@ async def trigger_batch_discovery(
     return BatchDiscoveryResponse(run_id=run_id)
 
 
+@router.post("/discovery/run/batch/all", response_model=BatchDiscoveryResponse)
+async def trigger_batch_all_discovery(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BatchDiscoveryResponse:
+    """Submit a Batch API run across ALL configured sources in one batch (50% discount)."""
+    run_id = await run_batch_discovery("all", db)
+    return BatchDiscoveryResponse(run_id=run_id)
+
+
 @router.get("/discovery/sources", response_model=DiscoverySourcesResponse)
 async def get_discovery_sources(
     current_user: User = Depends(get_current_user),
@@ -192,9 +202,18 @@ async def get_discovery_feed(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryFeedResponse:
+    # Most-recent Analysis per job (correlated scalar subquery) — avoids the duplicate
+    # rows a plain Analysis join produces when a job has been scored more than once.
+    latest_analysis_id = (
+        select(Analysis.id)
+        .where(Analysis.job_id == Job.id)
+        .order_by(Analysis.created_at.desc(), Analysis.id.desc())
+        .limit(1)
+        .correlate(Job)
+        .scalar_subquery()
+    )
     base = (
-        select(Job, Analysis.id.label("analysis_id"), SavedJob.user_id.label("saved_by"))
-        .outerjoin(Analysis, Analysis.job_id == Job.id)
+        select(Job, latest_analysis_id.label("analysis_id"), SavedJob.user_id.label("saved_by"))
         .outerjoin(SavedJob, and_(SavedJob.job_id == Job.id, SavedJob.user_id == current_user.id))
         .where(Job.state == "scored")
         .where(Job.relevance_score >= min_score)
@@ -223,11 +242,17 @@ async def get_saved_jobs(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryFeedResponse:
-    base = (
-        select(Job, Analysis.id.label("analysis_id"), SavedJob.user_id.label("saved_by"))
-        .join(SavedJob, and_(SavedJob.job_id == Job.id, SavedJob.user_id == current_user.id))
-        .outerjoin(Analysis, Analysis.job_id == Job.id)
+    latest_analysis_id = (
+        select(Analysis.id)
+        .where(Analysis.job_id == Job.id)
+        .order_by(Analysis.created_at.desc(), Analysis.id.desc())
+        .limit(1)
+        .correlate(Job)
+        .scalar_subquery()
     )
+    base = select(
+        Job, latest_analysis_id.label("analysis_id"), SavedJob.user_id.label("saved_by")
+    ).join(SavedJob, and_(SavedJob.job_id == Job.id, SavedJob.user_id == current_user.id))
 
     total: int = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
     rows = (
