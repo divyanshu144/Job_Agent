@@ -174,6 +174,8 @@ class Analysis(Base):
     role_type: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
     company: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
     match_score: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    # Per-run quality summary (JSON), populated at end of Phase 2 (see orchestrator).
+    quality_signals: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     job_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("jobs.id"), nullable=True, default=None
     )

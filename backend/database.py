@@ -61,3 +61,5 @@ async def init_db() -> None:
             await conn.execute(text("ALTER TABLE analyses ADD COLUMN company VARCHAR"))
         if "match_score" not in anal_cols:
             await conn.execute(text("ALTER TABLE analyses ADD COLUMN match_score INTEGER"))
+        if "quality_signals" not in anal_cols:
+            await conn.execute(text("ALTER TABLE analyses ADD COLUMN quality_signals TEXT"))

@@ -28,7 +28,8 @@ export const AGENT_ORDER: AgentName[] = ["job_parser","match_scorer","gap_analys
 export const PHASE1_AGENTS: AgentName[] = ["job_parser","match_scorer","gap_analyst"];
 export const PHASE2_AGENTS: AgentName[] = ["resource_planner","cover_letter","resume_tailorer"];
 export type AgentStatus = "pending"|"running"|"done"|"error";
-export interface PipelineDoneData { analysis_id: string; score: number; partial: boolean; evaluate_only: boolean; }
+export interface QualitySignals { match_score: number | null; match_score_adjusted: number | null; gaps_critical: number; gaps_nice_to_have: number; resource_confidence_avg: number | null; low_confidence_gaps: string[]; }
+export interface PipelineDoneData { analysis_id: string; score: number; partial: boolean; evaluate_only: boolean; quality_signals?: QualitySignals; }
 export interface SSECallbacks {
   onPipelineStart?: (data: { total_agents: number }) => void;
   onAgentStart?: (data: { agent: AgentName }) => void;
