@@ -62,7 +62,10 @@ class BaseAgent:
             run_id=self._run_id,
             analysis_id=self._analysis_id,
             max_tokens=MAX_TOKENS,
-            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+            # No prompt caching: each pipeline call's system prompt is unique per request
+            # (profile + JD + prior outputs injected), so cached blocks are never read back —
+            # only the 1.25x write premium was incurred. See tasks/observability-audit.md.
+            system=system,
             messages=[{"role": "user", "content": user}],
         )
         return msg.content[0].text  # type: ignore[union-attr]
