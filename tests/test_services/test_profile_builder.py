@@ -57,6 +57,16 @@ async def test_build_profile_merges_sources(session, tmp_path):
     assert "DocChat" in profile.merged_profile
 
 
+def test_assemble_merged_is_github_order_independent():
+    """merged_profile feeds profile_content_hash, so it must be deterministic regardless of
+    github_data ordering — else identical content hashes differently across rebuilds."""
+    from backend.services.profile_builder import _assemble_merged
+
+    a = _assemble_merged("YAML", "CV", {"z/z": "readme-z", "a/a": "readme-a"})
+    b = _assemble_merged("YAML", "CV", {"a/a": "readme-a", "z/z": "readme-z"})
+    assert a == b
+
+
 async def test_build_profile_empty_readme_counts_as_no_github(session, tmp_path):
     """A cache row whose readme_content is empty must not count as GitHub content:
     it's filtered from github_data, and the 'not synced' warning is surfaced — one signal."""

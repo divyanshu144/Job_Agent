@@ -45,7 +45,9 @@ def _assemble_merged(yaml_data: str, cv_text: str, github_data: dict[str, str]) 
     parts = ["## Candidate Profile (YAML)\n" + yaml_data]
     if cv_text.strip():
         parts.append("## CV Text\n" + cv_text[:8000])
-    for repo, readme in github_data.items():
+    # Sorted so merged_profile (and thus profile_content_hash) is deterministic
+    # regardless of github_data dict / DB-row order.
+    for repo, readme in sorted(github_data.items()):
         if readme.strip():
             parts.append(f"## GitHub: {repo}\n" + readme[:3000])
     return "\n\n---\n\n".join(parts)
