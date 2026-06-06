@@ -8,6 +8,16 @@ Fix: what the correct approach is
 Avoid: what not to do next time
 -->
 
+## [2026-06-07] Kill the cause, not the symptom: removed GitHub to make the cache hash deterministic
+
+Pattern: The content-hash cache key (`profile_content_hash(merged_profile)`) was non-deterministic because `_assemble_merged` iterated a GitHub-README dict in unordered DB/dict order. The first fix sorted the dict (`sorted(github_data.items())`) — a symptom patch that kept the unstable input alive. GitHub READMEs were the *only* collection-iterating input to `merged_profile`.
+
+Fix: Removed GitHub as a profile source entirely. `merged_profile` is now YAML + CV only — two ordered scalars, deterministic by construction, so the content hash is stable with no sort needed. Whole surface went: `github_client.py`, `refresh_github_cache`, `/profile/refresh/github`, `/profile/status`, `GithubCache` model + `Profile.github_data`/`github_last_fetched_at`, config + schemas + frontend banner/timestamp/button + ~13 test fixtures.
+
+Avoid: Sorting/normalizing a fragile input to stabilize a hash when the input isn't needed. If a feature exists only to feed a value you then have to defensively normalize, deleting the feature is the deeper fix. DB-row / dict iteration order is never guaranteed — anything feeding a hash must be ordered or scalar.
+
+Also: Removing a mapped column (`Profile.github_data`) ripples to every test that constructs the model with that kwarg (~13 here). Leave-orphan in existing DBs (no DROP) matches the additive `init_db` pattern — SQLAlchemy only queries mapped columns, so orphan table/columns are harmless.
+
 ## [2026-05-28] Anthropic prompt caching: token threshold and field semantics
 
 Pattern: Adding `cache_control: {type: ephemeral}` to system prompts does nothing if the prompt is under the model's minimum cacheable length. Haiku requires ≥2048 tokens. `input_tokens` in the response **excludes** cached portions — it is mutually exclusive with `cache_creation_input_tokens` and `cache_read_input_tokens`. SUM = input + creation + read across calls for the same prompt.

@@ -81,7 +81,6 @@ async def test_feed_returns_scored_jobs(app_client, db_session):
         id="p1",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="m",
         last_refreshed_at=datetime.now(timezone.utc),
     )
@@ -161,7 +160,6 @@ async def test_feed_min_score_filter_excludes_low_score_jobs(app_client, db_sess
         id="p-score-filter",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="m",
         last_refreshed_at=datetime.now(timezone.utc),
     )

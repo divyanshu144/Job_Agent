@@ -1,4 +1,4 @@
-import type { ProfileResponse, ProfileStatusResponse, GitHubRefreshResponse, AnalysisDetail, AgentName, SSECallbacks, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback, AnalysisSummary } from "../types";
+import type { ProfileResponse, AnalysisDetail, AgentName, SSECallbacks, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback, AnalysisSummary } from "../types";
 
 const BASE = "/api";
 
@@ -37,12 +37,6 @@ export const api = {
     const r = await fetch(`${BASE}/profile/cv`, { method: "POST", body: form, credentials: "include" });
     if (!r.ok) throw new Error(`CV upload failed: ${r.status}`);
     return r.json() as Promise<ProfileResponse>;
-  },
-  getProfileStatus: () => get<ProfileStatusResponse>("/profile/status"),
-  refreshGithub: async (): Promise<GitHubRefreshResponse> => {
-    const r = await fetch(`${BASE}/profile/refresh/github`, { method: "POST", credentials: "include" });
-    if (!r.ok) throw new Error(`GitHub refresh failed: ${r.status}`);
-    return r.json() as Promise<GitHubRefreshResponse>;
   },
   getAnalysis: (id: string) => get<AnalysisDetail>(`/analysis/${id}`),
   listHistory: () => get<AnalysisSummary[]>("/history"),

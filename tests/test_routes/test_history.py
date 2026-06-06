@@ -26,7 +26,6 @@ async def client_with_data():
         p = Profile(
             yaml_data="x",
             cv_text="",
-            github_data="{}",
             merged_profile="x",
             last_refreshed_at=datetime.now(timezone.utc),
         )

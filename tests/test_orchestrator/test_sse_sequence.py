@@ -53,7 +53,6 @@ async def test_evaluate_pipeline_sse_sequence(session, stub_agents):
         id="test-profile-id",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="profile text",
         last_refreshed_at=datetime.now(timezone.utc),
     )
@@ -111,7 +110,6 @@ async def test_generate_pipeline_sse_sequence(session, stub_agents):
         id="test-profile-id",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="profile text",
         last_refreshed_at=datetime.now(timezone.utc),
     )

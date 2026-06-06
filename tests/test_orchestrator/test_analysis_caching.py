@@ -36,7 +36,6 @@ async def test_cache_hit_returns_existing_analysis(session):
         id="p1",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="profile",
         last_refreshed_at=datetime.now(timezone.utc),
     )
@@ -94,7 +93,6 @@ async def test_cache_hit_survives_profile_id_rotation(session):
         id="old-id",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="IDENTICAL CONTENT",
         last_refreshed_at=datetime.now(timezone.utc),
     )
@@ -125,7 +123,6 @@ async def test_cache_hit_survives_profile_id_rotation(session):
         id="new-id",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="IDENTICAL CONTENT",
         last_refreshed_at=datetime.now(timezone.utc),
     )
@@ -150,7 +147,6 @@ async def test_cache_miss_runs_pipeline(session):
         id="p2",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="profile",
         last_refreshed_at=datetime.now(timezone.utc),
     )
@@ -200,7 +196,6 @@ async def test_partial_cache_not_reused(session):
         id="p3",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="profile",
         last_refreshed_at=datetime.now(timezone.utc),
     )

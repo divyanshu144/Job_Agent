@@ -1,4 +1,3 @@
-import json
 from unittest.mock import AsyncMock, patch
 
 import pytest_asyncio
@@ -25,75 +24,23 @@ async def session():
 
 
 async def test_build_profile_merges_sources(session, tmp_path):
-    from backend.models import GithubCache
-
     yaml_path = tmp_path / "profile.yaml"
-    yaml_path.write_text(
-        "identity:\n  name: Test User\ncore_skills:\n  languages: [Python]\n"
-        "featured_projects:\n  - repo: divyanshu144/docchat\n"
-    )
-
-    # Populate GitHub cache
-    cache = GithubCache(
-        owner="divyanshu144", repo_name="docchat", readme_content="# DocChat README"
-    )
-    session.add(cache)
-    await session.commit()
+    yaml_path.write_text("identity:\n  name: Test User\ncore_skills:\n  languages: [Python]\n")
 
     with patch(
-        "backend.services.cv_parser.extract_text_from_file", new_callable=AsyncMock
-    ) as mock_cv:
-        mock_cv.return_value = ""
+        "backend.services.profile_builder.extract_text_from_file",
+        new_callable=AsyncMock,
+        return_value="My CV body text",
+    ):
         from backend.services.profile_builder import build_profile
 
         profile = await build_profile(session, str(yaml_path), "fake/cv.pdf")
 
     assert profile.id is not None
     assert "Test User" in profile.yaml_data
-    assert profile.cv_text == ""
-    github = json.loads(profile.github_data)
-    assert "divyanshu144/docchat" in github
+    assert profile.cv_text == "My CV body text"
     assert "## Candidate Profile" in profile.merged_profile
-    assert "DocChat" in profile.merged_profile
-
-
-def test_assemble_merged_is_github_order_independent():
-    """merged_profile feeds profile_content_hash, so it must be deterministic regardless of
-    github_data ordering — else identical content hashes differently across rebuilds."""
-    from backend.services.profile_builder import _assemble_merged
-
-    a = _assemble_merged("YAML", "CV", {"z/z": "readme-z", "a/a": "readme-a"})
-    b = _assemble_merged("YAML", "CV", {"a/a": "readme-a", "z/z": "readme-z"})
-    assert a == b
-
-
-async def test_build_profile_empty_readme_counts_as_no_github(session, tmp_path):
-    """A cache row whose readme_content is empty must not count as GitHub content:
-    it's filtered from github_data, and the 'not synced' warning is surfaced — one signal."""
-    from datetime import datetime, timezone
-
-    from backend.models import GithubCache
-    from backend.routes.profile import _profile_response
-
-    yaml_path = tmp_path / "profile.yaml"
-    yaml_path.write_text("identity:\n  name: T\nfeatured_projects: []\n")
-    session.add(
-        GithubCache(
-            owner="o", repo_name="r", readme_content="", fetched_at=datetime.now(timezone.utc)
-        )
-    )
-    await session.commit()
-
-    with patch(
-        "backend.services.cv_parser.extract_text_from_file", new_callable=AsyncMock
-    ) as mock_cv:
-        mock_cv.return_value = ""
-        from backend.services.profile_builder import build_profile
-
-        profile = await build_profile(session, str(yaml_path), "fake/cv.pdf")
-
-    assert json.loads(profile.github_data) == {}  # empty readme filtered out
-    assert _profile_response(profile).warnings  # 'not synced' warning surfaced
+    assert "My CV body text" in profile.merged_profile
 
 
 async def test_get_or_build_returns_cached(session, tmp_path):

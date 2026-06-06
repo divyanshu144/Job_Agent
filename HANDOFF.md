@@ -1,63 +1,65 @@
 # Session Handoff
 
-**Updated:** 2026-06-06  
-**Branch:** fix/profile-content-cache-key (off `main` `f571595`)
+**Updated:** 2026-06-07
+**Branch:** chore/remove-github-profile-source (off `fix/profile-content-cache-key`)
 
 ---
 
 ## Current State
 
-**Profile-cache correctness fix COMPLETE** (plan: `~/.claude/plans/atomic-beaming-hamming.md`,
-approved). TDD throughout; `make check` green (**238 passed, 75.74% cov**).
+**GitHub-as-a-profile-source removal COMPLETE** (plan: `~/.claude/plans/atomic-beaming-hamming.md`,
+approved). `make check` green (**234 passed, 76.71% cov**) + `npx tsc --noEmit` clean.
 
-**Primary (cache keyed on rotating id → content-hash):**
-- `build_profile` inserts a fresh `uuid4()` Profile row every build, so the old key
-  `sha256(jd :: profile.id)` invalidated the whole analysis cache on every Refresh/CV/GitHub.
-- Added one primitive `profile_content_hash(merged_profile)` (`profile_builder.py`) and one helper
-  `analysis_cache_key(jd, profile)` (`orchestrator.py`); both cache sites (`run_evaluate_pipeline`,
-  `_run_phase1`) now derive the key through it. Content-addressed: identical content survives a
-  Refresh; changed content invalidates. No DB migration (`jd_hash` column unchanged); existing
-  `jd_hash` values go permanently un-hit — expected one-time cold start, not a regression.
+This stacks on the content-hash cache fix (`bd14958`). Removing GitHub is the *deep* fix for the
+cache-determinism problem: GitHub READMEs were the only collection-iterating input to
+`merged_profile`. With them gone, `merged_profile` is YAML + CV only — deterministic by
+construction, so the just-added `sorted()` in `_assemble_merged` was removed (no longer needed),
+and the vestigial secondary-1 GitHub-warning block in `_profile_response` is gone too.
 
-**Secondary 1 (GitHub-warning divergence — fixed):** `build_profile` now filters empty-content cache
-rows out of `github_readmes`/`github_data`, and `_profile_response` warns off empty `github_data`
-(not the timestamp). Both derive from one signal: "is there real GitHub content."
+**Surface removed:**
+- Backend: deleted `services/github_client.py`; `profile_builder.py` (`_assemble_merged`→YAML+CV,
+  `_read_repos`→`_read_yaml`, `refresh_github_cache` deleted, no github read in `build_profile`);
+  `routes/profile.py` (deleted `/profile/refresh/github` + `/profile/status`, warning block,
+  unused imports); `models.py` (`GithubCache`, `Profile.github_data`/`github_last_fetched_at`,
+  `UniqueConstraint` import); `config.py` (`github_username`, `github_stale_days`); `schemas.py`
+  (`ProfileResponse` github fields, `ProfileStatusResponse`, `GitHubRefreshResponse`).
+- Frontend: `ProfileSetup.tsx` (banner, sync timestamp, refresh button, status state, `daysSince`),
+  `api/client.ts` (`refreshGithub`, `getProfileStatus` + imports), `types/index.ts` (github fields
+  + 2 interfaces).
+- Tests: deleted `test_github_client.py`; rewrote merges test to YAML+CV; deleted 2 github
+  profile_builder tests; dropped `github_data="{}"` from ~13 fixtures; dropped `github_username`
+  from `test_config.py`.
+- Docs: `CLAUDE.md` (overview, 2 map lines, JD-hash note), `.env.example` (`GITHUB_USERNAME`).
 
-**Secondary 2 (profile row accretion):** investigated, **left as-is** (recommended) — with the
-content-hash fix it no longer affects cache correctness, and `Analysis.profile_id` FKs to old
-`profiles.id` so pruning/upsert would orphan history. Flagged as future work; not changed.
-
-**Docs corrected:** CLAUDE.md JD-hash note (content-hash behavior) + map label
-("YAML editor" → "read-only YAML viewer"); `tasks/lessons.md` 2026-05-26 cache entry superseded
-(root cause: "rotating identifier as a proxy for content in a cache key").
-
-**Tests:** `tests/test_orchestrator/test_cache_key.py` (new, 3), `test_analysis_caching.py`
-(updated to content-hash + id-rotation regression test), `test_profile_builder.py` (empty-README
-→ no-GitHub warning).
+**Left as-is (per plan):** `scripts/migrate.py` history untouched; orphan `github_cache` table +
+`Profile.github_data`/`github_last_fetched_at` columns remain in existing DBs (zero migration,
+harmless — SQLAlchemy only queries mapped columns). Optional one-time DROP flagged as follow-up.
 
 ## Next Action
 
-Branch is ready to commit/push and fold into the pending batch merge onto `main` (alongside
-`fix/drop-ineffective-prompt-cache`, `feat/resource-planner-selfcheck`, `feat/discovery-improvements`,
-`docs/project-patterns`). No frontend code touched (the YAML-editor fix is a doc) → no `tsc` needed.
+Commit on `chore/remove-github-profile-source`. Then fold into the pending batch merge onto `main`
+alongside `fix/profile-content-cache-key` (this branch builds on it) and the other feature branches.
 
 ## Why It Stopped
 
-Fix complete and verified. Committing.
+Removal complete and verified (backend + frontend). Committing.
 
 ## In-Flight
 
-Committing now on `fix/profile-content-cache-key`: `profile_builder.py`, `orchestrator.py`,
-`routes/profile.py`, `CLAUDE.md`, `tasks/lessons.md`, this HANDOFF, + the three test files.
+Committing now: `backend/` (config, models, schemas, routes/profile, services/profile_builder,
+deleted github_client), `frontend/` (ProfileSetup, client, types), tests (deleted test_github_client,
+rewrote test_profile_builder, ~13 fixture edits, test_config), `CLAUDE.md`, `.env.example`,
+`tasks/lessons.md`, this HANDOFF.
 
 ## Open Questions
 
-1. Profile row accretion — leave-as-is (current) vs prune-to-last-N vs upsert-canonical (needs a
-   `Analysis.profile_id` repoint migration). Deferred.
+1. Optional explicit `DROP TABLE github_cache` + drop the two `Profile` orphan columns on deployed
+   DBs — left as a follow-up, not required.
+2. Profile row accretion — still leave-as-is (deferred from the cache fix).
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 238 passed, 1 deselected, 75.74% coverage |
-| new/updated tests | ✓ cache-key content-addressing, id-rotation regression, empty-README warning |
+| `make check` | ✓ 234 passed, 1 deselected, 76.71% coverage |
+| `npx tsc --noEmit` (frontend) | ✓ clean (exit 0) |

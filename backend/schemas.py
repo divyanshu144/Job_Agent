@@ -110,24 +110,9 @@ class ProfileResponse(BaseModel):
     id: str
     yaml_data: str
     cv_text: str
-    github_data: str
     merged_profile: str
     last_refreshed_at: datetime
-    github_last_fetched_at: datetime | None = None
     warnings: list[str] = []
-
-
-class ProfileStatusResponse(BaseModel):
-    profile_last_built_at: datetime
-    github_last_fetched_at: datetime | None
-    github_is_stale: bool
-    github_stale_after_days: int
-
-
-class GitHubRefreshResponse(BaseModel):
-    repos_updated: int
-    github_last_fetched_at: datetime
-    profile: ProfileResponse
 
 
 class PipelineDoneData(BaseModel):
