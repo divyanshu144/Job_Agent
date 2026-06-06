@@ -54,15 +54,15 @@ See: `backend/routes/contacts.py:26`
 
 ---
 
-## [2026-05-26] JD hash cache key does not include profile content
+## [2026-06-06] Cache key used a ROTATING identifier as a proxy for content (supersedes 2026-05-26 entry)
 
-Pattern: The analysis cache key is `sha256(jd_text + "::" + profile.id)`. If a user updates their profile (new CV, refreshed GitHub data) and then re-runs the same JD, the orchestrator returns the cached analysis — built against the old profile — without any indication it is stale.
+Pattern: The analysis cache key was `sha256(jd_text + "::" + profile.id)`. The earlier note assumed `profile.id` was *stable* and only worried about staleness. The real defect is the opposite and worse: `build_profile` inserts a NEW `Profile` row with a fresh `uuid4()` on **every** Refresh / CV upload / GitHub refresh, and `get_or_build_profile` returns the latest. So `profile.id` rotates constantly → every profile build silently **invalidated the entire analysis cache** (needless recompute + spend), while *also* failing to invalidate when content changed without an id change.
 
-Fix (deferred): Hash the profile content instead of just the ID: `sha256(jd_text + "::" + profile.merged_profile)`. This is a correctness tradeoff — content hash increases cache misses but ensures the cache reflects actual profile state.
+Fix (implemented): key on profile **content**, via one primitive + one helper. `profile_content_hash(merged_profile)` (profile_builder.py) is the single definition of "profile identity"; `analysis_cache_key(jd, profile)` (orchestrator.py) is the single key derivation, called by both cache sites (`run_evaluate_pipeline`, `_run_phase1`). Identical content → identical key (survives a no-op Refresh); changed content → new key. No DB migration; existing `jd_hash` values go permanently un-hit (expected one-time cold start). Caveat: keys on the *built* merged_profile, so an on-disk YAML edit without a Refresh still returns the prior result — the row wasn't rebuilt.
 
-Avoid: Using a stable identifier (ID, filename) as a proxy for content in cache keys. Identifiers don't change when content changes.
+Avoid: Using ANY rotating/unstable identifier (uuid, autoincrement id, row pk, filename) as a proxy for content in a cache key. If the cache must reflect content, hash the content. Extract the key derivation into ONE helper so it can't drift across call sites.
 
-See: `backend/services/orchestrator.py:62`
+See: `backend/services/orchestrator.py` (`analysis_cache_key`), `backend/services/profile_builder.py` (`profile_content_hash`)
 
 ---
 

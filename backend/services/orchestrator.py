@@ -25,7 +25,20 @@ from backend.schemas import (
     PriorOutputs,
 )
 from backend.services.instrumentation import new_trace_id, span
-from backend.services.profile_builder import build_compact_profile, get_or_build_profile
+from backend.services.profile_builder import (
+    build_compact_profile,
+    get_or_build_profile,
+    profile_content_hash,
+)
+
+
+def analysis_cache_key(jd: str, profile: Profile) -> str:
+    """Single derivation of the analysis cache key. Keyed on profile *content*
+    (merged_profile), not profile.id — which rotates on every build. The one helper
+    every cache site calls."""
+    return hashlib.sha256(
+        f"{jd}::{profile_content_hash(profile.merged_profile)}".encode()
+    ).hexdigest()
 
 
 @dataclass
@@ -61,7 +74,7 @@ async def _run_phase1(
     Pass model=HAIKU for bulk discovery to cut costs ~20x vs Sonnet.
     """
     # Return cached result if this exact JD+profile was already scored
-    jd_hash = hashlib.sha256(f"{jd}::{profile.id}".encode()).hexdigest()
+    jd_hash = analysis_cache_key(jd, profile)
     cached = (
         await db.execute(
             select(Analysis).where(
@@ -170,7 +183,7 @@ async def run_evaluate_pipeline(
     """
     new_trace_id()
     profile = await get_or_build_profile(db, user_id=user_id)
-    jd_hash = hashlib.sha256(f"{jd}::{profile.id}".encode()).hexdigest()
+    jd_hash = analysis_cache_key(jd, profile)
 
     # Cache check: return immediately if a complete analysis already exists for this JD+profile
     cached = (

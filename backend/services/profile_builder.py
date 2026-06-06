@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from datetime import datetime, timezone
@@ -16,6 +17,14 @@ from backend.services.cv_parser import extract_text_from_file
 from backend.services.github_client import fetch_readme_with_meta
 
 logger = logging.getLogger(__name__)
+
+
+def profile_content_hash(merged_profile: str) -> str:
+    """The single definition of 'profile identity' for caching — hashes the built
+    profile *content*, not its rotating row id. Any content change yields a new hash;
+    identical content (even across rebuilt rows) yields the same hash."""
+    return hashlib.sha256(merged_profile.encode()).hexdigest()
+
 
 _DEFAULT_PROFILE_YAML = """identity:
   name: Candidate
@@ -88,10 +97,14 @@ async def build_profile(
     yaml_text, _ = _read_repos(yaml_path)
     cv_text = await extract_text_from_file(cv_path)
 
-    # Read github_cache
+    # Read github_cache. Only rows with real README content count as GitHub data —
+    # empty-content rows (fetched but blank) are filtered out so "has GitHub content"
+    # is a single, honest signal used both here and in _profile_response.
     cache_rows = (await db.execute(select(GithubCache))).scalars().all()
     github_readmes: dict[str, str] = {
-        f"{r.owner}/{r.repo_name}": r.readme_content for r in cache_rows
+        f"{r.owner}/{r.repo_name}": r.readme_content
+        for r in cache_rows
+        if r.readme_content and r.readme_content.strip()
     }
 
     if not github_readmes:

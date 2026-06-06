@@ -65,7 +65,7 @@ backend/
 frontend/src/
 ├── App.tsx
 ├── pages/
-│   ├── ProfileSetup.tsx   # CV upload, GitHub list, YAML editor
+│   ├── ProfileSetup.tsx   # CV upload, GitHub refresh, read-only YAML viewer
 │   ├── AnalyseJob.tsx     # JD paste, AgentProgress, navigates to /results/:id on done
 │   ├── Results.tsx        # Tabbed: Score | Gaps | Resources | Letter | Resume | Cold Email
 │   ├── Discover.tsx       # Discovery feed with filters and save actions
@@ -119,7 +119,7 @@ frontend/src/
 
 **Runtime model override** — `orchestrator.py` mutates `agent.model` at dispatch time (`agent.model = HAIKU`) to tier models by pipeline phase. This is intentional: agents default to Sonnet, but the orchestrator can downgrade to Haiku for bulk/cheap operations (discovery scoring). Do not read `agent.model` as a static property; its value at call time depends on who dispatched it.
 
-**JD hash caching** — `orchestrator.py` caches Phase 1 results keyed on `sha256(jd_text + "::" + profile.id)`. The key uses `profile.id`, not profile content. If a user updates their profile and re-submits the same JD, the cache returns the stale result. This is a known limitation — profile content changes do not invalidate the cache.
+**JD hash caching** — `orchestrator.py` caches Phase 1 results keyed on `sha256(jd_text + "::" + sha256(merged_profile))` via the single `analysis_cache_key(jd, profile)` helper (`profile_content_hash` lives in `profile_builder.py`). The key is content-addressed, **not** keyed on `profile.id` (which rotates on every `build_profile`). Consequences: a Refresh/CV-upload/GitHub-refresh that produces **identical** merged content keeps existing cache hits (no needless recompute); a build that **changes** content yields a new key (correct invalidation). Caveat: it keys on the *built* `merged_profile`, so editing `candidate_profile.yaml` on disk without a Refresh returns the prior result — the profile row wasn't rebuilt.
 
 **`validation_warnings` is a meta field** — every agent output model carries `validation_warnings: list[ValidationWarning] = Field(default_factory=list, exclude=True)`. `exclude=True` strips it from `model_dump()`, so it never enters `PriorOutputs` or gets injected into downstream prompts. It lives only in memory during a request and is surfaced via `logger.warning()` calls in `backend/evals/validators.py`.
 

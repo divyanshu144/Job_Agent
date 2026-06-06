@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -21,9 +22,14 @@ router = APIRouter(tags=["profile"])
 
 
 def _profile_response(profile: Profile) -> ProfileResponse:
-    """Build ProfileResponse, adding warnings when GitHub cache is empty."""
+    """Build ProfileResponse, warning when the profile has no real GitHub content.
+
+    Keyed on github_data (which build_profile populates only with non-empty READMEs),
+    not on github_last_fetched_at — so a fetch that returned only empty READMEs still
+    surfaces the warning. One signal, shared with build_profile.
+    """
     resp = ProfileResponse.model_validate(profile)
-    if profile.github_last_fetched_at is None:
+    if not json.loads(profile.github_data or "{}"):
         resp.warnings = ["GitHub data not yet synced. Use Refresh GitHub to populate."]
     return resp
 

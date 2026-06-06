@@ -57,6 +57,35 @@ async def test_build_profile_merges_sources(session, tmp_path):
     assert "DocChat" in profile.merged_profile
 
 
+async def test_build_profile_empty_readme_counts_as_no_github(session, tmp_path):
+    """A cache row whose readme_content is empty must not count as GitHub content:
+    it's filtered from github_data, and the 'not synced' warning is surfaced — one signal."""
+    from datetime import datetime, timezone
+
+    from backend.models import GithubCache
+    from backend.routes.profile import _profile_response
+
+    yaml_path = tmp_path / "profile.yaml"
+    yaml_path.write_text("identity:\n  name: T\nfeatured_projects: []\n")
+    session.add(
+        GithubCache(
+            owner="o", repo_name="r", readme_content="", fetched_at=datetime.now(timezone.utc)
+        )
+    )
+    await session.commit()
+
+    with patch(
+        "backend.services.cv_parser.extract_text_from_file", new_callable=AsyncMock
+    ) as mock_cv:
+        mock_cv.return_value = ""
+        from backend.services.profile_builder import build_profile
+
+        profile = await build_profile(session, str(yaml_path), "fake/cv.pdf")
+
+    assert json.loads(profile.github_data) == {}  # empty readme filtered out
+    assert _profile_response(profile).warnings  # 'not synced' warning surfaced
+
+
 async def test_get_or_build_returns_cached(session, tmp_path):
     yaml_path = tmp_path / "profile.yaml"
     yaml_path.write_text("identity:\n  name: Cached\nfeatured_projects: []\n")
