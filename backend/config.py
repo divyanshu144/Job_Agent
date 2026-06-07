@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me-in-production-use-long-random-string"
     jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
     hunter_api_key: str = ""
+    # Gmail OAuth (server-side draft creation; NOT the Claude.ai Gmail MCP).
+    gmail_client_id: str = ""
+    gmail_client_secret: str = ""
+    gmail_refresh_token: str = ""
     reed_api_key: str = ""  # reed.co.uk developer API key
     adzuna_app_id: str = ""  # adzuna.co.uk application ID
     adzuna_app_key: str = ""  # adzuna.co.uk application key

@@ -13,6 +13,7 @@ from backend.database import SessionLocal, init_db
 from backend.models import DiscoveryRun
 from backend.routes.analyse import router as analyse_router
 from backend.routes.auth import router as auth_router
+from backend.routes.campaign import router as campaign_router
 from backend.routes.contacts import router as contacts_router
 from backend.routes.discovery import router as discovery_router
 from backend.routes.feedback import router as feedback_router
@@ -55,6 +56,7 @@ app.include_router(discovery_router, prefix=settings.api_prefix)
 app.include_router(contacts_router, prefix=settings.api_prefix)
 app.include_router(metrics_router, prefix=settings.api_prefix)
 app.include_router(feedback_router, prefix=settings.api_prefix)
+app.include_router(campaign_router, prefix=settings.api_prefix)
 
 
 @app.get("/health")

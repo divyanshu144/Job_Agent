@@ -1,59 +1,59 @@
 # Session Handoff
 
 **Updated:** 2026-06-07
-**Branch:** main (synced with `origin/main`); live-ATS fix on `fix/ats-live-shapes`
+**Branch:** feat/campaign-trigger (off `feat/campaign-draft`) — committed, not merged/pushed
 
 ---
 
 ## Current State
 
-**Live ATS shape check COMPLETE** (step 2 of: branch cleanup → live ATS check → Prompt 2).
-`make check` green (**254 passed, 77.31% cov**). Hit one real endpoint per source and reconciled
-normalizers/fixtures to the true shapes.
+**Prompt 6 COMPLETE — manual campaign trigger + status endpoints (NO scheduler).**
+TDD (5 tests written failing first). `make check` green (**275 passed, 78.10% cov**); ruff + mypy +
+schema-drift pass.
 
-**Findings & fixes:**
-- **Greenhouse** — legacy `boards.greenhouse.io/{slug}/jobs.json` 404s. Fixed endpoint to
-  `boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true`. Its `content` is HTML-**escaped**,
-  so `_normalise_greenhouse` now `unescape→strip`s (was leaving visible tags). Test fixture updated
-  to escaped content + asserts no tags/entities survive.
-- **Remotive / Lever / Ashby** — endpoints + shapes verified correct against live data; no code
-  change (my dead test slugs were the only issue).
-- **YC** — `v0.1/companies` has **no `jobs_url`/ATS field** (only `website` + YC profile `url`); the
-  YC→ATS passthrough was infeasible. **Per decision: dropped the YC source** — removed `yc_client.py`,
-  its 3 tests, the dispatch branches (3 sites), `_get_configured_sources` entry, `_VALID_SOURCES`,
-  and the `/discovery/sources` key. Curated YC companies go in `target_companies.json` with explicit
-  `ats`+`slug`.
-- **HN kept** — untouched; remains the default source.
+**What landed (`backend/routes/campaign.py`, registered in `main.py`):**
+- **`POST /api/campaign/run`** — fires `run_campaign(threshold=0.75)` as a background
+  `asyncio.create_task` (never blocks; a full run is minutes), returns **202** with `{run_id, status}`.
+  **409** if a run is already in progress. Concurrency guarded by an in-process `_state["running"]`
+  flag set synchronously before the task is created and cleared in the task's `finally`.
+- **`GET /api/campaign/status`** — `running` + `last_run_id` + `last_run_started_at` (in-memory,
+  best-effort), `CampaignJob` **counts by status** (queued/drafted/failed), and the most recent
+  `limit` (default 5) **failed jobs with their error strings** — to debug the supervised run.
+- Both require auth (`get_current_user` → 401 without). `main.py` change is purely additive (one
+  import + one `include_router`); existing routes untouched.
 
-**Active source set:** `hn`, `remotive`, `reed`/`adzuna` (keyed), `targets` (when list populated).
+**Design note:** run state is **in-process** (no `CampaignRun` table) — single-run guard + last-run
+info reset on server restart. Fine for the supervised-validation phase; a scheduler / persisted run
+ledger is explicitly deferred.
+
+**Testing:** `run_campaign` mocked for route tests — 202+run_id (and the background task runs the
+mock + clears the flag), 409 when already running, status counts + recent-failure errors, and auth
+required on both endpoints.
 
 ## Next Action
 
-**Prompt 2 — CampaignJob model + orchestrator skeleton.** The normalizers are now validated against
-real payloads, so the Job-schema normalization the orchestrator builds on is trustworthy.
-
-## Why It Stopped
-
-Live-check fixes done + verified; ready for Prompt 2.
+The full pipeline is now triggerable + observable. To do a **supervised real run**: provide real
+`assets/resume.tex`, real `target_companies.json` slugs, Hunter + Gmail OAuth creds in `.env`, install
+`google-*` + texlive, then `POST /api/campaign/run` and watch `GET /api/campaign/status`.
+Then merge the campaign chain to `main` + push.
 
 ## In-Flight
 
-On branch `fix/ats-live-shapes` (off `main`): `backend/services/ats_client.py`,
-`backend/services/discovery.py`, `backend/routes/discovery.py`, deleted
-`backend/services/yc_client.py`, `tests/test_services/test_new_sources.py`, `tasks/lessons.md`,
-this HANDOFF. To merge into `main` + push.
+Committed on `feat/campaign-trigger`: `backend/routes/campaign.py`, `backend/main.py`,
+`tests/test_routes/test_campaign.py`, this HANDOFF. Stack: `feat/campaign-orchestrator` (P2) →
+`feat/resume-latex` (P3) → `feat/campaign-draft` (P4+P5) → `feat/campaign-trigger` (P6). None on
+`main` yet.
 
 ## Open Questions
 
-1. `feat/job-board-scrapers` + `feat/referral-clean` remain (local+remote) — unmerged, not named in
-   cleanup. Delete too?
-2. `Discover.tsx` source toggles still deferred (do when orchestrator is wired end-to-end).
-3. Greenhouse/Lever/Ashby slugs in `target_companies.json` are placeholders — swap for real
-   target-company slugs when known.
+1. **Merge the 5-branch campaign chain (P2→P6) to `main` + push** — when?
+2. Scheduler (deferred): after a clean supervised run, add cron/interval triggering of `run_campaign`.
+3. Send vs draft-only (drafts created for human review); persisted run ledger if we want history.
+4. `feat/job-board-scrapers` + `feat/referral-clean` still linger from the cleanup pass.
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 254 passed, 1 deselected, 77.31% coverage |
-| live endpoints | ✓ remotive/greenhouse(modern)/lever/ashby 200 + shapes reconciled; YC dropped |
+| `make check` | ✓ 275 passed, 1 deselected, 78.10% coverage |
+| new tests | ✓ 202+run_id / 409-when-running / status counts+errors / auth required (run + status) |

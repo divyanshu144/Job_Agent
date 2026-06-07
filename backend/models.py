@@ -214,6 +214,26 @@ class Contact(Base):
     analysis: Mapped[Analysis] = relationship("Analysis", back_populates="contacts")
 
 
+class CampaignJob(Base):
+    """One job's journey through the autonomous application campaign.
+
+    Created when a discovery job scores >= the campaign threshold. status:
+    queued (awaiting/processing downstream steps) | drafted (outreach drafted) |
+    failed (a per-job step raised; see `error`). match_score is 0–1 and nullable
+    so a job that errors before scoring still records a failed row.
+    """
+
+    __tablename__ = "campaign_jobs"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    job_id: Mapped[str] = mapped_column(String, ForeignKey("jobs.id"), index=True)
+    run_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    match_score: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    draft_id: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    status: Mapped[str] = mapped_column(String, default="queued")  # queued | drafted | failed
+    error: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 class DiscoveryBatch(Base):
     """Tracks a single Anthropic Batch API submission for a discovery run's Stage 2 phase."""
 
