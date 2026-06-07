@@ -1,66 +1,59 @@
 # Session Handoff
 
 **Updated:** 2026-06-07
-**Branch:** feat/discovery-new-sources (off `chore/remove-github-profile-source`)
+**Branch:** main (synced with `origin/main` @ `a4802dc`)
 
 ---
 
 ## Current State
 
-**Three new discovery sources COMPLETE** (plan: `~/.claude/plans/atomic-beaming-hamming.md`,
-approved). TDD throughout (17 tests written failing first, then implemented). `make check` green
-(**251 passed, 77.45% cov** — prior 234 preserved + 17 new).
+**Branch integration COMPLETE — all approved work merged to `main` and pushed.** `make check` green
+(**257 passed, 77.55% cov**) + `npx tsc --noEmit` clean on the final reconciled `main`.
 
-Added **Remotive** (keyless), **YC → ATS passthrough**, and a **manual target list**, all normalising
-to the existing `RawJob` dataclass and returning `list[RawJob]` like `fetch_reed_jobs`.
+Merged into `main` (in order, `make check` after each):
+1. **Session stack** (`feat/discovery-new-sources` tip → brought `fix/profile-content-cache-key` +
+   `chore/remove-github-profile-source` + the new discovery sources).
+2. `docs/project-patterns` — docs only, clean.
+3. `feat/resource-planner-selfcheck` — self-check loop + quality_signals. *Fixup:* dropped a stale
+   `github_data` kwarg its `test_quality_signals.py` carried (predated the GitHub removal).
+4. `fix/drop-ineffective-prompt-cache` — clean.
+5. `feat/discovery-improvements` — **conflict in `discovery.py`** (`_run_batch_discovery_task`):
+   resolved to keep the all-source `raw_by_source` fan-out AND dispatch the new
+   remotive/yc/targets sources within it. *Fixup:* dropped a stale `github_data` kwarg from a
+   newly-added feed test.
+6. **`origin/main`** had meanwhile merged PR #8 (discovery-improvements) and PR #10
+   (drop-prompt-cache) on GitHub. Fetched + merged in; ort auto-reconciled (same underlying commits),
+   no conflicts. Pushed (non-force, fast-forward).
 
-**New modules (`backend/services/`):**
-- `remotive_client.py` — `fetch_remotive_jobs()`; GET remotive software-dev API, HTML-stripped.
-- `ats_client.py` — `detect_ats(jobs_url)`, `_extract_slug`, `fetch_ats_jobs(ats, slug)` dispatching
-  Greenhouse/Lever/Ashby with per-provider normalisers. Shared by YC + targets.
-- `yc_client.py` — `fetch_yc_jobs()`; YC hiring companies → detect ATS → aggregate. Per-company
-  try/except continue; unknown-ATS companies skipped.
-- `targets_client.py` — `fetch_target_jobs()`; reads `assets/target_companies.json`, queries ATS per
-  entry. Missing/invalid file → []; malformed entries + per-entry errors skipped.
+**Skipped (per decision):** `feat/prompt-caching` — superseded, would resurrect the deleted
+`github_client.py` and conflict across ~90 files. Also untouched: `feat/job-board-scrapers`,
+`feat/referral-clean` (older/superseded).
 
-**Wiring (`discovery.py`):** new imports; additive `elif source == "remotive"/"yc"/"targets"`
-branches before the `else` (HN) in all three fetch-dispatch sites (`_run_discovery_task`,
-`_run_source_task`, `_run_batch_discovery_task`) — existing reed/adzuna/hn lines untouched.
-`_get_configured_sources()` now always includes remotive+yc, adds targets when
-`assets/target_companies.json` is populated (new `_target_list_present()` helper).
-
-**Routes (`routes/discovery.py`):** `_VALID_SOURCES` extended with the three; `/discovery/sources`
-response dict reports them.
-
-**Asset:** `assets/target_companies.json` with 5 placeholder entries (greenhouse/lever/ashby mix).
-
-**Note on ATS response shapes:** the Greenhouse/Lever/Ashby/Remotive/YC JSON field mappings are coded
-defensively (`.get(...) or ""`) and pinned by mocked tests; if a live response differs, adjust the
-per-provider normalisers in `ats_client.py` / `remotive_client.py`. No live calls were made.
+**Pushed:** `main`; plus the three previously-local stack branches now have upstreams
+(`fix/profile-content-cache-key`, `chore/remove-github-profile-source`, `feat/discovery-new-sources`).
 
 ## Next Action
 
-Commit on `feat/discovery-new-sources`. Folds into the pending batch merge onto `main` alongside the
-other stacked branches.
+Integration done. Optional cleanup: delete the now-merged remote/local feature branches, and
+`feat/prompt-caching` / `integration/consolidate` if confirmed obsolete. Open follow-ups below.
 
 ## Why It Stopped
 
-Feature complete and verified. Committing.
-
-## In-Flight
-
-Committing now: new files `backend/services/{remotive,ats,yc,targets}_client.py`,
-`assets/target_companies.json`, `tests/test_services/test_new_sources.py`; edits to
-`backend/services/discovery.py`, `backend/routes/discovery.py`, this HANDOFF.
+User asked to push + merge all branches; done and verified. Awaiting next direction.
 
 ## Open Questions
 
-1. Frontend Discover.tsx source toggles don't yet surface the 3 new sources (out of scope this pass).
-2. Live response-shape validation against real Greenhouse/Lever/Ashby/YC payloads still pending.
+1. Branch cleanup — delete merged branches (stack + the 4 independents) and the superseded
+   `feat/prompt-caching` / `feat/job-board-scrapers` / `feat/referral-clean`? Not done without confirm.
+2. New discovery sources: live response-shape validation vs real Greenhouse/Lever/Ashby/YC payloads
+   still pending (mocked-only so far).
+3. Frontend `Discover.tsx` doesn't yet surface the 3 new source toggles (was out of scope).
+4. The autonomous campaign / LaTeX resume / cold-email-send vision (from earlier) — still to design.
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 251 passed, 1 deselected, 77.45% coverage |
-| new tests | ✓ 17 in tests/test_services/test_new_sources.py (remotive, ats detect/fetch, yc, targets, config) |
+| `make check` (final main) | ✓ 257 passed, 1 deselected, 77.55% coverage |
+| `npx tsc --noEmit` (frontend) | ✓ clean |
+| `main` ↔ `origin/main` | ✓ in sync (0/0) |
