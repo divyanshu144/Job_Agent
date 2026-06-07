@@ -122,16 +122,18 @@ def test_detect_ats_unknown_returns_none():
 async def test_fetch_ats_jobs_greenhouse():
     from backend.services import ats_client
 
+    # content arrives HTML-escaped from the real Greenhouse API (&lt;p&gt; …)
     payload = {
         "jobs": [
             {
                 "id": 4567,
                 "title": "Staff Software Engineer",
                 "location": {"name": "Remote - US"},
-                "absolute_url": "https://boards.greenhouse.io/stripe/jobs/4567",
+                "absolute_url": "https://stripe.com/jobs/search?gh_jid=4567",
                 "content": (
-                    "Build payments infrastructure at scale with Go and Ruby. "
-                    "We value strong distributed-systems fundamentals here."
+                    "&lt;h2&gt;About the role&lt;/h2&gt;&lt;p&gt;Build payments "
+                    "infrastructure at scale with Go and Ruby. We value strong "
+                    "distributed-systems fundamentals here.&lt;/p&gt;"
                 ),
             }
         ]
@@ -141,8 +143,11 @@ async def test_fetch_ats_jobs_greenhouse():
 
     assert len(jobs) == 1
     assert jobs[0].source_id == "greenhouse_stripe_4567"
-    assert jobs[0].source_url == "https://boards.greenhouse.io/stripe/jobs/4567"
+    assert jobs[0].source_url == "https://stripe.com/jobs/search?gh_jid=4567"
     assert "Staff Software Engineer" in jobs[0].raw_text
+    assert "Build payments infrastructure" in jobs[0].raw_text
+    # escaped HTML must be unescaped AND stripped — no tags, no entities left
+    assert "<" not in jobs[0].raw_text and "&lt;" not in jobs[0].raw_text
     assert len(jobs[0].dedup_hash) == 64
 
 
@@ -203,86 +208,6 @@ async def test_fetch_ats_jobs_http_error_returns_empty():
     client.get = AsyncMock(side_effect=httpx.HTTPError("502"))
     with patch("httpx.AsyncClient", return_value=client):
         jobs = await ats_client.fetch_ats_jobs("greenhouse", "stripe")
-    assert jobs == []
-
-
-# ─────────────────────────────── YC ──────────────────────────────────
-
-
-async def test_fetch_yc_jobs_aggregates_and_skips_unrecognised():
-    """Aggregates ATS jobs across companies; a company with an unrecognised
-    jobs_url (detect_ats → None) is skipped without aborting the rest."""
-    from backend.services import yc_client
-    from backend.services.hn_client import RawJob
-
-    companies = {
-        "companies": [
-            {"name": "Stripe", "jobs_url": "https://boards.greenhouse.io/stripe"},
-            {"name": "Mystery", "jobs_url": "https://careers.mystery.com"},  # unrecognised
-        ]
-    }
-
-    async def fake_fetch_ats(ats: str, slug: str) -> list[RawJob]:
-        return [
-            RawJob(
-                source_id=f"{ats}_{slug}_1",
-                source_url=f"https://x/{slug}/1",
-                raw_text="A relevant backend engineering role " * 4,
-                dedup_hash=f"hash-{slug}",
-            )
-        ]
-
-    with (
-        patch("httpx.AsyncClient", return_value=_mock_client(_resp(companies))),
-        patch.object(yc_client, "fetch_ats_jobs", side_effect=fake_fetch_ats),
-    ):
-        jobs = await yc_client.fetch_yc_jobs()
-
-    # Only the greenhouse company produced jobs; mystery was skipped
-    assert len(jobs) == 1
-    assert jobs[0].source_id == "greenhouse_stripe_1"
-
-
-async def test_fetch_yc_jobs_one_company_error_does_not_abort_others():
-    from backend.services import yc_client
-    from backend.services.hn_client import RawJob
-
-    companies = {
-        "companies": [
-            {"name": "BadCo", "jobs_url": "https://jobs.lever.co/badco"},
-            {"name": "GoodCo", "jobs_url": "https://jobs.lever.co/goodco"},
-        ]
-    }
-
-    async def fake_fetch_ats(ats: str, slug: str) -> list[RawJob]:
-        if slug == "badco":
-            raise httpx.HTTPError("boom")
-        return [
-            RawJob(
-                source_id="lever_goodco_1",
-                source_url="https://jobs.lever.co/goodco/1",
-                raw_text="Good engineering role with Python and Go " * 3,
-                dedup_hash="hash-goodco",
-            )
-        ]
-
-    with (
-        patch("httpx.AsyncClient", return_value=_mock_client(_resp(companies))),
-        patch.object(yc_client, "fetch_ats_jobs", side_effect=fake_fetch_ats),
-    ):
-        jobs = await yc_client.fetch_yc_jobs()
-
-    assert len(jobs) == 1
-    assert jobs[0].source_id == "lever_goodco_1"
-
-
-async def test_fetch_yc_jobs_http_error_returns_empty():
-    from backend.services import yc_client
-
-    client = _mock_client(_resp({}))
-    client.get = AsyncMock(side_effect=httpx.HTTPError("dns failure"))
-    with patch("httpx.AsyncClient", return_value=client):
-        jobs = await yc_client.fetch_yc_jobs()
     assert jobs == []
 
 
@@ -376,7 +301,7 @@ def test_get_configured_sources_includes_keyless_sources():
 
     sources = _get_configured_sources()
     assert "remotive" in sources
-    assert "yc" in sources
+    assert "hn" in sources
 
 
 def test_get_configured_sources_targets_gated_on_file():

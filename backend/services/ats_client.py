@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import logging
 from typing import Any
 
@@ -13,8 +14,10 @@ logger = logging.getLogger(__name__)
 _MIN_TEXT_LEN = 100
 
 # Public board/posting endpoints per ATS. {slug} is substituted at call time.
+# Greenhouse: the legacy boards.greenhouse.io/{slug}/jobs.json host 404s; the
+# current Job Board API is boards-api.greenhouse.io/v1/boards/{slug}/jobs.
 _ENDPOINTS = {
-    "greenhouse": "https://boards.greenhouse.io/{slug}/jobs.json?content=true",
+    "greenhouse": "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true",
     "lever": "https://api.lever.co/v0/postings/{slug}?mode=json",
     "ashby": "https://api.ashbyhq.com/posting-api/job-board/{slug}",
 }
@@ -60,7 +63,10 @@ def _normalise_greenhouse(slug: str, data: Any) -> list[RawJob]:
     jobs: list[RawJob] = []
     for r in data.get("jobs", []):
         location = (r.get("location") or {}).get("name", "")
-        raw_text = f"{r.get('title', '')} ({location})\n\n{_strip_html(r.get('content', ''))}"
+        # Greenhouse returns `content` as HTML-escaped markup (e.g. &lt;p&gt;), so
+        # unescape before stripping tags — otherwise tags survive into raw_text.
+        content = _strip_html(html.unescape(r.get("content", "")))
+        raw_text = f"{r.get('title', '')} ({location})\n\n{content}"
         job = _make_raw_job(
             "greenhouse", slug, str(r.get("id", "")), r.get("absolute_url", ""), raw_text
         )

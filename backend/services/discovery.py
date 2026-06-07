@@ -25,7 +25,6 @@ from backend.services.profile_builder import build_compact_profile, get_or_build
 from backend.services.reed_client import fetch_reed_jobs
 from backend.services.remotive_client import fetch_remotive_jobs
 from backend.services.targets_client import _TARGET_FILE, fetch_target_jobs
-from backend.services.yc_client import fetch_yc_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -296,8 +295,6 @@ async def _run_discovery_task(run_id: str, source: str) -> None:
                     raw_jobs = await fetch_adzuna_jobs(keywords, location)
                 elif source == "remotive":
                     raw_jobs = await fetch_remotive_jobs()
-                elif source == "yc":
-                    raw_jobs = await fetch_yc_jobs()
                 elif source == "targets":
                     raw_jobs = await fetch_target_jobs()
                 else:  # "hn" — fetches the monthly "Who is Hiring" thread; no keywords needed
@@ -383,10 +380,10 @@ def _target_list_present() -> bool:
 
 
 def _get_configured_sources() -> list[str]:
-    """Return source names available for an 'all' run. HN, Remotive, and YC need
-    no credentials and are always included; Reed/Adzuna require keys; the manual
+    """Return source names available for an 'all' run. HN and Remotive need no
+    credentials and are always included; Reed/Adzuna require keys; the manual
     target list is included only when assets/target_companies.json is populated."""
-    sources: list[str] = ["hn", "remotive", "yc"]
+    sources: list[str] = ["hn", "remotive"]
     if settings.reed_api_key:
         sources.append("reed")
     if settings.adzuna_app_id and settings.adzuna_app_key:
@@ -445,8 +442,6 @@ async def _run_source_task(run_id: str, source: str) -> None:
                     raw_jobs = await fetch_adzuna_jobs(keywords, location)
                 elif source == "remotive":
                     raw_jobs = await fetch_remotive_jobs()
-                elif source == "yc":
-                    raw_jobs = await fetch_yc_jobs()
                 elif source == "targets":
                     raw_jobs = await fetch_target_jobs()
                 else:
@@ -611,8 +606,6 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
                         jobs = await fetch_adzuna_jobs(keywords, location)
                     elif src == "remotive":
                         jobs = await fetch_remotive_jobs()
-                    elif src == "yc":
-                        jobs = await fetch_yc_jobs()
                     elif src == "targets":
                         jobs = await fetch_target_jobs()
                     else:

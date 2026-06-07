@@ -8,6 +8,26 @@ Fix: what the correct approach is
 Avoid: what not to do next time
 -->
 
+## [2026-06-07] Verify external API shapes with a live call before building normalizers
+
+Pattern: The new discovery sources were coded + unit-tested against *assumed* response shapes
+(mocked). A live check (one real endpoint per source) found two assumptions wrong: (1) Greenhouse's
+legacy `boards.greenhouse.io/{slug}/jobs.json` host 404s — the live API is
+`boards-api.greenhouse.io/v1/boards/{slug}/jobs`, and its `content` is HTML-**escaped**
+(`&lt;p&gt;`), so a strip-then-unescape helper leaves visible tags; (2) the YC
+`v0.1/companies?is_hiring=true` payload has **no `jobs_url`/ATS field at all** (only `website` +
+YC-profile `url`), so the entire "YC→ATS passthrough" was infeasible — every company silently
+skipped.
+
+Fix: Hit one real endpoint per source, snapshot the JSON, reconcile the normalizer + fixtures to the
+true shape — *before* building anything on top. Greenhouse: corrected host + `unescape→strip`. YC:
+dropped the source (no public companies→ATS mapping exists); curated companies go in
+`target_companies.json` with explicit `ats`+`slug` instead. Mocked tests that pass prove only
+self-consistency, never that the shape matches reality.
+
+Avoid: Treating a written spec's field names ("detect ATS from `jobs_url`") as ground truth.
+Shipping normalizers for an external API you've never actually called.
+
 ## [2026-06-07] Kill the cause, not the symptom: removed GitHub to make the cache hash deterministic
 
 Pattern: The content-hash cache key (`profile_content_hash(merged_profile)`) was non-deterministic because `_assemble_merged` iterated a GitHub-README dict in unordered DB/dict order. The first fix sorted the dict (`sorted(github_data.items())`) — a symptom patch that kept the unstable input alive. GitHub READMEs were the *only* collection-iterating input to `merged_profile`.
