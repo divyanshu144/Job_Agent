@@ -1,57 +1,61 @@
 # Session Handoff
 
 **Updated:** 2026-06-07
-**Branch:** feat/campaign-orchestrator (off `main`) — committed, not yet merged/pushed
+**Branch:** feat/resume-latex (off `feat/campaign-orchestrator`) — committed, not merged/pushed
 
 ---
 
 ## Current State
 
-**Prompt 2 COMPLETE — CampaignJob model + campaign orchestrator skeleton + Alembic introduced.**
-TDD (5 tests written failing first, then implemented). `make check` green (**259 passed, 77.89%
-cov**); ruff + mypy + schema-drift pass.
+**Prompt 3 COMPLETE — LaTeX resume tailoring → PDF, wired into the campaign orchestrator.**
+TDD (4 tests written failing first). `make check` green (**263 passed, 77.69% cov**); ruff + mypy +
+schema-drift pass. Pipeline target: cold email + tailored resume PDF attachment, **no cover letter**.
 
 **What landed:**
-- **Alembic introduced** (hybrid): `create_all`/`init_db` stays as the fresh-DB + test bootstrap;
-  Alembic is the forward-migration tool for deployed DBs. Files: `alembic.ini`, `alembic/env.py`
-  (async; URL from `settings.database_url` unless a caller overrides via `set_main_option`),
-  `alembic/script.py.mako`, `alembic/versions/0001_add_campaign_jobs.py` (hand-authored). `alembic`
-  added to `requirements.txt`. Baseline: deployed DBs → `alembic upgrade head`; fresh → create_all
-  then `alembic stamp head`.
-- **`CampaignJob` model** (`backend/models.py`): id, job_id (FK jobs), run_at, match_score
-  (Float, **nullable** — 0–1), draft_id, status (queued|drafted|failed), error, created_at.
-- **`backend/services/campaign_orchestrator.py`**: `run_campaign(threshold=0.75) -> CampaignRunResult`
-  — pulls `Job.state=="scored"` not already in campaign_jobs; `_score_job` (job_parser→match_scorer,
-  returns score/100) per job; filters `>= threshold`; inserts `CampaignJob(status="queued")`; calls
-  4 **stub** no-ops (`_cover_letter`, `_resume_tailor`, `_contact_find`, `_draft_create` — log TODO,
-  return None). **Each job in its own `SessionLocal()`**; per-job errors → `status="failed"`,
-  `error=str(e)`, continue (recorded in a fresh session).
+- **Step 1 check:** `ResumeTailorerAgent` IS used by the main interactive pipeline (`orchestrator.py`
+  Phase 2) — so it was **not** repurposed. The LaTeX flow is a **separate module**.
+- **`backend/services/resume_latex.py`** — `tailor_resume_pdf(job_description, latex_source) -> bytes`:
+  LLM (`_tailor_latex`, Sonnet) edits ONLY summary/skills/experience and preserves preamble/structure;
+  writes `.tex` in a `TemporaryDirectory`; runs `pdflatex -interaction=nonstopmode -halt-on-error
+  -output-directory {tmp} {tex}`; on non-zero exit retries ONCE with a self-correction prompt carrying
+  the pdflatex log tail; on second failure raises `ResumeCompileError`. PDF bytes read before tempdir
+  cleanup. Comment notes real runs need texlive (`pdflatex` on PATH).
+- **`assets/resume.tex`** — minimal valid placeholder (`\documentclass{article}` + Summary/Skills/
+  Experience) so the path is exercisable.
+- **Orchestrator (`campaign_orchestrator.py`)**: renamed `_cover_letter` → `_cold_email` (still a
+  no-op; Prompt 4). `_resume_tailor(job_id, job_description)` is now **real** — calls
+  `tailor_resume_pdf(load_resume_latex())`, **PDF held in memory per-job, not persisted**. Loop
+  captures `job.raw_text` before the session closes and passes it. `_record_failure` is now an
+  **upsert** (so a job that fails *after* being queued is flipped to failed, not duplicated).
 
-**Verified:** unit tests (queue/skip/dedupe/failure-isolation/stub-noop) + migration test
-(`tests/test_migrations.py` runs `command.upgrade` on a temp DB) + manual `alembic upgrade head` on a
-copy of `data/jobfit.db` → `campaign_jobs` created with FK to real `jobs`.
+**Testing:** pdflatex is **mocked** (`subprocess.run`) — tests assert command shape, retry-on-failure
+feeds the log tail to the correction prompt, and double-failure raises. CI needs no texlive. Campaign
+logic tests mock `_resume_tailor`; a wiring test asserts it receives the job description.
 
 ## Next Action
 
-Merge `feat/campaign-orchestrator` → `main` + push (on your go), then **Prompt 3** (implement the
-first stub step). The stubs are the designed seams: each currently logs TODO and returns None.
+Merge the campaign chain (`feat/campaign-orchestrator` → `feat/resume-latex`) to `main` + push on your
+go, then **Prompt 4** (implement `_cold_email`, consuming the in-memory resume PDF as the attachment).
 
 ## In-Flight
 
-Committed on `feat/campaign-orchestrator`: `backend/models.py`,
-`backend/services/campaign_orchestrator.py`, `alembic/*`, `alembic.ini`, `requirements.txt`,
-`tests/test_services/test_campaign_orchestrator.py`, `tests/test_migrations.py`, this HANDOFF.
+Committed on `feat/resume-latex`: `backend/services/resume_latex.py`,
+`backend/services/campaign_orchestrator.py`, `assets/resume.tex`,
+`tests/test_services/test_resume_latex.py`, `tests/test_services/test_campaign_orchestrator.py`,
+this HANDOFF. Branch stacks on `feat/campaign-orchestrator` (Prompt 2), which is not yet on `main`.
 
 ## Open Questions
 
-1. Merge/push this branch now, or stack Prompt 3 on it first?
-2. `feat/job-board-scrapers` + `feat/referral-clean` still linger (unmerged) from the cleanup pass.
-3. Stub order/return contract for Prompt 3: which step first, and does each return an id/artifact the
-   next consumes (e.g. draft_create → draft_id on the CampaignJob)?
+1. Merge order: `feat/campaign-orchestrator` then `feat/resume-latex` → `main` (stacked). Do it now?
+2. Prompt 4 contract: `_cold_email` consumes the resume PDF — thread the bytes from `_resume_tailor`
+   into `_cold_email(job_id, resume_pdf)` (capture in the loop), and presumably `_contact_find` runs
+   first to supply the recipient. Confirm step order/signatures when we get there.
+3. `feat/job-board-scrapers` + `feat/referral-clean` still linger from the cleanup pass.
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 259 passed, 1 deselected, 77.89% coverage |
-| migration | ✓ test_migrations upgrade head creates campaign_jobs; smoke on real-DB copy passed |
+| `make check` | ✓ 263 passed, 1 deselected, 77.69% coverage |
+| new tests | ✓ 3 resume_latex (cmd shape / retry-feeds-log / double-fail-raises) + 1 orchestrator wiring |
+| texlive | not required in CI (pdflatex mocked); real runs need it on PATH |

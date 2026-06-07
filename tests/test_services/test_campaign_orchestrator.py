@@ -61,6 +61,8 @@ async def _seed_jobs(Session, n: int, state: str = "scored") -> list[str]:
 
 
 def _patches(Session, score_side_effect):
+    # _resume_tailor is mocked: the real step runs LLM + pdflatex, which these
+    # logic tests neither need nor (in CI) can run. Wiring is covered separately.
     return (
         patch("backend.services.campaign_orchestrator.SessionLocal", Session),
         patch(
@@ -68,6 +70,7 @@ def _patches(Session, score_side_effect):
             new_callable=AsyncMock,
             side_effect=score_side_effect,
         ),
+        patch("backend.services.campaign_orchestrator._resume_tailor", new_callable=AsyncMock),
     )
 
 
@@ -78,8 +81,8 @@ async def test_run_campaign_queues_qualifiers(Session):
     def score(job, profile, db):
         return scores[job.id]
 
-    p_sl, p_score = _patches(Session, score)
-    with p_sl, p_score:
+    p_sl, p_score, p_rt = _patches(Session, score)
+    with p_sl, p_score, p_rt:
         from backend.services.campaign_orchestrator import run_campaign
 
         result = await run_campaign(threshold=0.75)
@@ -103,8 +106,8 @@ async def test_below_threshold_creates_no_row(Session):
     def score(job, profile, db):
         return 0.10
 
-    p_sl, p_score = _patches(Session, score)
-    with p_sl, p_score:
+    p_sl, p_score, p_rt = _patches(Session, score)
+    with p_sl, p_score, p_rt:
         from backend.services.campaign_orchestrator import run_campaign
 
         result = await run_campaign(threshold=0.75)
@@ -128,8 +131,8 @@ async def test_jobs_already_in_campaign_are_not_repulled(Session):
         seen.append(job.id)
         return 0.95
 
-    p_sl, p_score = _patches(Session, score)
-    with p_sl, p_score:
+    p_sl, p_score, p_rt = _patches(Session, score)
+    with p_sl, p_score, p_rt:
         from backend.services.campaign_orchestrator import run_campaign
 
         result = await run_campaign(threshold=0.75)
@@ -146,8 +149,8 @@ async def test_per_job_failure_is_isolated(Session):
             raise RuntimeError("scorer boom")
         return 0.90
 
-    p_sl, p_score = _patches(Session, score)
-    with p_sl, p_score:
+    p_sl, p_score, p_rt = _patches(Session, score)
+    with p_sl, p_score, p_rt:
         from backend.services.campaign_orchestrator import run_campaign
 
         result = await run_campaign(threshold=0.75)
@@ -162,3 +165,30 @@ async def test_per_job_failure_is_isolated(Session):
     assert rows[ids[1]].match_score is None
     assert rows[ids[0]].status == "queued"
     assert rows[ids[2]].status == "queued"
+
+
+async def test_resume_tailor_receives_job_description(Session):
+    ids = await _seed_jobs(Session, 1)
+
+    def score(job, profile, db):
+        return 0.9
+
+    with (
+        patch("backend.services.campaign_orchestrator.SessionLocal", Session),
+        patch(
+            "backend.services.campaign_orchestrator._score_job",
+            new_callable=AsyncMock,
+            side_effect=score,
+        ),
+        patch(
+            "backend.services.campaign_orchestrator._resume_tailor", new_callable=AsyncMock
+        ) as rt,
+    ):
+        from backend.services.campaign_orchestrator import run_campaign
+
+        await run_campaign(threshold=0.75)
+
+    rt.assert_awaited_once()
+    args = rt.await_args.args
+    assert args[0] == ids[0]  # job_id
+    assert "Backend engineer role" in args[1]  # job_description (job.raw_text)

@@ -13,6 +13,7 @@ from backend.database import SessionLocal
 from backend.models import CampaignJob, Job, Profile
 from backend.schemas import PriorOutputs
 from backend.services.profile_builder import build_compact_profile, get_or_build_profile
+from backend.services.resume_latex import load_resume_latex, tailor_resume_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -44,16 +45,25 @@ async def _score_job(job: Job, profile: Profile, db: AsyncSession) -> float:
     return scored.score / 100.0
 
 
-# ── Downstream steps — stubbed no-ops for now (filled in later prompts) ──────────
+# ── Downstream steps ─────────────────────────────────────────────────────────────
 
 
-async def _cover_letter(job_id: str) -> None:
-    logger.info("TODO: cover_letter for job %s", job_id)
-    return None
+async def _resume_tailor(job_id: str, job_description: str) -> bytes:
+    """Tailor the base LaTeX resume to this job and compile it to PDF bytes.
+
+    The PDF is held in memory per-job (returned to the caller) and is NOT
+    persisted to CampaignJob — a later step (cold email) attaches it.
+    """
+    pdf = await tailor_resume_pdf(job_description, load_resume_latex())
+    logger.info("Tailored resume PDF for job %s: %d bytes (in memory)", job_id, len(pdf))
+    return pdf
 
 
-async def _resume_tailor(job_id: str) -> None:
-    logger.info("TODO: resume_tailor for job %s", job_id)
+# Still stubbed — implemented in later prompts.
+
+
+async def _cold_email(job_id: str) -> None:
+    logger.info("TODO: cold_email for job %s", job_id)
     return None
 
 
@@ -68,9 +78,18 @@ async def _draft_create(job_id: str) -> None:
 
 
 async def _record_failure(job_id: str, error: str) -> None:
-    """Persist a failed CampaignJob row in its own session."""
+    """Mark this job's campaign row failed, in its own session. Upserts: a job
+    that errored after being queued is updated in place (not duplicated); one
+    that errored before queueing gets a fresh failed row."""
     async with SessionLocal() as db:
-        db.add(CampaignJob(job_id=job_id, status="failed", error=error, match_score=None))
+        existing = (
+            await db.execute(select(CampaignJob).where(CampaignJob.job_id == job_id))
+        ).scalar_one_or_none()
+        if existing is not None:
+            existing.status = "failed"
+            existing.error = error
+        else:
+            db.add(CampaignJob(job_id=job_id, status="failed", error=error, match_score=None))
         await db.commit()
 
 
@@ -110,6 +129,7 @@ async def run_campaign(threshold: float = 0.75) -> CampaignRunResult:
                     result.skipped += 1
                     continue
 
+                job_description = job.raw_text  # capture before the session closes
                 db.add(
                     CampaignJob(
                         job_id=job_id,
@@ -120,10 +140,11 @@ async def run_campaign(threshold: float = 0.75) -> CampaignRunResult:
                 )
                 await db.commit()
 
-            # Downstream steps (no-ops for now).
-            await _cover_letter(job_id)
-            await _resume_tailor(job_id)
+            # Downstream steps. resume_tailor is real (PDF held in memory, not
+            # persisted); the rest are stubs until later prompts.
+            await _resume_tailor(job_id, job_description)
             await _contact_find(job_id)
+            await _cold_email(job_id)
             await _draft_create(job_id)
 
             result.queued += 1
