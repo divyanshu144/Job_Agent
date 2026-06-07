@@ -1,65 +1,66 @@
 # Session Handoff
 
 **Updated:** 2026-06-07
-**Branch:** chore/remove-github-profile-source (off `fix/profile-content-cache-key`)
+**Branch:** feat/discovery-new-sources (off `chore/remove-github-profile-source`)
 
 ---
 
 ## Current State
 
-**GitHub-as-a-profile-source removal COMPLETE** (plan: `~/.claude/plans/atomic-beaming-hamming.md`,
-approved). `make check` green (**234 passed, 76.71% cov**) + `npx tsc --noEmit` clean.
+**Three new discovery sources COMPLETE** (plan: `~/.claude/plans/atomic-beaming-hamming.md`,
+approved). TDD throughout (17 tests written failing first, then implemented). `make check` green
+(**251 passed, 77.45% cov** — prior 234 preserved + 17 new).
 
-This stacks on the content-hash cache fix (`bd14958`). Removing GitHub is the *deep* fix for the
-cache-determinism problem: GitHub READMEs were the only collection-iterating input to
-`merged_profile`. With them gone, `merged_profile` is YAML + CV only — deterministic by
-construction, so the just-added `sorted()` in `_assemble_merged` was removed (no longer needed),
-and the vestigial secondary-1 GitHub-warning block in `_profile_response` is gone too.
+Added **Remotive** (keyless), **YC → ATS passthrough**, and a **manual target list**, all normalising
+to the existing `RawJob` dataclass and returning `list[RawJob]` like `fetch_reed_jobs`.
 
-**Surface removed:**
-- Backend: deleted `services/github_client.py`; `profile_builder.py` (`_assemble_merged`→YAML+CV,
-  `_read_repos`→`_read_yaml`, `refresh_github_cache` deleted, no github read in `build_profile`);
-  `routes/profile.py` (deleted `/profile/refresh/github` + `/profile/status`, warning block,
-  unused imports); `models.py` (`GithubCache`, `Profile.github_data`/`github_last_fetched_at`,
-  `UniqueConstraint` import); `config.py` (`github_username`, `github_stale_days`); `schemas.py`
-  (`ProfileResponse` github fields, `ProfileStatusResponse`, `GitHubRefreshResponse`).
-- Frontend: `ProfileSetup.tsx` (banner, sync timestamp, refresh button, status state, `daysSince`),
-  `api/client.ts` (`refreshGithub`, `getProfileStatus` + imports), `types/index.ts` (github fields
-  + 2 interfaces).
-- Tests: deleted `test_github_client.py`; rewrote merges test to YAML+CV; deleted 2 github
-  profile_builder tests; dropped `github_data="{}"` from ~13 fixtures; dropped `github_username`
-  from `test_config.py`.
-- Docs: `CLAUDE.md` (overview, 2 map lines, JD-hash note), `.env.example` (`GITHUB_USERNAME`).
+**New modules (`backend/services/`):**
+- `remotive_client.py` — `fetch_remotive_jobs()`; GET remotive software-dev API, HTML-stripped.
+- `ats_client.py` — `detect_ats(jobs_url)`, `_extract_slug`, `fetch_ats_jobs(ats, slug)` dispatching
+  Greenhouse/Lever/Ashby with per-provider normalisers. Shared by YC + targets.
+- `yc_client.py` — `fetch_yc_jobs()`; YC hiring companies → detect ATS → aggregate. Per-company
+  try/except continue; unknown-ATS companies skipped.
+- `targets_client.py` — `fetch_target_jobs()`; reads `assets/target_companies.json`, queries ATS per
+  entry. Missing/invalid file → []; malformed entries + per-entry errors skipped.
 
-**Left as-is (per plan):** `scripts/migrate.py` history untouched; orphan `github_cache` table +
-`Profile.github_data`/`github_last_fetched_at` columns remain in existing DBs (zero migration,
-harmless — SQLAlchemy only queries mapped columns). Optional one-time DROP flagged as follow-up.
+**Wiring (`discovery.py`):** new imports; additive `elif source == "remotive"/"yc"/"targets"`
+branches before the `else` (HN) in all three fetch-dispatch sites (`_run_discovery_task`,
+`_run_source_task`, `_run_batch_discovery_task`) — existing reed/adzuna/hn lines untouched.
+`_get_configured_sources()` now always includes remotive+yc, adds targets when
+`assets/target_companies.json` is populated (new `_target_list_present()` helper).
+
+**Routes (`routes/discovery.py`):** `_VALID_SOURCES` extended with the three; `/discovery/sources`
+response dict reports them.
+
+**Asset:** `assets/target_companies.json` with 5 placeholder entries (greenhouse/lever/ashby mix).
+
+**Note on ATS response shapes:** the Greenhouse/Lever/Ashby/Remotive/YC JSON field mappings are coded
+defensively (`.get(...) or ""`) and pinned by mocked tests; if a live response differs, adjust the
+per-provider normalisers in `ats_client.py` / `remotive_client.py`. No live calls were made.
 
 ## Next Action
 
-Commit on `chore/remove-github-profile-source`. Then fold into the pending batch merge onto `main`
-alongside `fix/profile-content-cache-key` (this branch builds on it) and the other feature branches.
+Commit on `feat/discovery-new-sources`. Folds into the pending batch merge onto `main` alongside the
+other stacked branches.
 
 ## Why It Stopped
 
-Removal complete and verified (backend + frontend). Committing.
+Feature complete and verified. Committing.
 
 ## In-Flight
 
-Committing now: `backend/` (config, models, schemas, routes/profile, services/profile_builder,
-deleted github_client), `frontend/` (ProfileSetup, client, types), tests (deleted test_github_client,
-rewrote test_profile_builder, ~13 fixture edits, test_config), `CLAUDE.md`, `.env.example`,
-`tasks/lessons.md`, this HANDOFF.
+Committing now: new files `backend/services/{remotive,ats,yc,targets}_client.py`,
+`assets/target_companies.json`, `tests/test_services/test_new_sources.py`; edits to
+`backend/services/discovery.py`, `backend/routes/discovery.py`, this HANDOFF.
 
 ## Open Questions
 
-1. Optional explicit `DROP TABLE github_cache` + drop the two `Profile` orphan columns on deployed
-   DBs — left as a follow-up, not required.
-2. Profile row accretion — still leave-as-is (deferred from the cache fix).
+1. Frontend Discover.tsx source toggles don't yet surface the 3 new sources (out of scope this pass).
+2. Live response-shape validation against real Greenhouse/Lever/Ashby/YC payloads still pending.
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 234 passed, 1 deselected, 76.71% coverage |
-| `npx tsc --noEmit` (frontend) | ✓ clean (exit 0) |
+| `make check` | ✓ 251 passed, 1 deselected, 77.45% coverage |
+| new tests | ✓ 17 in tests/test_services/test_new_sources.py (remotive, ats detect/fetch, yc, targets, config) |
