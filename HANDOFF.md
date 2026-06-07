@@ -1,59 +1,57 @@
 # Session Handoff
 
 **Updated:** 2026-06-07
-**Branch:** main (synced with `origin/main`); live-ATS fix on `fix/ats-live-shapes`
+**Branch:** feat/campaign-orchestrator (off `main`) — committed, not yet merged/pushed
 
 ---
 
 ## Current State
 
-**Live ATS shape check COMPLETE** (step 2 of: branch cleanup → live ATS check → Prompt 2).
-`make check` green (**254 passed, 77.31% cov**). Hit one real endpoint per source and reconciled
-normalizers/fixtures to the true shapes.
+**Prompt 2 COMPLETE — CampaignJob model + campaign orchestrator skeleton + Alembic introduced.**
+TDD (5 tests written failing first, then implemented). `make check` green (**259 passed, 77.89%
+cov**); ruff + mypy + schema-drift pass.
 
-**Findings & fixes:**
-- **Greenhouse** — legacy `boards.greenhouse.io/{slug}/jobs.json` 404s. Fixed endpoint to
-  `boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true`. Its `content` is HTML-**escaped**,
-  so `_normalise_greenhouse` now `unescape→strip`s (was leaving visible tags). Test fixture updated
-  to escaped content + asserts no tags/entities survive.
-- **Remotive / Lever / Ashby** — endpoints + shapes verified correct against live data; no code
-  change (my dead test slugs were the only issue).
-- **YC** — `v0.1/companies` has **no `jobs_url`/ATS field** (only `website` + YC profile `url`); the
-  YC→ATS passthrough was infeasible. **Per decision: dropped the YC source** — removed `yc_client.py`,
-  its 3 tests, the dispatch branches (3 sites), `_get_configured_sources` entry, `_VALID_SOURCES`,
-  and the `/discovery/sources` key. Curated YC companies go in `target_companies.json` with explicit
-  `ats`+`slug`.
-- **HN kept** — untouched; remains the default source.
+**What landed:**
+- **Alembic introduced** (hybrid): `create_all`/`init_db` stays as the fresh-DB + test bootstrap;
+  Alembic is the forward-migration tool for deployed DBs. Files: `alembic.ini`, `alembic/env.py`
+  (async; URL from `settings.database_url` unless a caller overrides via `set_main_option`),
+  `alembic/script.py.mako`, `alembic/versions/0001_add_campaign_jobs.py` (hand-authored). `alembic`
+  added to `requirements.txt`. Baseline: deployed DBs → `alembic upgrade head`; fresh → create_all
+  then `alembic stamp head`.
+- **`CampaignJob` model** (`backend/models.py`): id, job_id (FK jobs), run_at, match_score
+  (Float, **nullable** — 0–1), draft_id, status (queued|drafted|failed), error, created_at.
+- **`backend/services/campaign_orchestrator.py`**: `run_campaign(threshold=0.75) -> CampaignRunResult`
+  — pulls `Job.state=="scored"` not already in campaign_jobs; `_score_job` (job_parser→match_scorer,
+  returns score/100) per job; filters `>= threshold`; inserts `CampaignJob(status="queued")`; calls
+  4 **stub** no-ops (`_cover_letter`, `_resume_tailor`, `_contact_find`, `_draft_create` — log TODO,
+  return None). **Each job in its own `SessionLocal()`**; per-job errors → `status="failed"`,
+  `error=str(e)`, continue (recorded in a fresh session).
 
-**Active source set:** `hn`, `remotive`, `reed`/`adzuna` (keyed), `targets` (when list populated).
+**Verified:** unit tests (queue/skip/dedupe/failure-isolation/stub-noop) + migration test
+(`tests/test_migrations.py` runs `command.upgrade` on a temp DB) + manual `alembic upgrade head` on a
+copy of `data/jobfit.db` → `campaign_jobs` created with FK to real `jobs`.
 
 ## Next Action
 
-**Prompt 2 — CampaignJob model + orchestrator skeleton.** The normalizers are now validated against
-real payloads, so the Job-schema normalization the orchestrator builds on is trustworthy.
-
-## Why It Stopped
-
-Live-check fixes done + verified; ready for Prompt 2.
+Merge `feat/campaign-orchestrator` → `main` + push (on your go), then **Prompt 3** (implement the
+first stub step). The stubs are the designed seams: each currently logs TODO and returns None.
 
 ## In-Flight
 
-On branch `fix/ats-live-shapes` (off `main`): `backend/services/ats_client.py`,
-`backend/services/discovery.py`, `backend/routes/discovery.py`, deleted
-`backend/services/yc_client.py`, `tests/test_services/test_new_sources.py`, `tasks/lessons.md`,
-this HANDOFF. To merge into `main` + push.
+Committed on `feat/campaign-orchestrator`: `backend/models.py`,
+`backend/services/campaign_orchestrator.py`, `alembic/*`, `alembic.ini`, `requirements.txt`,
+`tests/test_services/test_campaign_orchestrator.py`, `tests/test_migrations.py`, this HANDOFF.
 
 ## Open Questions
 
-1. `feat/job-board-scrapers` + `feat/referral-clean` remain (local+remote) — unmerged, not named in
-   cleanup. Delete too?
-2. `Discover.tsx` source toggles still deferred (do when orchestrator is wired end-to-end).
-3. Greenhouse/Lever/Ashby slugs in `target_companies.json` are placeholders — swap for real
-   target-company slugs when known.
+1. Merge/push this branch now, or stack Prompt 3 on it first?
+2. `feat/job-board-scrapers` + `feat/referral-clean` still linger (unmerged) from the cleanup pass.
+3. Stub order/return contract for Prompt 3: which step first, and does each return an id/artifact the
+   next consumes (e.g. draft_create → draft_id on the CampaignJob)?
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 254 passed, 1 deselected, 77.31% coverage |
-| live endpoints | ✓ remotive/greenhouse(modern)/lever/ashby 200 + shapes reconciled; YC dropped |
+| `make check` | ✓ 259 passed, 1 deselected, 77.89% coverage |
+| migration | ✓ test_migrations upgrade head creates campaign_jobs; smoke on real-DB copy passed |
