@@ -61,8 +61,18 @@ class GapAnalystOutput(BaseModel):
     validation_warnings: list[ValidationWarning] = Field(default_factory=list, exclude=True)
 
 
+class PlannerMeta(BaseModel):
+    """Self-check telemetry from the resource_planner loop (persisted, not a meta-field)."""
+
+    total_llm_calls: int
+    retried_gaps: list[str] = Field(default_factory=list)
+    low_confidence_gaps: list[str] = Field(default_factory=list)
+    gap_confidences: dict[str, float] = Field(default_factory=dict)
+
+
 class ResourcePlannerOutput(BaseModel):
     gaps: list[ResourceItem]
+    planner_meta: PlannerMeta | None = None
     validation_warnings: list[ValidationWarning] = Field(default_factory=list, exclude=True)
 
 

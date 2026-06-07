@@ -415,6 +415,8 @@ async def run_generate_pipeline(
     analysis.evaluate_only = False
     if partial:
         analysis.partial = True
+    quality_signals = _build_quality_signals(prior)
+    analysis.quality_signals = json.dumps(quality_signals)
     await db.commit()
 
     score = prior.match_scorer.score if prior.match_scorer else 0
@@ -425,5 +427,26 @@ async def run_generate_pipeline(
             "score": score,
             "partial": partial or analysis.partial,
             "evaluate_only": False,
+            "quality_signals": quality_signals,
         },
     )
+
+
+def _build_quality_signals(prior: PriorOutputs) -> dict[str, Any]:
+    """Per-run quality summary assembled at end of Phase 2 from prior outputs."""
+    ms = prior.match_scorer
+    ga = prior.gap_analyst
+    rp = prior.resource_planner
+    pm = rp.planner_meta if rp else None
+    confidences = list(pm.gap_confidences.values()) if pm and pm.gap_confidences else []
+    return {
+        "match_score": ms.score if ms else None,
+        # match_scorer is single-pass today; no second iteration to adjust against.
+        "match_score_adjusted": None,
+        "gaps_critical": len(ga.critical_gaps) if ga else 0,
+        "gaps_nice_to_have": len(ga.nice_to_have_gaps) if ga else 0,
+        "resource_confidence_avg": round(sum(confidences) / len(confidences), 3)
+        if confidences
+        else None,
+        "low_confidence_gaps": list(pm.low_confidence_gaps) if pm else [],
+    }

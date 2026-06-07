@@ -7,7 +7,8 @@ export interface ValidationWarning { agent: string; rule: string; detail: string
 export interface JobParserOutput { required_skills: string[]; nice_to_have: string[]; years_experience: number | null; role_type: string; seniority: string; company?: string | null; validation_warnings?: ValidationWarning[]; }
 export interface MatchScorerOutput { score: number; matched_skills: string[]; missing_skills: string[]; partial_matches: string[]; validation_warnings?: ValidationWarning[]; }
 export interface GapAnalystOutput { critical_gaps: GapItem[]; nice_to_have_gaps: GapItem[]; validation_warnings?: ValidationWarning[]; }
-export interface ResourcePlannerOutput { gaps: ResourceItem[]; validation_warnings?: ValidationWarning[]; }
+export interface PlannerMeta { total_llm_calls: number; retried_gaps: string[]; low_confidence_gaps: string[]; gap_confidences: Record<string, number>; }
+export interface ResourcePlannerOutput { gaps: ResourceItem[]; planner_meta?: PlannerMeta | null; validation_warnings?: ValidationWarning[]; }
 export interface CoverLetterOutput { subject: string; body: string; tone_notes: string; validation_warnings?: ValidationWarning[]; }
 export interface ResumeTailorerOutput { tailored_bullets: BulletItem[]; validation_warnings?: ValidationWarning[]; }
 export interface ProfileResponse { id: string; yaml_data: string; cv_text: string; merged_profile: string; last_refreshed_at: string; warnings: string[]; }
@@ -25,7 +26,8 @@ export const AGENT_ORDER: AgentName[] = ["job_parser","match_scorer","gap_analys
 export const PHASE1_AGENTS: AgentName[] = ["job_parser","match_scorer","gap_analyst"];
 export const PHASE2_AGENTS: AgentName[] = ["resource_planner","cover_letter","resume_tailorer"];
 export type AgentStatus = "pending"|"running"|"done"|"error";
-export interface PipelineDoneData { analysis_id: string; score: number; partial: boolean; evaluate_only: boolean; }
+export interface QualitySignals { match_score: number | null; match_score_adjusted: number | null; gaps_critical: number; gaps_nice_to_have: number; resource_confidence_avg: number | null; low_confidence_gaps: string[]; }
+export interface PipelineDoneData { analysis_id: string; score: number; partial: boolean; evaluate_only: boolean; quality_signals?: QualitySignals; }
 export interface SSECallbacks {
   onPipelineStart?: (data: { total_agents: number }) => void;
   onAgentStart?: (data: { agent: AgentName }) => void;
