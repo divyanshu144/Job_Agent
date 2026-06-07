@@ -1,59 +1,45 @@
 # Session Handoff
 
 **Updated:** 2026-06-07
-**Branch:** feat/campaign-trigger (off `feat/campaign-draft`) — committed, not merged/pushed
+**Branch:** main (synced with `origin/main` @ `2890567`)
 
 ---
 
 ## Current State
 
-**Prompt 6 COMPLETE — manual campaign trigger + status endpoints (NO scheduler).**
-TDD (5 tests written failing first). `make check` green (**275 passed, 78.10% cov**); ruff + mypy +
-schema-drift pass.
+**Campaign chain (P2–P6) MERGED to `main` and pushed.** `make check` green on merged main
+(**275 passed, 78.10% cov**); ruff + mypy + schema-drift pass. `main` ↔ `origin/main` in sync (0/0).
 
-**What landed (`backend/routes/campaign.py`, registered in `main.py`):**
-- **`POST /api/campaign/run`** — fires `run_campaign(threshold=0.75)` as a background
-  `asyncio.create_task` (never blocks; a full run is minutes), returns **202** with `{run_id, status}`.
-  **409** if a run is already in progress. Concurrency guarded by an in-process `_state["running"]`
-  flag set synchronously before the task is created and cleared in the task's `finally`.
-- **`GET /api/campaign/status`** — `running` + `last_run_id` + `last_run_started_at` (in-memory,
-  best-effort), `CampaignJob` **counts by status** (queued/drafted/failed), and the most recent
-  `limit` (default 5) **failed jobs with their error strings** — to debug the supervised run.
-- Both require auth (`get_current_user` → 401 without). `main.py` change is purely additive (one
-  import + one `include_router`); existing routes untouched.
+The autonomous application campaign is now end-to-end on `main`:
+- **P2** `CampaignJob` model + `run_campaign` orchestrator skeleton; **Alembic** introduced (hybrid:
+  create_all stays for fresh DBs/tests; revision `0001_add_campaign_jobs`).
+- **P3** LaTeX resume tailoring → PDF (`resume_latex.py`; pdflatex + self-correction retry).
+- **P4** `_contact_find` (Hunter.io) + `_cold_email` (ColdEmailAgent) wired.
+- **P5** `_draft_create` → Gmail draft (cold email + resume PDF attachment) via server-side OAuth
+  (google-api-python-client + google-auth; **no MCP**).
+- **P6** manual `POST /api/campaign/run` (202, 409-if-running) + `GET /api/campaign/status`.
 
-**Design note:** run state is **in-process** (no `CampaignRun` table) — single-run guard + last-run
-info reset on server restart. Fine for the supervised-validation phase; a scheduler / persisted run
-ledger is explicitly deferred.
-
-**Testing:** `run_campaign` mocked for route tests — 202+run_id (and the background task runs the
-mock + clears the flag), 409 when already running, status counts + recent-failure errors, and auth
-required on both endpoints.
+Pipeline: `POST /campaign/run` → score → resume PDF → contact → cold email → Gmail draft, observable
+via `GET /campaign/status`. Drafts are for human review (no auto-send).
 
 ## Next Action
 
-The full pipeline is now triggerable + observable. To do a **supervised real run**: provide real
-`assets/resume.tex`, real `target_companies.json` slugs, Hunter + Gmail OAuth creds in `.env`, install
-`google-*` + texlive, then `POST /api/campaign/run` and watch `GET /api/campaign/status`.
-Then merge the campaign chain to `main` + push.
-
-## In-Flight
-
-Committed on `feat/campaign-trigger`: `backend/routes/campaign.py`, `backend/main.py`,
-`tests/test_routes/test_campaign.py`, this HANDOFF. Stack: `feat/campaign-orchestrator` (P2) →
-`feat/resume-latex` (P3) → `feat/campaign-draft` (P4+P5) → `feat/campaign-trigger` (P6). None on
-`main` yet.
+Do a **supervised real run**: real `assets/resume.tex`, real `target_companies.json` slugs, Hunter +
+Gmail OAuth creds in `.env`, `pip install -r requirements.txt` (google libs) + texlive (pdflatex);
+then `POST /api/campaign/run` and watch `GET /api/campaign/status`. After it's clean, consider a
+scheduler + persisted run ledger.
 
 ## Open Questions
 
-1. **Merge the 5-branch campaign chain (P2→P6) to `main` + push** — when?
-2. Scheduler (deferred): after a clean supervised run, add cron/interval triggering of `run_campaign`.
-3. Send vs draft-only (drafts created for human review); persisted run ledger if we want history.
-4. `feat/job-board-scrapers` + `feat/referral-clean` still linger from the cleanup pass.
+1. **Branch cleanup**: the 5 merged campaign branches (P2–P6) exist locally + on origin — delete them?
+   Also `feat/job-board-scrapers` + `feat/referral-clean` still linger from the earlier cleanup pass.
+2. Scheduler (deferred until a clean supervised run), send-vs-draft-only, persisted run history.
+3. Discover.tsx source toggles still deferred.
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 275 passed, 1 deselected, 78.10% coverage |
-| new tests | ✓ 202+run_id / 409-when-running / status counts+errors / auth required (run + status) |
+| `make check` (merged main) | ✓ 275 passed, 1 deselected, 78.10% coverage |
+| `main` ↔ `origin/main` | ✓ in sync (0/0) |
+| pushed | ✓ main + feat/campaign-{orchestrator,draft,trigger} + feat/resume-latex |
