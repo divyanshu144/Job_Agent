@@ -168,17 +168,55 @@ export function Discover() {
   const [configuredSources, setConfiguredSources] = useState<Record<string, boolean>>({
     hn: true, reed: false, adzuna: false,
   });
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
+  const [timedOutRunId, setTimedOutRunId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const attemptsRef = useRef(0);
 
   const loadFeed = useCallback(async (profile?: string, location?: string) => {
     try {
-      const res = await api.getDiscoveryFeed({ profile: profile || undefined, location: location || undefined });
+      const res = await api.getDiscoveryFeed({ profile: profile || undefined, location: location || undefined, offset: 0 });
       setFeed(res.items);
       setTotal(res.total);
+      setOffset(res.items.length);
+      setHasMore(res.has_more);
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : "Failed to load feed");
     }
   }, []);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const res = await api.getDiscoveryFeed({ profile: profileFilter || undefined, location: locationFilter || undefined, offset });
+      setFeed((prev) => [...prev, ...res.items]);
+      setOffset((prev) => prev + res.items.length);
+      setHasMore(res.has_more);
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Failed to load more");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const refreshRunStatus = async () => {
+    if (!timedOutRunId) return;
+    try {
+      const run = await api.getDiscoveryRun(timedOutRunId);
+      setActiveRun(run);
+      setLastRun(run);
+      if (run.status === "complete") {
+        setTimedOut(false);
+        setTimedOutRunId(null);
+        loadFeed(profileFilter || undefined, locationFilter || undefined);
+      }
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Refresh failed");
+    }
+  };
 
   useEffect(() => {
     // Load configured sources and prior runs in parallel
@@ -203,7 +241,18 @@ export function Discover() {
 
   useEffect(() => {
     if (!activeRunId) return;
+    attemptsRef.current = 0;
+    const MAX_ATTEMPTS = 200; // 200 × 3s = 10 minutes
     pollRef.current = setInterval(async () => {
+      attemptsRef.current += 1;
+      if (attemptsRef.current > MAX_ATTEMPTS) {
+        clearInterval(pollRef.current!);
+        setTimedOutRunId(activeRunId);
+        setActiveRunId(null);
+        setFetching(false);
+        setTimedOut(true);
+        return;
+      }
       try {
         const run = await api.getDiscoveryRun(activeRunId);
         setActiveRun(run);
@@ -225,18 +274,22 @@ export function Discover() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRunId, profileFilter, locationFilter, loadFeed]);
 
-  async function triggerFetch() {
+  async function startRun(trigger: () => Promise<{ run_id: string }>) {
     setFetching(true);
     setFetchError(null);
     setActiveRun(null);
+    setTimedOut(false);
+    setTimedOutRunId(null);
     try {
-      const { run_id } = await api.triggerAllDiscovery();
+      const { run_id } = await trigger();
       setActiveRunId(run_id);
     } catch (err) {
       setFetching(false);
       setFetchError(err instanceof Error ? err.message : "Failed to start discovery");
     }
   }
+  const triggerFetch = () => startRun(api.triggerAllDiscovery);
+  const triggerBatch = () => startRun(api.triggerBatchDiscovery);
 
   function handleProfileFilter(value: string) {
     setProfileFilter(value);
@@ -266,18 +319,40 @@ export function Discover() {
             Job boards · scored for your profiles
           </p>
         </div>
-        <button
-          onClick={triggerFetch}
-          disabled={fetching}
-          className="shrink-0 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-        >
-          {fetching ? "Fetching…" : "Fetch All Jobs"}
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={triggerFetch}
+            disabled={fetching}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {fetching ? "Fetching…" : "Fetch All Jobs"}
+          </button>
+          <button
+            onClick={triggerBatch}
+            disabled={fetching}
+            title="Uses Anthropic Batch API — results arrive asynchronously, funnel will update as batches complete"
+            className="px-4 py-2 border border-blue-600 text-blue-700 text-sm font-semibold rounded-lg hover:bg-blue-50 disabled:opacity-50 transition-colors"
+          >
+            Batch mode (50% cheaper)
+          </button>
+        </div>
       </div>
 
       {fetchError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {fetchError}
+        </div>
+      )}
+
+      {timedOut && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-center justify-between gap-3">
+          <span>Discovery is taking longer than expected. Refresh to check status.</span>
+          <button
+            onClick={refreshRunStatus}
+            className="shrink-0 px-3 py-1 border border-amber-300 rounded-md text-amber-800 hover:bg-amber-100 font-medium"
+          >
+            Refresh
+          </button>
         </div>
       )}
 
@@ -322,6 +397,17 @@ export function Discover() {
               <JobCard key={job.id} job={job} onToggleSave={handleToggleSave} />
             ))}
           </div>
+          {hasMore && (
+            <div className="text-center pt-2">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="px-4 py-2 text-sm border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              >
+                {loadingMore ? "Loading…" : "Load more"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
