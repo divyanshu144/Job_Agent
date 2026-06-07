@@ -35,7 +35,6 @@ async def analysis_with_jp(mem_db):
         id="prof-1",
         yaml_data="",
         cv_text="",
-        github_data="{}",
         merged_profile="test profile",
         last_refreshed_at=datetime.now(timezone.utc),
     )
@@ -175,7 +174,6 @@ async def test_discover_contacts_raises_domain_required_when_no_company(mem_db):
         id="prof-2",
         yaml_data="",
         cv_text="",
-        github_data="{}",
         merged_profile="",
         last_refreshed_at=datetime.now(timezone.utc),
     )

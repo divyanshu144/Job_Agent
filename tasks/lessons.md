@@ -8,6 +8,16 @@ Fix: what the correct approach is
 Avoid: what not to do next time
 -->
 
+## [2026-06-07] Kill the cause, not the symptom: removed GitHub to make the cache hash deterministic
+
+Pattern: The content-hash cache key (`profile_content_hash(merged_profile)`) was non-deterministic because `_assemble_merged` iterated a GitHub-README dict in unordered DB/dict order. The first fix sorted the dict (`sorted(github_data.items())`) — a symptom patch that kept the unstable input alive. GitHub READMEs were the *only* collection-iterating input to `merged_profile`.
+
+Fix: Removed GitHub as a profile source entirely. `merged_profile` is now YAML + CV only — two ordered scalars, deterministic by construction, so the content hash is stable with no sort needed. Whole surface went: `github_client.py`, `refresh_github_cache`, `/profile/refresh/github`, `/profile/status`, `GithubCache` model + `Profile.github_data`/`github_last_fetched_at`, config + schemas + frontend banner/timestamp/button + ~13 test fixtures.
+
+Avoid: Sorting/normalizing a fragile input to stabilize a hash when the input isn't needed. If a feature exists only to feed a value you then have to defensively normalize, deleting the feature is the deeper fix. DB-row / dict iteration order is never guaranteed — anything feeding a hash must be ordered or scalar.
+
+Also: Removing a mapped column (`Profile.github_data`) ripples to every test that constructs the model with that kwarg (~13 here). Leave-orphan in existing DBs (no DROP) matches the additive `init_db` pattern — SQLAlchemy only queries mapped columns, so orphan table/columns are harmless.
+
 ## [2026-05-28] Anthropic prompt caching: token threshold and field semantics
 
 Pattern: Adding `cache_control: {type: ephemeral}` to system prompts does nothing if the prompt is under the model's minimum cacheable length. Haiku requires ≥2048 tokens. `input_tokens` in the response **excludes** cached portions — it is mutually exclusive with `cache_creation_input_tokens` and `cache_read_input_tokens`. SUM = input + creation + read across calls for the same prompt.
@@ -54,15 +64,15 @@ See: `backend/routes/contacts.py:26`
 
 ---
 
-## [2026-05-26] JD hash cache key does not include profile content
+## [2026-06-06] Cache key used a ROTATING identifier as a proxy for content (supersedes 2026-05-26 entry)
 
-Pattern: The analysis cache key is `sha256(jd_text + "::" + profile.id)`. If a user updates their profile (new CV, refreshed GitHub data) and then re-runs the same JD, the orchestrator returns the cached analysis — built against the old profile — without any indication it is stale.
+Pattern: The analysis cache key was `sha256(jd_text + "::" + profile.id)`. The earlier note assumed `profile.id` was *stable* and only worried about staleness. The real defect is the opposite and worse: `build_profile` inserts a NEW `Profile` row with a fresh `uuid4()` on **every** Refresh / CV upload / GitHub refresh, and `get_or_build_profile` returns the latest. So `profile.id` rotates constantly → every profile build silently **invalidated the entire analysis cache** (needless recompute + spend), while *also* failing to invalidate when content changed without an id change.
 
-Fix (deferred): Hash the profile content instead of just the ID: `sha256(jd_text + "::" + profile.merged_profile)`. This is a correctness tradeoff — content hash increases cache misses but ensures the cache reflects actual profile state.
+Fix (implemented): key on profile **content**, via one primitive + one helper. `profile_content_hash(merged_profile)` (profile_builder.py) is the single definition of "profile identity"; `analysis_cache_key(jd, profile)` (orchestrator.py) is the single key derivation, called by both cache sites (`run_evaluate_pipeline`, `_run_phase1`). Identical content → identical key (survives a no-op Refresh); changed content → new key. No DB migration; existing `jd_hash` values go permanently un-hit (expected one-time cold start). Caveat: keys on the *built* merged_profile, so an on-disk YAML edit without a Refresh still returns the prior result — the row wasn't rebuilt.
 
-Avoid: Using a stable identifier (ID, filename) as a proxy for content in cache keys. Identifiers don't change when content changes.
+Avoid: Using ANY rotating/unstable identifier (uuid, autoincrement id, row pk, filename) as a proxy for content in a cache key. If the cache must reflect content, hash the content. Extract the key derivation into ONE helper so it can't drift across call sites.
 
-See: `backend/services/orchestrator.py:62`
+See: `backend/services/orchestrator.py` (`analysis_cache_key`), `backend/services/profile_builder.py` (`profile_content_hash`)
 
 ---
 

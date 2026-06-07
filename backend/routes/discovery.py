@@ -27,7 +27,7 @@ from backend.services.discovery import (
 
 router = APIRouter(tags=["discovery"])
 
-_VALID_SOURCES = {"hn", "reed", "adzuna"}
+_VALID_SOURCES = {"hn", "reed", "adzuna", "remotive", "yc", "targets"}
 
 
 def _run_to_response(run: DiscoveryRun) -> DiscoveryRunResponse:
@@ -125,6 +125,9 @@ async def get_discovery_sources(
             "hn": "hn" in configured,
             "reed": "reed" in configured,
             "adzuna": "adzuna" in configured,
+            "remotive": "remotive" in configured,
+            "yc": "yc" in configured,
+            "targets": "targets" in configured,
         }
     )
 

@@ -1,63 +1,66 @@
 # Session Handoff
 
-**Updated:** 2026-06-02  
-**Branch:** main (local at `9fb7147`, **ahead of `origin/main` `3f493d8` — push held for review**)
+**Updated:** 2026-06-07
+**Branch:** feat/discovery-new-sources (off `chore/remove-github-profile-source`)
 
 ---
 
 ## Current State
 
-**Branch consolidation LANDED on local `main`.** `main` was fast-forwarded from the Batch-API
-state (`3f493d8`) to the integration tip (`9fb7147`). `make check` green at this commit:
-**233 passed, 1 deselected, 75.67% coverage.** Working tree clean (this HANDOFF aside).
+**Three new discovery sources COMPLETE** (plan: `~/.claude/plans/atomic-beaming-hamming.md`,
+approved). TDD throughout (17 tests written failing first, then implemented). `make check` green
+(**251 passed, 77.45% cov** — prior 234 preserved + 17 new).
 
-What's now in `main` (consolidated this session):
-- **Batch API discovery** (already in `3f493d8` — PR #7): `batch_processor`, `DiscoveryBatch`,
-  `log_batch_llm_call`, `calculate_cost(batch=True)`, `/discovery/run/batch`.
-- **Evals** (from `feat/evals-clean`): `backend/evals/validators.py` (per-agent `validate_*`),
-  `scripts/consistency_check.py`, `tests/test_evals/`, `make eval-consistency`. Merged clean.
-- **Observability + harness** (from `feat/history`, which contained `chore/harness-hooks` ==
-  `feat/observability`): structured JSON logging + `trace_id`, `PipelineEvent` spans/failures/
-  tool/retry, feedback capture + hook, HANDOFF stop hook, lessons. `instrumentation.py` and
-  `discovery.py` auto-merged with the Batch API additions (both sets of functions coexist).
-- **Analysed-jobs list** on the Analyse page (`feat/history`): denormalized Analysis fields +
-  `scripts/backfill_analysis_meta.py` + `api.listHistory`.
+Added **Remotive** (keyless), **YC → ATS passthrough**, and a **manual target list**, all normalising
+to the existing `RawJob` dataclass and returning `list[RawJob]` like `fetch_reed_jobs`.
 
-Integration done on `integration/consolidate` (off `main`); only conflict was `schemas.py`
-(both added a class — kept both). The earlier evals "lost" framing was corrected (they lived on
-`feat/evals-clean`, now merged).
+**New modules (`backend/services/`):**
+- `remotive_client.py` — `fetch_remotive_jobs()`; GET remotive software-dev API, HTML-stripped.
+- `ats_client.py` — `detect_ats(jobs_url)`, `_extract_slug`, `fetch_ats_jobs(ats, slug)` dispatching
+  Greenhouse/Lever/Ashby with per-provider normalisers. Shared by YC + targets.
+- `yc_client.py` — `fetch_yc_jobs()`; YC hiring companies → detect ATS → aggregate. Per-company
+  try/except continue; unknown-ATS companies skipped.
+- `targets_client.py` — `fetch_target_jobs()`; reads `assets/target_companies.json`, queries ATS per
+  entry. Missing/invalid file → []; malformed entries + per-entry errors skipped.
+
+**Wiring (`discovery.py`):** new imports; additive `elif source == "remotive"/"yc"/"targets"`
+branches before the `else` (HN) in all three fetch-dispatch sites (`_run_discovery_task`,
+`_run_source_task`, `_run_batch_discovery_task`) — existing reed/adzuna/hn lines untouched.
+`_get_configured_sources()` now always includes remotive+yc, adds targets when
+`assets/target_companies.json` is populated (new `_target_list_present()` helper).
+
+**Routes (`routes/discovery.py`):** `_VALID_SOURCES` extended with the three; `/discovery/sources`
+response dict reports them.
+
+**Asset:** `assets/target_companies.json` with 5 placeholder entries (greenhouse/lever/ashby mix).
+
+**Note on ATS response shapes:** the Greenhouse/Lever/Ashby/Remotive/YC JSON field mappings are coded
+defensively (`.get(...) or ""`) and pinned by mocked tests; if a live response differs, adjust the
+per-provider normalisers in `ats_client.py` / `remotive_client.py`. No live calls were made.
 
 ## Next Action
 
-1. **You eyeball `main`, then give the okay to push** — held per your instruction:
-   `git push origin main` (`9fb7147` → `origin/main`). Non-force.
-2. After push: tidy merged feature branches / PRs; `integration/consolidate` can be deleted.
-3. Deferred (your hands / your call):
-   - `feat/referral-clean` — its own review pass (referral system + removes GitHub scraping).
-   - `feat/prompt-caching` / `feat/job-board-scrapers` — assessed: no unique unmerged work
-     (superseded; identical pair). Delete when ready (hook-blocked for the agent).
-   - `python scripts/backfill_analysis_meta.py --claim-orphans` to recover the 4 analysed-job rows.
+Commit on `feat/discovery-new-sources`. Folds into the pending batch merge onto `main` alongside the
+other stacked branches.
 
 ## Why It Stopped
 
-ff to `main` done; HANDOFF written for the landed state. Holding the `origin main` push for your
-explicit okay after you review `main`.
+Feature complete and verified. Committing.
 
 ## In-Flight
 
-Local `main` == `integration/consolidate` == `9fb7147`, ahead of `origin/main` by the consolidation
-commits. This HANDOFF commit sits on top. Nothing else uncommitted.
+Committing now: new files `backend/services/{remotive,ats,yc,targets}_client.py`,
+`assets/target_companies.json`, `tests/test_services/test_new_sources.py`; edits to
+`backend/services/discovery.py`, `backend/routes/discovery.py`, this HANDOFF.
 
 ## Open Questions
 
-1. Push `origin main` directly (awaiting okay), or open a PR from a branch instead?
-2. Keep `integration/consolidate` as the merge record, or delete after pushing `main`?
-3. Evals scorer that *consumes* `Feedback` — the remaining evals gap (hook in `backend/evals/__init__.py`).
+1. Frontend Discover.tsx source toggles don't yet surface the 3 new sources (out of scope this pass).
+2. Live response-shape validation against real Greenhouse/Lever/Ashby/YC payloads still pending.
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make check` @ `9fb7147` | ✓ 233 passed, 1 deselected, 75.67% coverage |
-| merge conflicts | only `schemas.py` (additive — both classes kept); instrumentation.py & discovery.py auto-merged |
-| `main` vs `origin/main` | local ahead (push held); `origin/main` still `3f493d8` |
+| `make check` | ✓ 251 passed, 1 deselected, 77.45% coverage |
+| new tests | ✓ 17 in tests/test_services/test_new_sources.py (remotive, ats detect/fetch, yc, targets, config) |

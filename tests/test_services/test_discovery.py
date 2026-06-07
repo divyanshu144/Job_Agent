@@ -70,7 +70,6 @@ async def test_process_job_filters_stage1_failure(session):
         id="p1",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="m",
         last_refreshed_at=datetime.now(timezone.utc),
     )
@@ -106,7 +105,6 @@ async def test_process_job_skips_duplicate_hash(session):
         id="p2",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="m",
         last_refreshed_at=datetime.now(timezone.utc),
     )
@@ -163,7 +161,6 @@ async def test_process_job_scores_relevant_job(session):
         id="p3",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="m",
         last_refreshed_at=datetime.now(timezone.utc),
     )
@@ -228,7 +225,6 @@ async def test_process_job_phase1_failure_sets_filtered(session):
         id="p4",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="m",
         last_refreshed_at=datetime.now(timezone.utc),
     )
@@ -284,7 +280,6 @@ async def test_process_job_reed_source_tag_stored(session):
         id="p5",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="m",
         last_refreshed_at=datetime.now(timezone.utc),
     )

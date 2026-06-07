@@ -43,7 +43,6 @@ async def test_evaluate_pipeline_denormalizes_meta(session):
         id="p-meta",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="profile text",
         last_refreshed_at=datetime.now(timezone.utc),
     )

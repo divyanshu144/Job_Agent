@@ -14,7 +14,6 @@ async def _profile(db):
         id="p-bf",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="m",
         last_refreshed_at=datetime.now(timezone.utc),
     )

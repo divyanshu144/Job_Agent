@@ -32,7 +32,6 @@ async def _profile(session):
         id="p-evt",
         yaml_data="name: Test",
         cv_text="",
-        github_data="{}",
         merged_profile="merged",
         last_refreshed_at=datetime.now(timezone.utc),
     )

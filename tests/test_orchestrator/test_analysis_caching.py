@@ -36,17 +36,16 @@ async def test_cache_hit_returns_existing_analysis(session):
         id="p1",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="profile",
         last_refreshed_at=datetime.now(timezone.utc),
     )
     session.add(profile)
     await session.flush()
 
-    # Pre-seed a complete analysis with the same JD
-    import hashlib
+    # Pre-seed a complete analysis with the same JD (content-hashed key)
+    from backend.services.orchestrator import analysis_cache_key
 
-    jd_hash = hashlib.sha256(f"{JD}::p1".encode()).hexdigest()
+    jd_hash = analysis_cache_key(JD, profile)
     existing = Analysis(
         jd_text=JD,
         profile_id="p1",
@@ -85,13 +84,69 @@ async def test_cache_hit_returns_existing_analysis(session):
     assert events[0].data["score"] == 75
 
 
+async def test_cache_hit_survives_profile_id_rotation(session):
+    """Regression: a Refresh that mints a new profile.id but identical merged content
+    must still hit the cache (the id-keyed bug invalidated it on every refresh)."""
+    from backend.services.orchestrator import analysis_cache_key, run_evaluate_pipeline
+
+    old = Profile(
+        id="old-id",
+        yaml_data="x",
+        cv_text="",
+        merged_profile="IDENTICAL CONTENT",
+        last_refreshed_at=datetime.now(timezone.utc),
+    )
+    session.add(old)
+    await session.flush()
+    existing = Analysis(
+        jd_text=JD,
+        profile_id=old.id,
+        partial=False,
+        evaluate_only=True,
+        jd_hash=analysis_cache_key(JD, old),
+    )
+    session.add(existing)
+    await session.flush()
+    session.add(
+        JobResult(
+            analysis_id=existing.id,
+            agent_name="match_scorer",
+            output_json=json.dumps(
+                {"score": 75, "matched_skills": [], "missing_skills": [], "partial_matches": []}
+            ),
+        )
+    )
+    await session.commit()
+
+    # New profile row: rotated id, SAME merged content.
+    rotated = Profile(
+        id="new-id",
+        yaml_data="x",
+        cv_text="",
+        merged_profile="IDENTICAL CONTENT",
+        last_refreshed_at=datetime.now(timezone.utc),
+    )
+    with (
+        patch(
+            "backend.services.orchestrator.get_or_build_profile",
+            new_callable=AsyncMock,
+            return_value=rotated,
+        ),
+        patch("backend.agents.job_parser.JobParserAgent.run", new_callable=AsyncMock) as jp_run,
+    ):
+        events = [e async for e in run_evaluate_pipeline(JD, session)]
+
+    assert len(events) == 1 and events[0].name == "pipeline_done"
+    assert events[0].data["analysis_id"] == existing.id  # cache HIT despite new id
+    jp_run.assert_not_called()  # agents did not run
+
+
 async def test_cache_miss_runs_pipeline(session):
     """When no cached analysis exists, all three Phase 1 agents run."""
     profile = Profile(
         id="p2",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="profile",
         last_refreshed_at=datetime.now(timezone.utc),
     )
@@ -141,16 +196,15 @@ async def test_partial_cache_not_reused(session):
         id="p3",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="profile",
         last_refreshed_at=datetime.now(timezone.utc),
     )
     session.add(profile)
     await session.flush()
 
-    import hashlib
+    from backend.services.orchestrator import analysis_cache_key
 
-    jd_hash = hashlib.sha256(f"{JD}::p3".encode()).hexdigest()
+    jd_hash = analysis_cache_key(JD, profile)
     partial_analysis = Analysis(
         jd_text=JD, profile_id="p3", partial=True, evaluate_only=True, jd_hash=jd_hash
     )

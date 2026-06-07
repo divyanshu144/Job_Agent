@@ -1,4 +1,3 @@
-import json
 from unittest.mock import AsyncMock, patch
 
 import pytest_asyncio
@@ -25,36 +24,23 @@ async def session():
 
 
 async def test_build_profile_merges_sources(session, tmp_path):
-    from backend.models import GithubCache
-
     yaml_path = tmp_path / "profile.yaml"
-    yaml_path.write_text(
-        "identity:\n  name: Test User\ncore_skills:\n  languages: [Python]\n"
-        "featured_projects:\n  - repo: divyanshu144/docchat\n"
-    )
-
-    # Populate GitHub cache
-    cache = GithubCache(
-        owner="divyanshu144", repo_name="docchat", readme_content="# DocChat README"
-    )
-    session.add(cache)
-    await session.commit()
+    yaml_path.write_text("identity:\n  name: Test User\ncore_skills:\n  languages: [Python]\n")
 
     with patch(
-        "backend.services.cv_parser.extract_text_from_file", new_callable=AsyncMock
-    ) as mock_cv:
-        mock_cv.return_value = ""
+        "backend.services.profile_builder.extract_text_from_file",
+        new_callable=AsyncMock,
+        return_value="My CV body text",
+    ):
         from backend.services.profile_builder import build_profile
 
         profile = await build_profile(session, str(yaml_path), "fake/cv.pdf")
 
     assert profile.id is not None
     assert "Test User" in profile.yaml_data
-    assert profile.cv_text == ""
-    github = json.loads(profile.github_data)
-    assert "divyanshu144/docchat" in github
+    assert profile.cv_text == "My CV body text"
     assert "## Candidate Profile" in profile.merged_profile
-    assert "DocChat" in profile.merged_profile
+    assert "My CV body text" in profile.merged_profile
 
 
 async def test_get_or_build_returns_cached(session, tmp_path):
