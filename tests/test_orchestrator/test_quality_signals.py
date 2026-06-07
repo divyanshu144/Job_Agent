@@ -41,7 +41,6 @@ async def test_phase2_persists_and_emits_quality_signals(session):
         id="p-qs",
         yaml_data="x",
         cv_text="",
-        github_data="{}",
         merged_profile="profile text",
         last_refreshed_at=datetime.now(timezone.utc),
     )
