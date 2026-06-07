@@ -120,7 +120,9 @@ async def _stage2_check(
         db=db,
         run_id=run_id,
         max_tokens=200,
-        system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+        # stage2 intentionally uncached: ~380 tok << 4096 Haiku min; see DevLog
+        # 'stage2 enrichment' for the only case that flips this.
+        system=system,
         messages=[{"role": "user", "content": f"Job posting:\n{raw_text[:3000]}"}],
     )
     if not msg.content:
