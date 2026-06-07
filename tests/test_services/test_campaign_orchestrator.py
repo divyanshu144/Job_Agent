@@ -1,9 +1,11 @@
 # tests/test_services/test_campaign_orchestrator.py
 from __future__ import annotations
 
+import base64
 import contextlib
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from email import message_from_bytes
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest_asyncio
 from sqlalchemy import select
@@ -73,6 +75,7 @@ def _patched(Session, score_side_effect):
         patch(f"{mod}._resume_tailor", new_callable=AsyncMock),
         patch(f"{mod}._contact_find", new_callable=AsyncMock, return_value=None),
         patch(f"{mod}._cold_email", new_callable=AsyncMock),
+        patch(f"{mod}._draft_create", new_callable=AsyncMock, return_value="draft-x"),
     ):
         yield
 
@@ -179,6 +182,7 @@ async def test_resume_tailor_receives_job_description(Session):
         patch(f"{mod}._resume_tailor", new_callable=AsyncMock) as rt,
         patch(f"{mod}._contact_find", new_callable=AsyncMock, return_value=None),
         patch(f"{mod}._cold_email", new_callable=AsyncMock),
+        patch(f"{mod}._draft_create", new_callable=AsyncMock, return_value="draft-x"),
     ):
         from backend.services.campaign_orchestrator import run_campaign
 
@@ -215,6 +219,12 @@ async def test_contact_find_runs_before_cold_email_and_threads_contact(Session):
         captured["contact"] = contact
         return ColdEmailOutput(subject="S", body="B")
 
+    def draft_create(job_id, pdf, contact, email, db):
+        calls.append("draft_create")
+        captured["draft_contact"] = contact
+        captured["draft_email"] = email
+        return "draft-x"
+
     mod = "backend.services.campaign_orchestrator"
     with (
         patch(f"{mod}.SessionLocal", Session),
@@ -222,13 +232,17 @@ async def test_contact_find_runs_before_cold_email_and_threads_contact(Session):
         patch(f"{mod}._resume_tailor", new_callable=AsyncMock),
         patch(f"{mod}._contact_find", new_callable=AsyncMock, side_effect=contact_find),
         patch(f"{mod}._cold_email", new_callable=AsyncMock, side_effect=cold_email),
+        patch(f"{mod}._draft_create", new_callable=AsyncMock, side_effect=draft_create),
     ):
         from backend.services.campaign_orchestrator import run_campaign
 
         await run_campaign(threshold=0.75)
 
-    assert calls == ["contact_find", "cold_email"]  # order matters
+    # contact_find before cold_email, and draft_create terminal
+    assert calls == ["contact_find", "cold_email", "draft_create"]
     assert captured["contact"] is sentinel  # contact threads into cold_email
+    assert captured["draft_contact"] is sentinel  # ...and into draft_create
+    assert captured["draft_email"].subject == "S"  # email threads into draft_create
 
 
 async def test_contact_find_returns_highest_confidence(Session):
@@ -300,3 +314,119 @@ async def test_cold_email_threads_contact_name_and_is_generic_without():
 
         await _cold_email("job1", "JD text", None, "profile text", None)
         assert mrun.await_args.kwargs["contact_name"] is None
+
+
+# ── _draft_create (Gmail) ──────────────────────────────────────────────────────
+
+
+def _gmail_mock(capture: dict, draft_id: str = "draft-1", fail: bool = False) -> MagicMock:
+    """Mock Gmail client whose users().drafts().create(...).execute() captures the
+    raw message and returns {"id": draft_id} (or raises if fail)."""
+    client = MagicMock()
+
+    def create(userId, body):  # noqa: N803 — matches Gmail API kwarg
+        capture["raw"] = body["message"]["raw"]
+        leaf = MagicMock()
+        if fail:
+            leaf.execute.side_effect = RuntimeError("gmail boom")
+        else:
+            leaf.execute.return_value = {"id": draft_id}
+        return leaf
+
+    client.users.return_value.drafts.return_value.create.side_effect = create
+    return client
+
+
+def _decode(raw_b64url: str):
+    return message_from_bytes(base64.urlsafe_b64decode(raw_b64url))
+
+
+async def _seed_campaign_job(Session, job_id: str, company: str | None = None) -> None:
+    async with Session() as s:
+        if company is not None:
+            job = (await s.execute(select(Job).where(Job.id == job_id))).scalar_one()
+            job.company = company
+        s.add(CampaignJob(job_id=job_id, match_score=0.9, status="queued"))
+        await s.commit()
+
+
+async def test_draft_create_builds_pdf_attachment_and_flips_status(Session):
+    ids = await _seed_jobs(Session, 1)
+    await _seed_campaign_job(Session, ids[0])
+    contact = Contact(
+        id="c", analysis_id="a", email="ada@acme.com", name="Ada", company="Acme Corp"
+    )
+    email = ColdEmailOutput(subject="Hello Ada", body="Plain body text")
+    capture: dict = {}
+
+    with patch(
+        "backend.services.campaign_orchestrator._gmail_client",
+        return_value=_gmail_mock(capture, "draft-1"),
+    ):
+        from backend.services.campaign_orchestrator import _draft_create
+
+        async with Session() as db:
+            draft_id = await _draft_create(ids[0], b"%PDF-1.4 data", contact, email, db)
+
+    assert draft_id == "draft-1"
+    msg = _decode(capture["raw"])
+    assert msg.is_multipart()
+    assert msg["To"] == "ada@acme.com"
+    assert msg["Subject"] == "Hello Ada"
+    pdfs = [p for p in msg.walk() if p.get_content_type() == "application/pdf"]
+    assert len(pdfs) == 1
+    assert pdfs[0].get_filename() == "Acme_Corp_resume.pdf"
+
+    async with Session() as s:
+        row = (
+            await s.execute(select(CampaignJob).where(CampaignJob.job_id == ids[0]))
+        ).scalar_one()
+    assert row.status == "drafted"
+    assert row.draft_id == "draft-1"
+
+
+async def test_draft_create_blank_to_when_no_contact(Session):
+    ids = await _seed_jobs(Session, 1)
+    await _seed_campaign_job(Session, ids[0], company="Globex")
+    email = ColdEmailOutput(subject="Hi", body="Body")
+    capture: dict = {}
+
+    with patch(
+        "backend.services.campaign_orchestrator._gmail_client",
+        return_value=_gmail_mock(capture, "draft-2"),
+    ):
+        from backend.services.campaign_orchestrator import _draft_create
+
+        async with Session() as db:
+            draft_id = await _draft_create(ids[0], b"%PDF", None, email, db)
+
+    assert draft_id == "draft-2"
+    msg = _decode(capture["raw"])
+    assert (msg["To"] or "") == ""  # blank To when no contact
+    pdfs = [p for p in msg.walk() if p.get_content_type() == "application/pdf"]
+    assert pdfs[0].get_filename() == "Globex_resume.pdf"
+
+
+async def test_draft_create_gmail_failure_sets_failed_without_raising(Session):
+    ids = await _seed_jobs(Session, 1)
+    await _seed_campaign_job(Session, ids[0])
+    contact = Contact(id="c", analysis_id="a", email="x@y.com", name="X", company="Z")
+    email = ColdEmailOutput(subject="S", body="B")
+    capture: dict = {}
+
+    with patch(
+        "backend.services.campaign_orchestrator._gmail_client",
+        return_value=_gmail_mock(capture, fail=True),
+    ):
+        from backend.services.campaign_orchestrator import _draft_create
+
+        async with Session() as db:
+            draft_id = await _draft_create(ids[0], b"%PDF", contact, email, db)
+
+    assert draft_id == ""  # did not raise past the per-job boundary
+    async with Session() as s:
+        row = (
+            await s.execute(select(CampaignJob).where(CampaignJob.job_id == ids[0]))
+        ).scalar_one()
+    assert row.status == "failed"
+    assert "gmail boom" in (row.error or "")

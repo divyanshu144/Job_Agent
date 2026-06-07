@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import base64
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from email.message import EmailMessage
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.agents.cold_email_agent import ColdEmailAgent
 from backend.agents.job_parser import JobParserAgent
 from backend.agents.match_scorer import MatchScorerAgent
+from backend.config import settings
 from backend.database import SessionLocal
 from backend.models import Analysis, CampaignJob, Contact, Job, Profile
 from backend.schemas import ColdEmailOutput, PriorOutputs
@@ -18,6 +24,8 @@ from backend.services.profile_builder import build_compact_profile, get_or_build
 from backend.services.resume_latex import load_resume_latex, tailor_resume_pdf
 
 logger = logging.getLogger(__name__)
+
+_GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.compose"
 
 
 @dataclass
@@ -118,18 +126,100 @@ async def _cold_email(
     )
 
 
-# Still stubbed — implemented in the next prompt. Receives the in-memory
-# artifacts (resume PDF, contact, drafted email) to persist/send.
+def _gmail_client() -> Any:  # pragma: no cover - thin OAuth wiring; mocked in tests
+    """Build a Gmail API client from a stored OAuth refresh token.
+
+    Server-side only — does NOT use the Claude.ai Gmail MCP connector. Factored
+    out so tests can mock it. Real runs need google-api-python-client + google-auth
+    and gmail_* settings populated.
+    """
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+
+    creds = Credentials(  # type: ignore[no-untyped-call]
+        None,
+        refresh_token=settings.gmail_refresh_token,
+        client_id=settings.gmail_client_id,
+        client_secret=settings.gmail_client_secret,
+        token_uri="https://oauth2.googleapis.com/token",
+        scopes=[_GMAIL_SCOPE],
+    )
+    return build("gmail", "v1", credentials=creds, cache_discovery=False)
+
+
+def _build_message(to: str, subject: str, body: str, pdf: bytes, company: str) -> EmailMessage:
+    """Multipart MIME: plain-text body + PDF attachment named {company}_resume.pdf."""
+    msg = EmailMessage()
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.set_content(body)
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", company).strip("_") or "company"
+    msg.add_attachment(pdf, maintype="application", subtype="pdf", filename=f"{safe}_resume.pdf")
+    return msg
+
+
+def _encode(msg: EmailMessage) -> str:
+    return base64.urlsafe_b64encode(msg.as_bytes()).decode()
+
+
+def _create_draft(raw: str) -> str:
+    """Blocking Gmail call (run in a thread). Returns the created draft id."""
+    client = _gmail_client()
+    created = client.users().drafts().create(userId="me", body={"message": {"raw": raw}}).execute()
+    return str(created["id"])
+
+
+async def _set_campaign_status(
+    db: AsyncSession,
+    job_id: str,
+    *,
+    status: str,
+    draft_id: str | None = None,
+    error: str | None = None,
+) -> None:
+    row = (
+        (await db.execute(select(CampaignJob).where(CampaignJob.job_id == job_id)))
+        .scalars()
+        .first()
+    )
+    if row is None:
+        return
+    row.status = status
+    if draft_id is not None:
+        row.draft_id = draft_id
+    if error is not None:
+        row.error = error
+    await db.commit()
 
 
 async def _draft_create(
     job_id: str,
-    resume_pdf: bytes,
+    pdf: bytes,
     contact: Contact | None,
     email: ColdEmailOutput,
-) -> None:
-    logger.info("TODO: draft_create for job %s", job_id)
-    return None
+    db: AsyncSession,
+) -> str:
+    """Create a Gmail draft (cold email + resume PDF attachment) and flip the
+    CampaignJob to drafted. On Gmail error: status=failed, error recorded, and we
+    return "" — never raising past the per-job boundary, so the run continues.
+    Returns the draft id on success, "" on failure.
+    """
+    job = (await db.execute(select(Job).where(Job.id == job_id))).scalar_one_or_none()
+    company = (contact.company if contact and contact.company else None) or (
+        job.company if job else ""
+    )
+    to = contact.email if contact else ""
+    raw = _encode(_build_message(to, email.subject, email.body, pdf, company))
+
+    try:
+        draft_id = await asyncio.to_thread(_create_draft, raw)
+    except Exception as e:  # Gmail API failure must not abort the run
+        logger.warning("draft_create: Gmail error for job %s: %s", job_id, e)
+        await _set_campaign_status(db, job_id, status="failed", error=str(e))
+        return ""
+
+    await _set_campaign_status(db, job_id, status="drafted", draft_id=draft_id)
+    return draft_id
 
 
 async def _record_failure(job_id: str, error: str) -> None:
@@ -207,10 +297,16 @@ async def run_campaign(threshold: float = 0.75) -> CampaignRunResult:
                 email = await _cold_email(
                     job_id, job_description, contact, profile.merged_profile, db
                 )
-            await _draft_create(job_id, pdf, contact, email)  # no-op this prompt
+                draft_id = await _draft_create(job_id, pdf, contact, email, db)
 
-            result.queued += 1
-            result.queued_ids.append(job_id)
+            # _draft_create owns its own failure (status=failed, no raise): an
+            # empty draft id means the Gmail draft failed → count as failed.
+            if draft_id:
+                result.queued += 1
+                result.queued_ids.append(job_id)
+            else:
+                result.failed += 1
+                result.failed_ids.append(job_id)
         except Exception as e:  # one job must never abort the run
             logger.warning("Campaign job %s failed: %s", job_id, e)
             await _record_failure(job_id, str(e))
