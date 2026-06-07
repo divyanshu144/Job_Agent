@@ -7,11 +7,13 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.agents.cold_email_agent import ColdEmailAgent
 from backend.agents.job_parser import JobParserAgent
 from backend.agents.match_scorer import MatchScorerAgent
 from backend.database import SessionLocal
-from backend.models import CampaignJob, Job, Profile
-from backend.schemas import PriorOutputs
+from backend.models import Analysis, CampaignJob, Contact, Job, Profile
+from backend.schemas import ColdEmailOutput, PriorOutputs
+from backend.services.contact_discovery import ContactDiscoveryUnavailable, discover_contacts
 from backend.services.profile_builder import build_compact_profile, get_or_build_profile
 from backend.services.resume_latex import load_resume_latex, tailor_resume_pdf
 
@@ -59,20 +61,73 @@ async def _resume_tailor(job_id: str, job_description: str) -> bytes:
     return pdf
 
 
-# Still stubbed — implemented in later prompts.
+async def _contact_find(job_id: str, company: str | None, db: AsyncSession) -> Contact | None:
+    """Find the best outreach contact via the existing Hunter.io discovery agent.
+
+    Returns the highest-confidence contact (with an email), or None if none are
+    found / Hunter is unavailable. Never fails the job — _draft_create (next
+    prompt) decides what to do without a contact. Uses the job's own session.
+    """
+    analysis = (
+        (
+            await db.execute(
+                select(Analysis)
+                .where(Analysis.job_id == job_id)
+                .order_by(Analysis.created_at.desc())
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if analysis is None:
+        logger.info("contact_find: no analysis for job %s — no contact", job_id)
+        return None
+
+    domain = (company.lower().replace(" ", "") + ".com") if company else None
+    try:
+        contacts = await discover_contacts(analysis.id, db, domain=domain)
+    except (ContactDiscoveryUnavailable, ValueError) as e:
+        logger.info("contact_find: discovery unavailable for job %s: %s", job_id, e)
+        return None
+
+    candidates = [c for c in contacts if c.email]
+    if not candidates:
+        logger.info("contact_find: no contacts found for job %s", job_id)
+        return None
+    return max(candidates, key=lambda c: c.confidence)
 
 
-async def _cold_email(job_id: str) -> None:
-    logger.info("TODO: cold_email for job %s", job_id)
-    return None
+async def _cold_email(
+    job_id: str,
+    job_description: str,
+    contact: Contact | None,
+    profile_text: str,
+    db: AsyncSession,
+) -> ColdEmailOutput:
+    """Draft cold-email subject + body via the existing ColdEmailAgent.
+
+    Personalises the greeting with contact.name when present (generic otherwise).
+    Returns text only — does NOT touch the resume PDF. Uses the job's own session.
+    """
+    agent = ColdEmailAgent().with_tracking(db)
+    return await agent.run(
+        profile=profile_text,
+        jd=job_description,
+        contact_name=contact.name if contact else None,
+        contact_title=contact.title if contact else None,
+    )
 
 
-async def _contact_find(job_id: str) -> None:
-    logger.info("TODO: contact_find for job %s", job_id)
-    return None
+# Still stubbed — implemented in the next prompt. Receives the in-memory
+# artifacts (resume PDF, contact, drafted email) to persist/send.
 
 
-async def _draft_create(job_id: str) -> None:
+async def _draft_create(
+    job_id: str,
+    resume_pdf: bytes,
+    contact: Contact | None,
+    email: ColdEmailOutput,
+) -> None:
     logger.info("TODO: draft_create for job %s", job_id)
     return None
 
@@ -129,7 +184,9 @@ async def run_campaign(threshold: float = 0.75) -> CampaignRunResult:
                     result.skipped += 1
                     continue
 
-                job_description = job.raw_text  # capture before the session closes
+                # capture before the session closes
+                job_description = job.raw_text
+                company = job.company
                 db.add(
                     CampaignJob(
                         job_id=job_id,
@@ -140,12 +197,17 @@ async def run_campaign(threshold: float = 0.75) -> CampaignRunResult:
                 )
                 await db.commit()
 
-            # Downstream steps. resume_tailor is real (PDF held in memory, not
-            # persisted); the rest are stubs until later prompts.
-            await _resume_tailor(job_id, job_description)
-            await _contact_find(job_id)
-            await _cold_email(job_id)
-            await _draft_create(job_id)
+            # Downstream steps, threading artifacts in memory (nothing extra
+            # persisted to CampaignJob yet). resume_tailor needs no DB; the
+            # agent-backed steps share this job's own session. Order matters:
+            # contact_find before cold_email so the greeting can be personalised.
+            pdf = await _resume_tailor(job_id, job_description)
+            async with SessionLocal() as db:
+                contact = await _contact_find(job_id, company, db)
+                email = await _cold_email(
+                    job_id, job_description, contact, profile.merged_profile, db
+                )
+            await _draft_create(job_id, pdf, contact, email)  # no-op this prompt
 
             result.queued += 1
             result.queued_ids.append(job_id)

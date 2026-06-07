@@ -7,55 +7,56 @@
 
 ## Current State
 
-**Prompt 3 COMPLETE — LaTeX resume tailoring → PDF, wired into the campaign orchestrator.**
-TDD (4 tests written failing first). `make check` green (**263 passed, 77.69% cov**); ruff + mypy +
-schema-drift pass. Pipeline target: cold email + tailored resume PDF attachment, **no cover letter**.
+**Prompt 4 COMPLETE — contact_find + cold_email wired into the orchestrator as real steps.**
+TDD (4 tests written failing first). `make check` green (**267 passed, 77.68% cov**); ruff + mypy +
+schema-drift pass. Pipeline = tailored resume PDF + personalised cold email (no cover letter).
 
-**What landed:**
-- **Step 1 check:** `ResumeTailorerAgent` IS used by the main interactive pipeline (`orchestrator.py`
-  Phase 2) — so it was **not** repurposed. The LaTeX flow is a **separate module**.
-- **`backend/services/resume_latex.py`** — `tailor_resume_pdf(job_description, latex_source) -> bytes`:
-  LLM (`_tailor_latex`, Sonnet) edits ONLY summary/skills/experience and preserves preamble/structure;
-  writes `.tex` in a `TemporaryDirectory`; runs `pdflatex -interaction=nonstopmode -halt-on-error
-  -output-directory {tmp} {tex}`; on non-zero exit retries ONCE with a self-correction prompt carrying
-  the pdflatex log tail; on second failure raises `ResumeCompileError`. PDF bytes read before tempdir
-  cleanup. Comment notes real runs need texlive (`pdflatex` on PATH).
-- **`assets/resume.tex`** — minimal valid placeholder (`\documentclass{article}` + Summary/Skills/
-  Experience) so the path is exercisable.
-- **Orchestrator (`campaign_orchestrator.py`)**: renamed `_cover_letter` → `_cold_email` (still a
-  no-op; Prompt 4). `_resume_tailor(job_id, job_description)` is now **real** — calls
-  `tailor_resume_pdf(load_resume_latex())`, **PDF held in memory per-job, not persisted**. Loop
-  captures `job.raw_text` before the session closes and passes it. `_record_failure` is now an
-  **upsert** (so a job that fails *after* being queued is flipped to failed, not duplicated).
+**What landed (`campaign_orchestrator.py`):**
+- **`_contact_find(job_id, company, db) -> Contact | None`** — wraps `discover_contacts` (Hunter.io).
+  Resolves the job's `Analysis` (by `job_id`), derives domain from `company`, returns the
+  **highest-confidence** contact with an email. Returns **None** (never raises) when there's no
+  analysis / no contacts / Hunter unavailable (`ContactDiscoveryUnavailable`/`ValueError` caught) —
+  `_draft_create` will decide what to do.
+- **`_cold_email(job_id, job_description, contact, profile_text, db) -> ColdEmailOutput`** — wraps
+  `ColdEmailAgent`. Personalises greeting with `contact.name` when present, generic when None.
+  **Text only; never touches the resume PDF.**
+- **`run_campaign` threading** — per qualifying job, in order: `pdf = _resume_tailor(...)` →
+  (in the job's own session) `contact = _contact_find(...)` → `email = _cold_email(..., contact)` →
+  `_draft_create(job_id, pdf, contact, email)` (still a **no-op**, now receives the artifacts).
+  Nothing extra persisted to `CampaignJob`.
 
-**Testing:** pdflatex is **mocked** (`subprocess.run`) — tests assert command shape, retry-on-failure
-feeds the log tail to the correction prompt, and double-failure raises. CI needs no texlive. Campaign
-logic tests mock `_resume_tailor`; a wiring test asserts it receives the job description.
+**Signature reconciliation (flagged):** the spec's `_contact_find(job_id, company)` /
+`_cold_email(job_id, job_description, contact)` gained the params the existing agents require —
+`_cold_email` also needs `profile_text` (ColdEmailAgent), and both need a **session**. Per the
+constraint, the agent-backed steps share **one session opened per-job** (the job's own; never shared
+across jobs). `_resume_tailor` needs no session.
+
+**Testing:** both agents mocked — order test (contact_find before cold_email + contact threads into
+the email), highest-confidence selection, None-on-unavailable (job not failed), and name-threading
+(present → personalised, None → generic). No network in CI.
 
 ## Next Action
 
-Merge the campaign chain (`feat/campaign-orchestrator` → `feat/resume-latex`) to `main` + push on your
-go, then **Prompt 4** (implement `_cold_email`, consuming the in-memory resume PDF as the attachment).
+**Prompt 5 / `_draft_create`**: persist/send using the threaded `(resume_pdf, contact, email)` — e.g.
+write a Contact draft + attach the PDF, flip `CampaignJob.status` to `drafted` and set `draft_id`.
+Then merge the campaign chain to `main` + push (on your go).
 
 ## In-Flight
 
-Committed on `feat/resume-latex`: `backend/services/resume_latex.py`,
-`backend/services/campaign_orchestrator.py`, `assets/resume.tex`,
-`tests/test_services/test_resume_latex.py`, `tests/test_services/test_campaign_orchestrator.py`,
-this HANDOFF. Branch stacks on `feat/campaign-orchestrator` (Prompt 2), which is not yet on `main`.
+Committed on `feat/resume-latex`: `backend/services/campaign_orchestrator.py`,
+`tests/test_services/test_campaign_orchestrator.py`, this HANDOFF. Stacks on
+`feat/campaign-orchestrator` (Prompt 2) → `feat/resume-latex` (Prompt 3), neither yet on `main`.
 
 ## Open Questions
 
-1. Merge order: `feat/campaign-orchestrator` then `feat/resume-latex` → `main` (stacked). Do it now?
-2. Prompt 4 contract: `_cold_email` consumes the resume PDF — thread the bytes from `_resume_tailor`
-   into `_cold_email(job_id, resume_pdf)` (capture in the loop), and presumably `_contact_find` runs
-   first to supply the recipient. Confirm step order/signatures when we get there.
+1. `_draft_create` contract for next prompt: persist a Contact draft (subject/body) + set
+   `CampaignJob.draft_id` + status `drafted`? Where does the PDF go (attach at send time vs store)?
+2. Merge the three stacked campaign branches to `main` + push — when?
 3. `feat/job-board-scrapers` + `feat/referral-clean` still linger from the cleanup pass.
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 263 passed, 1 deselected, 77.69% coverage |
-| new tests | ✓ 3 resume_latex (cmd shape / retry-feeds-log / double-fail-raises) + 1 orchestrator wiring |
-| texlive | not required in CI (pdflatex mocked); real runs need it on PATH |
+| `make check` | ✓ 267 passed, 1 deselected, 77.68% coverage |
+| new tests | ✓ order+thread / highest-confidence / none-on-unavailable / name-threading |
