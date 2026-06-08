@@ -1,8 +1,13 @@
+from __future__ import annotations
+
+import asyncio
 from typing import Any, AsyncGenerator
 
+from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
+from alembic import command
 from backend.config import settings
 
 
@@ -26,8 +31,23 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+def _run_upgrade(url: str) -> None:
+    """Sync helper: build an Alembic Config and run `upgrade head`.
+
+    Must be called from a thread with no running event loop — alembic/env.py
+    uses asyncio.run() internally, which raises RuntimeError if a loop is already
+    running. Callers inside an async context must use asyncio.to_thread(_run_upgrade, url).
+    """
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", url)
+    command.upgrade(cfg, "head")
+
+
 async def init_db() -> None:
-    # Schema bootstrap only. The legacy runtime column-add migrations were
-    # removed — Alembic owns migrations now (two migration systems would fight).
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """Run `alembic upgrade head` at startup.
+
+    Delegates to the sync _run_upgrade helper via asyncio.to_thread so that
+    alembic/env.py's internal asyncio.run() call does not collide with the
+    running event loop.
+    """
+    await asyncio.to_thread(_run_upgrade, settings.database_url)
