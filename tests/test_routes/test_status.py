@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from backend.models import Analysis, Profile, User
+from backend.models import Analysis, Profile
 
 _USER_ID = "test-user-id"  # matches conftest._FAKE_USER (the auth override)
 
@@ -12,7 +12,7 @@ _USER_ID = "test-user-id"  # matches conftest._FAKE_USER (the auth override)
 @pytest.fixture
 async def seeded_analysis(Session):
     async with Session() as s:
-        s.add(User(id=_USER_ID, email="test@example.com", hashed_password="x"))  # PG FK
+        # The auth user (_USER_ID) is seeded by conftest.
         profile = Profile(
             id="p1",
             yaml_data="x",

@@ -8,6 +8,7 @@ testpaths = ["tests"]
 addopts = "--cov=backend --cov-report=term-missing --cov-fail-under=70 -m 'not integration'"
 markers = [
     "integration: tests that call the real Anthropic API (deselected by default)",
+    "relaxed_fks: opt out of Postgres FK enforcement for tests that need synthetic DB states",
 ]
 
 [tool.ruff]

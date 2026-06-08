@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+from sqlalchemy import insert, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from testcontainers.postgres import PostgresContainer
 
@@ -12,7 +14,8 @@ from backend.database import Base, get_db
 from backend.models import User
 from backend.services.auth_service import get_current_user
 
-_FAKE_USER = User(id="test-user-id", email="test@example.com", hashed_password="x", is_active=True)
+_FAKE_USER_ID = "test-user-id"
+_FAKE_USER = User(id=_FAKE_USER_ID, email="test@example.com", hashed_password="x", is_active=True)
 
 
 # ── Real Postgres, once per session (testcontainers; Docker required) ──────────
@@ -33,17 +36,30 @@ async def _engine(_pg_container):
 
 # ── Per-test isolation: join an external transaction (no recreate/truncate) ────
 @pytest_asyncio.fixture(loop_scope="session")
-async def _connection(_engine):
+async def _connection(_engine, request):
     """Open one outer transaction per test and roll it back at the end. Sessions
     bound to this connection join it via SAVEPOINTs, so every commit a test (or
-    the code under test) makes is undone on teardown."""
+    the code under test) makes is undone on teardown.
+
+    FK enforcement is ON by default (matching production). The authenticated user
+    is seeded so user-owned rows satisfy their FKs. A test that genuinely needs an
+    impossible/synthetic DB state opts out with @pytest.mark.relaxed_fks.
+    """
     async with _engine.connect() as conn:
         outer = await conn.begin()
-        # The suite was written against SQLite, which never enforced foreign keys,
-        # so many behaviour-focused tests seed children with synthetic parent ids.
-        # Postgres enforces FKs; relax trigger enforcement for the test session to
-        # preserve that intent. Production still enforces all FKs.
-        await conn.execute(text("SET session_replication_role = replica"))
+        if request.node.get_closest_marker("relaxed_fks"):
+            await conn.execute(text("SET session_replication_role = replica"))
+        # Seed the auth user (the app_client identity) so its owned rows FK-resolve.
+        await conn.execute(
+            insert(User).values(
+                id=_FAKE_USER_ID,
+                email="test@example.com",
+                hashed_password="x",
+                is_active=True,
+                is_admin=False,
+                created_at=datetime.now(timezone.utc),
+            )
+        )
         try:
             yield conn
         finally:

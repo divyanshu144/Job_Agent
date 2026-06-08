@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from backend.models import Analysis, JobResult, Profile, User
+from backend.models import Analysis, JobResult, Profile
 
 _USER_ID = "test-user-id"  # matches conftest._FAKE_USER (the auth override)
 
@@ -13,8 +13,7 @@ _USER_ID = "test-user-id"  # matches conftest._FAKE_USER (the auth override)
 @pytest.fixture
 async def client_with_data(app_client, Session):
     async with Session() as s:
-        # PG enforces FKs: seed the user the analysis is owned by, parents first.
-        s.add(User(id=_USER_ID, email="test@example.com", hashed_password="x"))
+        # The auth user (_USER_ID) is seeded by conftest; seed parents before children.
         p = Profile(
             yaml_data="x",
             cv_text="",

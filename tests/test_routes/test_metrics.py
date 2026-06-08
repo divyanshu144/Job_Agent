@@ -183,7 +183,10 @@ async def test_summary_tiering_excludes_cached_calls(authed_client: AsyncClient,
 
 @pytest.mark.asyncio
 async def test_runs_returns_analysis_run(authed_client: AsyncClient, db_session):
-    run_id = "test-run-001"
+    from tests.factories import make_discovery_run
+
+    run = await make_discovery_run(db_session)  # llm_calls.run_id FK
+    run_id = run.id
     db_session.add(
         LLMCall(
             agent_name="stage2_haiku",
