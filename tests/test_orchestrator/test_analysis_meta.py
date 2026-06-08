@@ -5,25 +5,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import backend.models  # noqa: F401
-from backend.database import Base
-from backend.models import Analysis, Profile
+from backend.models import Analysis, Profile, User
 from backend.schemas import GapAnalystOutput, JobParserOutput, MatchScorerOutput
 
 JD = "Senior ML Engineer role requiring Python, PyTorch, AWS experience. " * 5
-
-
-@pytest.fixture
-async def session():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    Session = async_sessionmaker(engine, expire_on_commit=False)
-    async with Session() as s:
-        yield s
-    await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -46,6 +33,10 @@ async def test_evaluate_pipeline_denormalizes_meta(session):
         merged_profile="profile text",
         last_refreshed_at=datetime.now(timezone.utc),
     )
+    # Postgres enforces FKs (analyses.profile_id, analyses.user_id) — seed both.
+    session.add(profile)
+    session.add(User(id="u-1", email="u1@example.com", hashed_password="x"))
+    await session.flush()
     with (
         patch(
             "backend.services.orchestrator.get_or_build_profile",

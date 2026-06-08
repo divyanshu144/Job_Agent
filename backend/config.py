@@ -11,7 +11,11 @@ class Settings(BaseSettings):
     )
 
     anthropic_api_key: str = ""
-    database_url: str = "sqlite+aiosqlite:///./data/jobfit.db"
+    # Postgres via the asyncpg driver. Local default matches docker-compose.
+    database_url: str = "postgresql+asyncpg://jobfit:jobfit@localhost:5432/jobfit"
+    # Managed Postgres (Neon/Supabase) needs TLS. Off locally; set DB_SSL=true in
+    # those envs and the engine passes connect_args={"ssl": True} to asyncpg.
+    db_ssl: bool = False
     api_prefix: str = "/api"
     log_level: str = "INFO"
     anthropic_max_retries: int = 3  # explicit SDK retry budget on LLM calls

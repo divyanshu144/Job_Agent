@@ -1,27 +1,5 @@
 from unittest.mock import AsyncMock, patch
 
-import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
-
-from backend.database import Base
-
-
-@pytest_asyncio.fixture(loop_scope="function")
-async def session():
-    # StaticPool ensures all connections reuse the same underlying SQLite DB.
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    Session = async_sessionmaker(engine, expire_on_commit=False)
-    async with Session() as s:
-        yield s
-    await engine.dispose()
-
 
 async def test_build_profile_merges_sources(session, tmp_path):
     yaml_path = tmp_path / "profile.yaml"

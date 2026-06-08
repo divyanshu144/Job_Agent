@@ -3,49 +3,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-import backend.models  # noqa: F401
-from backend.database import Base, get_db
-from backend.models import Analysis, Profile, User
-from backend.services.auth_service import get_current_user
+from backend.models import Analysis, Profile
 
-_FAKE_USER = User(id="test-user-id", email="test@example.com", hashed_password="x", is_active=True)
+_USER_ID = "test-user-id"  # matches conftest._FAKE_USER (the auth override)
 
 
 @pytest.fixture
-async def test_engine():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield engine
-    await engine.dispose()
-
-
-@pytest.fixture
-async def app_client(test_engine):
-    Session = async_sessionmaker(test_engine, expire_on_commit=False)
-    from backend.main import app
-
-    async def override_db():
-        async with Session() as s:
-            yield s
-
-    async def override_auth():
-        return _FAKE_USER
-
-    app.dependency_overrides[get_db] = override_db
-    app.dependency_overrides[get_current_user] = override_auth
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        yield ac
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture
-async def seeded_analysis(test_engine):
-    Session = async_sessionmaker(test_engine, expire_on_commit=False)
+async def seeded_analysis(Session):
     async with Session() as s:
+        # The auth user (_USER_ID) is seeded by conftest.
         profile = Profile(
             id="p1",
             yaml_data="x",
@@ -60,7 +27,7 @@ async def seeded_analysis(test_engine):
             profile_id=profile.id,
             partial=False,
             evaluate_only=False,
-            user_id=_FAKE_USER.id,
+            user_id=_USER_ID,
         )
         s.add(analysis)
         await s.commit()

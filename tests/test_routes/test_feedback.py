@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import pytest
 
+from tests.factories import make_analysis
+
 
 @pytest.mark.asyncio
 async def test_post_feedback_creates_row(app_client, db_session):
+    await make_analysis(db_session, id="an-123")  # feedback.analysis_id FK
+    await db_session.commit()
     resp = await app_client.post(
         "/api/feedback",
         json={"analysis_id": "an-123", "agent_name": "cover_letter", "rating": 1, "note": "great"},
@@ -26,7 +30,10 @@ async def test_post_feedback_requires_auth(unauthenticated_client):
 
 
 @pytest.mark.asyncio
-async def test_get_feedback_filters_by_analysis(app_client):
+async def test_get_feedback_filters_by_analysis(app_client, db_session):
+    await make_analysis(db_session, id="an-A")  # feedback.analysis_id FK
+    await make_analysis(db_session, id="an-B")
+    await db_session.commit()
     await app_client.post("/api/feedback", json={"analysis_id": "an-A", "rating": 1})
     await app_client.post("/api/feedback", json={"analysis_id": "an-B", "rating": -1})
 

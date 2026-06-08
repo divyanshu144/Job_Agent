@@ -4,25 +4,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import backend.models  # noqa: F401
-from backend.database import Base
 from backend.models import DiscoveryRun, Job, Profile
 from backend.services.hn_client import RawJob
-
-
-@pytest.fixture
-async def session():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    Session = async_sessionmaker(engine, expire_on_commit=False)
-    async with Session() as s:
-        yield s
-    await engine.dispose()
 
 
 async def test_stage1_pass_matches_target_role():
@@ -336,23 +322,14 @@ async def test_run_all_discovery_creates_run_with_pending_statuses(session):
     assert statuses["hn"]["error"] is None
 
 
-async def test_update_source_status_writes_error_field():
+async def test_update_source_status_writes_error_field(Session):
     """_update_source_status correctly persists error text when a source fails."""
     import json as _json
     from unittest.mock import patch as _patch
 
-    from sqlalchemy.ext.asyncio import async_sessionmaker as _asm
-    from sqlalchemy.ext.asyncio import create_async_engine as _cae
-
     from backend.services.discovery import _update_source_status
 
-    # Build a dedicated in-memory DB so we can inject it into SessionLocal
-    _engine = _cae("sqlite+aiosqlite:///:memory:")
-    async with _engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    _Session = _asm(_engine, expire_on_commit=False)
-
-    async with _Session() as s:
+    async with Session() as s:
         run = DiscoveryRun(
             source="all",
             status="running",
@@ -365,16 +342,14 @@ async def test_update_source_status_writes_error_field():
         await s.commit()
         run_id = run.id
 
-    with _patch("backend.services.discovery.SessionLocal", _Session):
+    with _patch("backend.services.discovery.SessionLocal", Session):
         await _update_source_status(run_id, "reed", status="failed", error="401 Unauthorized")
 
-    async with _Session() as s:
+    async with Session() as s:
         refreshed = (
             await s.execute(select(DiscoveryRun).where(DiscoveryRun.id == run_id))
         ).scalar_one()
         statuses = _json.loads(refreshed.source_statuses)
-
-    await _engine.dispose()
 
     assert statuses["reed"]["status"] == "failed"
     assert statuses["reed"]["error"] == "401 Unauthorized"

@@ -43,6 +43,7 @@ async def seeded_analysis(db_session):
         last_refreshed_at=datetime.now(timezone.utc),
     )
     db_session.add(profile)
+    await db_session.flush()  # PG enforces FKs; parent before child
     analysis = Analysis(
         id="anal-1",
         jd_text="test jd",
@@ -51,6 +52,7 @@ async def seeded_analysis(db_session):
         partial=False,
     )
     db_session.add(analysis)
+    await db_session.flush()
     jp = JobResult(
         id="jr-1",
         analysis_id="anal-1",

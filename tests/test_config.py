@@ -8,7 +8,7 @@ def test_settings_defaults():
         profile_yaml_path="data/candidate_profile.yaml",
     )
     assert s.api_prefix == "/api"
-    assert "aiosqlite" in s.database_url
+    assert "asyncpg" in s.database_url
     assert s.cv_path == "data/cv.pdf"
     assert s.profile_yaml_path == "data/candidate_profile.yaml"
 
