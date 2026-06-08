@@ -7,7 +7,6 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.message import EmailMessage
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,17 +14,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.agents.cold_email_agent import ColdEmailAgent
 from backend.agents.job_parser import JobParserAgent
 from backend.agents.match_scorer import MatchScorerAgent
-from backend.config import settings
 from backend.database import SessionLocal
 from backend.models import Analysis, CampaignJob, Contact, Job, Profile
 from backend.schemas import ColdEmailOutput, PriorOutputs
 from backend.services.contact_discovery import ContactDiscoveryUnavailable, discover_contacts
+from backend.services.gmail_service import gmail_client as _gmail_client
 from backend.services.profile_builder import build_compact_profile, get_or_build_profile
 from backend.services.resume_latex import load_resume_latex, tailor_resume_pdf
 
 logger = logging.getLogger(__name__)
-
-_GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.compose"
 
 
 @dataclass
@@ -124,27 +121,6 @@ async def _cold_email(
         contact_name=contact.name if contact else None,
         contact_title=contact.title if contact else None,
     )
-
-
-def _gmail_client() -> Any:  # pragma: no cover - thin OAuth wiring; mocked in tests
-    """Build a Gmail API client from a stored OAuth refresh token.
-
-    Server-side only — does NOT use the Claude.ai Gmail MCP connector. Factored
-    out so tests can mock it. Real runs need google-api-python-client + google-auth
-    and gmail_* settings populated.
-    """
-    from google.oauth2.credentials import Credentials
-    from googleapiclient.discovery import build
-
-    creds = Credentials(  # type: ignore[no-untyped-call]
-        None,
-        refresh_token=settings.gmail_refresh_token,
-        client_id=settings.gmail_client_id,
-        client_secret=settings.gmail_client_secret,
-        token_uri="https://oauth2.googleapis.com/token",
-        scopes=[_GMAIL_SCOPE],
-    )
-    return build("gmail", "v1", credentials=creds, cache_discovery=False)
 
 
 def _build_message(to: str, subject: str, body: str, pdf: bytes, company: str) -> EmailMessage:

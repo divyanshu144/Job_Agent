@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import logging
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,8 +12,11 @@ from backend.agents.cold_email_agent import ColdEmailAgent
 from backend.database import get_db
 from backend.models import Analysis, Contact, Profile, User
 from backend.schemas import ContactRead, DiscoverRequest, DraftResponse, SendResponse
+from backend.services import gmail_service
 from backend.services.auth_service import get_current_user
 from backend.services.contact_discovery import ContactDiscoveryUnavailable, discover_contacts
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["contacts"])
 
@@ -123,9 +130,20 @@ async def send_email(
     if contact.draft_text is None:
         raise HTTPException(status_code=400, detail={"error": "draft_required"})
 
-    # STUB: Gmail MCP integration not yet wired.
-    # To wire: call mcp__claude_ai_Gmail__create_draft then send; update status on success.
-    raise HTTPException(
-        status_code=503,
-        detail={"error": "gmail_unavailable", "retry": True},
+    # Server-side Gmail send (google-api-python-client + OAuth refresh token; no MCP).
+    raw = gmail_service.encode(
+        gmail_service.build_message(contact.email, contact.draft_subject or "", contact.draft_text)
     )
+    try:
+        await asyncio.to_thread(gmail_service.send_message, raw)
+    except Exception as e:
+        logger.warning("Gmail send failed for contact %s: %s", contact_id, e)
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "gmail_send_failed", "retry": True},
+        ) from e
+
+    contact.status = "sent"
+    contact.sent_at = datetime.now(timezone.utc)
+    await db.commit()
+    return SendResponse(sent=True)

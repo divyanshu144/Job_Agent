@@ -289,3 +289,90 @@ async def test_send_idempotent_when_already_sent(
     r = await authed_client.post("/api/contacts/c4/send", json={})
     assert r.status_code == 200
     assert r.json()["sent"] is True
+
+
+def _gmail_send_mock(capture: dict, *, message_id: str = "msg-1", fail: bool = False):
+    from unittest.mock import MagicMock
+
+    client = MagicMock()
+
+    def send(userId, body):  # noqa: N803 — matches Gmail API kwarg
+        capture["raw"] = body["raw"]
+        leaf = MagicMock()
+        if fail:
+            leaf.execute.side_effect = RuntimeError("gmail send boom")
+        else:
+            leaf.execute.return_value = {"id": message_id}
+        return leaf
+
+    client.users.return_value.messages.return_value.send.side_effect = send
+    return client
+
+
+@pytest.mark.asyncio
+async def test_send_dispatches_via_gmail_and_marks_sent(
+    authed_client: AsyncClient, db_session, seeded_analysis
+):
+    import base64
+
+    db_session.add(
+        Contact(
+            id="c5",
+            analysis_id="anal-1",
+            email="erin@stripe.com",
+            source="hunter",
+            confidence=0.8,
+            status="drafted",
+            draft_subject="Quick question",
+            draft_text="Hi Erin, I admire Stripe's payments work.",
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    await db_session.commit()
+
+    capture: dict = {}
+    with patch(
+        "backend.services.gmail_service.gmail_client",
+        return_value=_gmail_send_mock(capture, message_id="msg-1"),
+    ):
+        r = await authed_client.post("/api/contacts/c5/send", json={})
+
+    assert r.status_code == 200
+    assert r.json()["sent"] is True
+    # the sent MIME carries the recipient + drafted body
+    decoded = base64.urlsafe_b64decode(capture["raw"]).decode()
+    assert "erin@stripe.com" in decoded
+    assert "admire Stripe" in decoded
+
+    from sqlalchemy import select
+
+    row = (await db_session.execute(select(Contact).where(Contact.id == "c5"))).scalar_one()
+    await db_session.refresh(row)
+    assert row.status == "sent"
+    assert row.sent_at is not None
+
+
+@pytest.mark.asyncio
+async def test_send_503_on_gmail_failure(authed_client: AsyncClient, db_session, seeded_analysis):
+    db_session.add(
+        Contact(
+            id="c6",
+            analysis_id="anal-1",
+            email="frank@stripe.com",
+            source="hunter",
+            confidence=0.5,
+            status="drafted",
+            draft_text="Hi Frank",
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    await db_session.commit()
+
+    capture: dict = {}
+    with patch(
+        "backend.services.gmail_service.gmail_client",
+        return_value=_gmail_send_mock(capture, fail=True),
+    ):
+        r = await authed_client.post("/api/contacts/c6/send", json={})
+
+    assert r.status_code == 503
