@@ -5,10 +5,8 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import backend.models  # noqa: F401
-from backend.database import Base
 from backend.models import Analysis, JobResult, Profile
 from backend.services.contact_discovery import (
     ContactDiscoveryUnavailable,
@@ -18,18 +16,7 @@ from backend.services.contact_discovery import (
 
 
 @pytest.fixture
-async def mem_db():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    Session = async_sessionmaker(engine, expire_on_commit=False)
-    async with Session() as session:
-        yield session
-    await engine.dispose()
-
-
-@pytest.fixture
-async def analysis_with_jp(mem_db):
+async def analysis_with_jp(session):
     """Insert a Profile, Analysis, and job_parser JobResult with company='Stripe'."""
     profile = Profile(
         id="prof-1",
@@ -38,7 +25,8 @@ async def analysis_with_jp(mem_db):
         merged_profile="test profile",
         last_refreshed_at=datetime.now(timezone.utc),
     )
-    mem_db.add(profile)
+    session.add(profile)
+    await session.flush()  # PG enforces FKs; insert parent before children
     analysis = Analysis(
         id="anal-1",
         jd_text="test jd",
@@ -46,7 +34,8 @@ async def analysis_with_jp(mem_db):
         created_at=datetime.now(timezone.utc),
         partial=False,
     )
-    mem_db.add(analysis)
+    session.add(analysis)
+    await session.flush()
     jp = JobResult(
         id="jr-1",
         analysis_id="anal-1",
@@ -61,8 +50,8 @@ async def analysis_with_jp(mem_db):
             }
         ),
     )
-    mem_db.add(jp)
-    await mem_db.commit()
+    session.add(jp)
+    await session.commit()
     return analysis
 
 
@@ -79,7 +68,7 @@ def test_title_rank_none():
 
 
 @pytest.mark.asyncio
-async def test_discover_contacts_happy_path(analysis_with_jp, mem_db):
+async def test_discover_contacts_happy_path(analysis_with_jp, session):
     hunter_response = {
         "data": {
             "emails": [
@@ -111,7 +100,7 @@ async def test_discover_contacts_happy_path(analysis_with_jp, mem_db):
         mock_client.get = AsyncMock(return_value=mock_resp)
         mock_client_cls.return_value = mock_client
 
-        contacts = await discover_contacts("anal-1", mem_db)
+        contacts = await discover_contacts("anal-1", session)
 
     assert len(contacts) == 2
     assert contacts[0].email == "alice@stripe.com"  # Engineering Manager ranked higher
@@ -121,7 +110,7 @@ async def test_discover_contacts_happy_path(analysis_with_jp, mem_db):
 
 
 @pytest.mark.asyncio
-async def test_discover_contacts_filters_no_email(analysis_with_jp, mem_db):
+async def test_discover_contacts_filters_no_email(analysis_with_jp, session):
     hunter_response = {
         "data": {
             "emails": [
@@ -142,14 +131,14 @@ async def test_discover_contacts_filters_no_email(analysis_with_jp, mem_db):
         mock_client.get = AsyncMock(return_value=mock_resp)
         mock_client_cls.return_value = mock_client
 
-        contacts = await discover_contacts("anal-1", mem_db)
+        contacts = await discover_contacts("anal-1", session)
 
     assert len(contacts) == 1
     assert contacts[0].email == "alice@stripe.com"
 
 
 @pytest.mark.asyncio
-async def test_discover_contacts_raises_on_http_error(analysis_with_jp, mem_db):
+async def test_discover_contacts_raises_on_http_error(analysis_with_jp, session):
     import httpx
 
     mock_resp = MagicMock()
@@ -165,11 +154,11 @@ async def test_discover_contacts_raises_on_http_error(analysis_with_jp, mem_db):
         mock_client_cls.return_value = mock_client
 
         with pytest.raises(ContactDiscoveryUnavailable):
-            await discover_contacts("anal-1", mem_db)
+            await discover_contacts("anal-1", session)
 
 
 @pytest.mark.asyncio
-async def test_discover_contacts_raises_domain_required_when_no_company(mem_db):
+async def test_discover_contacts_raises_domain_required_when_no_company(session):
     profile = Profile(
         id="prof-2",
         yaml_data="",
@@ -177,7 +166,8 @@ async def test_discover_contacts_raises_domain_required_when_no_company(mem_db):
         merged_profile="",
         last_refreshed_at=datetime.now(timezone.utc),
     )
-    mem_db.add(profile)
+    session.add(profile)
+    await session.flush()  # PG enforces FKs; insert parent before children
     analysis = Analysis(
         id="anal-2",
         jd_text="test jd",
@@ -185,7 +175,8 @@ async def test_discover_contacts_raises_domain_required_when_no_company(mem_db):
         created_at=datetime.now(timezone.utc),
         partial=False,
     )
-    mem_db.add(analysis)
+    session.add(analysis)
+    await session.flush()
     jp = JobResult(
         id="jr-2",
         analysis_id="anal-2",
@@ -200,15 +191,15 @@ async def test_discover_contacts_raises_domain_required_when_no_company(mem_db):
             }
         ),
     )
-    mem_db.add(jp)
-    await mem_db.commit()
+    session.add(jp)
+    await session.commit()
 
     with pytest.raises(ValueError, match="domain_required"):
-        await discover_contacts("anal-2", mem_db, domain=None)
+        await discover_contacts("anal-2", session, domain=None)
 
 
 @pytest.mark.asyncio
-async def test_discover_contacts_uses_supplied_domain(analysis_with_jp, mem_db):
+async def test_discover_contacts_uses_supplied_domain(analysis_with_jp, session):
     hunter_response = {
         "data": {
             "emails": [
@@ -227,7 +218,7 @@ async def test_discover_contacts_uses_supplied_domain(analysis_with_jp, mem_db):
         mock_client.get = AsyncMock(return_value=mock_resp)
         mock_client_cls.return_value = mock_client
 
-        contacts = await discover_contacts("anal-1", mem_db, domain="customdomain.io")
+        contacts = await discover_contacts("anal-1", session, domain="customdomain.io")
 
     # Verify Hunter.io was called with the supplied domain
     call_kwargs = mock_client.get.call_args
@@ -236,7 +227,7 @@ async def test_discover_contacts_uses_supplied_domain(analysis_with_jp, mem_db):
 
 
 @pytest.mark.asyncio
-async def test_discover_contacts_raises_on_request_error(analysis_with_jp, mem_db):
+async def test_discover_contacts_raises_on_request_error(analysis_with_jp, session):
     import httpx
 
     with patch("httpx.AsyncClient") as mock_client_cls:
@@ -247,4 +238,4 @@ async def test_discover_contacts_raises_on_request_error(analysis_with_jp, mem_d
         mock_client_cls.return_value = mock_client
 
         with pytest.raises(ContactDiscoveryUnavailable):
-            await discover_contacts("anal-1", mem_db)
+            await discover_contacts("anal-1", session)

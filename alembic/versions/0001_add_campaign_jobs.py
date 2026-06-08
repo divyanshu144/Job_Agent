@@ -25,12 +25,12 @@ def upgrade() -> None:
         "campaign_jobs",
         sa.Column("id", sa.String(), nullable=False),
         sa.Column("job_id", sa.String(), sa.ForeignKey("jobs.id"), nullable=False),
-        sa.Column("run_at", sa.DateTime(), nullable=False),
+        sa.Column("run_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("match_score", sa.Float(), nullable=True),
         sa.Column("draft_id", sa.String(), nullable=True),
         sa.Column("status", sa.String(), nullable=False),
         sa.Column("error", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_campaign_jobs_job_id", "campaign_jobs", ["job_id"])

@@ -4,25 +4,17 @@ import json
 from datetime import datetime, timezone
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-import backend.models  # noqa: F401
-from backend.database import Base, get_db
 from backend.models import Analysis, JobResult, Profile, User
-from backend.services.auth_service import get_current_user
 
-_FAKE_USER = User(id="test-user-id", email="test@example.com", hashed_password="x", is_active=True)
+_USER_ID = "test-user-id"  # matches conftest._FAKE_USER (the auth override)
 
 
 @pytest.fixture
-async def client_with_data():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    Session = async_sessionmaker(engine, expire_on_commit=False)
-
+async def client_with_data(app_client, Session):
     async with Session() as s:
+        # PG enforces FKs: seed the user the analysis is owned by, parents first.
+        s.add(User(id=_USER_ID, email="test@example.com", hashed_password="x"))
         p = Profile(
             yaml_data="x",
             cv_text="",
@@ -35,7 +27,7 @@ async def client_with_data():
             jd_text="Senior ML Engineer " * 5,
             profile_id=p.id,
             partial=False,
-            user_id=_FAKE_USER.id,
+            user_id=_USER_ID,
             role_type="ML Engineer",
             company="Acme Corp",
             match_score=80,
@@ -50,21 +42,7 @@ async def client_with_data():
         await s.commit()
         analysis_id = a.id
 
-    from backend.main import app
-
-    async def override_db():
-        async with Session() as s:
-            yield s
-
-    async def override_auth():
-        return _FAKE_USER
-
-    app.dependency_overrides[get_db] = override_db
-    app.dependency_overrides[get_current_user] = override_auth
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        yield ac, analysis_id
-    app.dependency_overrides.clear()
-    await engine.dispose()
+    return app_client, analysis_id
 
 
 async def test_list_history(client_with_data):
@@ -102,7 +80,6 @@ async def test_history_includes_denormalized_meta(client_with_data):
     assert item["match_score"] == 80
 
 
-@pytest.mark.asyncio
 async def test_history_requires_auth(unauthenticated_client):
     resp = await unauthenticated_client.get("/api/history")
     assert resp.status_code == 401

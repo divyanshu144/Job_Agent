@@ -3,26 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
-import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 import backend.models  # noqa: F401
-from backend.database import Base
 from backend.models import Analysis, DiscoveryRun, Job, Profile
 from backend.schemas import GapAnalystOutput, JobParserOutput, MatchScorerOutput
 
 JD = "Senior Python Backend Engineer, 5+ years required, remote. " * 4
-
-
-@pytest.fixture
-async def session():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    Session = async_sessionmaker(engine, expire_on_commit=False)
-    async with Session() as s:
-        yield s
-    await engine.dispose()
 
 
 async def test_run_phase1_creates_analysis_with_no_job_id(session):

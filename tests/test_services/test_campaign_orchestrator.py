@@ -7,31 +7,13 @@ from datetime import datetime, timezone
 from email import message_from_bytes
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest_asyncio
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
 
-from backend.database import Base
 from backend.models import Analysis, CampaignJob, Contact, DiscoveryRun, Job, Profile
 from backend.schemas import ColdEmailOutput
 
-# run_campaign opens multiple SessionLocal() sessions; StaticPool makes them all
-# share the one in-memory DB (a plain :memory: engine gives each connection its own).
-
-
-@pytest_asyncio.fixture(loop_scope="function")
-async def Session():
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    maker = async_sessionmaker(engine, expire_on_commit=False)
-    yield maker
-    await engine.dispose()
+# `Session` (conftest) is bound to the per-test connection; run_campaign's multiple
+# SessionLocal() sessions are patched to it so they share that transaction.
 
 
 async def _seed_jobs(Session, n: int, state: str = "scored") -> list[str]:

@@ -28,7 +28,7 @@ class Profile(Base):
     yaml_data: Mapped[str] = mapped_column(Text)
     cv_text: Mapped[str] = mapped_column(Text, default="")
     merged_profile: Mapped[str] = mapped_column(Text, default="")
-    last_refreshed_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    last_refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     user_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("users.id"), nullable=True, default=None
     )
@@ -41,7 +41,7 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class InviteToken(Base):
@@ -53,15 +53,17 @@ class InviteToken(Base):
     used_by: Mapped[str | None] = mapped_column(
         String, ForeignKey("users.id"), nullable=True, default=None
     )
-    expires_at: Mapped[datetime] = mapped_column(DateTime)
-    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
 
 
 class SavedJob(Base):
     __tablename__ = "saved_jobs"
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), primary_key=True)
     job_id: Mapped[str] = mapped_column(String, ForeignKey("jobs.id"), primary_key=True)
-    saved_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class LLMCall(Base):
@@ -82,7 +84,7 @@ class LLMCall(Base):
     run_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("discovery_runs.id"), nullable=True, default=None
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class PipelineEvent(Base):
@@ -102,7 +104,7 @@ class PipelineEvent(Base):
     detail: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)  # JSON
     analysis_id: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
     run_id: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     __table_args__ = (Index("ix_pipeline_events_trace_kind", "trace_id", "kind"),)
 
 
@@ -112,8 +114,10 @@ class DiscoveryRun(Base):
     source: Mapped[str] = mapped_column(String)
     triggered_by: Mapped[str] = mapped_column(String, default="manual")
     status: Mapped[str] = mapped_column(String, default="pending")
-    started_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
     jobs_found: Mapped[int] = mapped_column(Integer, default=0)
     jobs_passed_stage1: Mapped[int] = mapped_column(Integer, default=0)
     jobs_passed_stage2: Mapped[int] = mapped_column(Integer, default=0)
@@ -135,7 +139,7 @@ class Job(Base):
     location: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
     raw_text: Mapped[str] = mapped_column(Text)  # required, no default
     dedup_hash: Mapped[str] = mapped_column(String, unique=True, index=True)  # required, no default
-    discovered_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     state: Mapped[str] = mapped_column(String, default="discovered", index=True)
     relevance_score: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     matched_profiles: Mapped[str] = mapped_column(Text, default="[]")
@@ -148,7 +152,7 @@ class Analysis(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
     jd_text: Mapped[str] = mapped_column(Text)
     profile_id: Mapped[str] = mapped_column(String, ForeignKey("profiles.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     partial: Mapped[bool] = mapped_column(Boolean, default=False)
     evaluate_only: Mapped[bool] = mapped_column(Boolean, default=False)
     jd_hash: Mapped[str] = mapped_column(String, default="", index=True)
@@ -193,7 +197,7 @@ class Feedback(Base):
     rating: Mapped[int] = mapped_column(Integer)  # e.g. -1 / +1, or 1–5
     note: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     trace_id: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class Contact(Base):
@@ -209,8 +213,10 @@ class Contact(Base):
     status: Mapped[str] = mapped_column(String, default="discovered")
     draft_subject: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     draft_text: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
-    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     analysis: Mapped[Analysis] = relationship("Analysis", back_populates="contacts")
 
 
@@ -226,12 +232,12 @@ class CampaignJob(Base):
     __tablename__ = "campaign_jobs"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
     job_id: Mapped[str] = mapped_column(String, ForeignKey("jobs.id"), index=True)
-    run_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     match_score: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
     draft_id: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
     status: Mapped[str] = mapped_column(String, default="queued")  # queued | drafted | failed
     error: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class DiscoveryBatch(Base):
@@ -243,6 +249,8 @@ class DiscoveryBatch(Base):
     anthropic_batch_id: Mapped[str] = mapped_column(String)  # "msgbatch_01..."
     status: Mapped[str] = mapped_column(String, default="submitted")  # submitted | ended | failed
     request_count: Mapped[int] = mapped_column(Integer, default=0)
-    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
     run: Mapped[DiscoveryRun] = relationship("DiscoveryRun", back_populates="batches")

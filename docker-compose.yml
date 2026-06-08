@@ -1,5 +1,21 @@
 version: "3.9"
 services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: jobfit
+      POSTGRES_PASSWORD: jobfit
+      POSTGRES_DB: jobfit
+    ports:
+      - "5432:5432"
+    volumes:
+      - jobfit_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobfit -d jobfit"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   app:
     build: .
     ports:
@@ -8,5 +24,12 @@ services:
     environment:
       PROFILE_YAML_PATH: /app/data/candidate_profile.yaml
       CV_PATH: /app/data/cv.pdf
+      DATABASE_URL: postgresql+asyncpg://jobfit:jobfit@db:5432/jobfit
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
+
+volumes:
+  jobfit_pgdata:

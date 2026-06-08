@@ -3,10 +3,8 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import backend.models  # noqa: F401
-from backend.database import Base
 from backend.models import Analysis, JobResult, Profile
 from backend.schemas import (
     CoverLetterOutput,
@@ -18,17 +16,6 @@ from backend.schemas import (
 )
 
 JD = "Senior ML Engineer role requiring Python, PyTorch, AWS experience. " * 5
-
-
-@pytest.fixture
-async def session():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    Session = async_sessionmaker(engine, expire_on_commit=False)
-    async with Session() as s:
-        yield s
-    await engine.dispose()
 
 
 @pytest.fixture
@@ -56,6 +43,8 @@ async def test_evaluate_pipeline_sse_sequence(session, stub_agents):
         merged_profile="profile text",
         last_refreshed_at=datetime.now(timezone.utc),
     )
+    session.add(mock_profile)  # Postgres enforces the analyses.profile_id FK
+    await session.flush()
 
     with (
         patch(

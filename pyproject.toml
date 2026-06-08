@@ -1,5 +1,9 @@
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# One event loop for the whole session so the session-scoped Postgres engine and
+# the per-test connections live on the same loop (asyncpg binds to its loop).
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 addopts = "--cov=backend --cov-report=term-missing --cov-fail-under=70 -m 'not integration'"
 markers = [
