@@ -83,3 +83,9 @@ Plan: `~/.claude/plans/atomic-beaming-hamming.md` (approved 2026-06-02)
 - [x] Tests: history endpoint (meta + auth), orchestrator denorm, backfill script. make check green (185)
 - [ ] (user) run backfill against data/jobfit.db to recover the 4 rows (2 owned + 2 orphaned)
 - [ ] (deferred B) status/application-stage UI + filters
+
+## Deferred / Backlog (flagged — revisit later)
+- [ ] **App startup schema strategy** (post Postgres migration, PR #11): `init_db()` still uses
+      `Base.metadata.create_all` at boot; Alembic is the source of truth for explicit migrations.
+      Decide whether startup should run `alembic upgrade head` instead of (or before) `create_all`.
+      Non-blocking — flagged 2026-06-08.
