@@ -157,13 +157,15 @@ frontend/src/
 
 1. Read `HANDOFF.md` — resume from last known state; confirms next action and in-flight files.
 2. Read `tasks/todo.md` — verify task checklist matches HANDOFF current state.
-3. Run `git status` and `git log -1` — verify in-flight files match HANDOFF.md's In-Flight section, and the last commit hash/message matches the expected state. If they diverge, treat the working tree as authoritative and update HANDOFF.md before proceeding.
+3. Read `tasks/lessons.md` (chronological "what broke / what we learned" log) and `tasks/agent_memory.md` (durable structured reference: Architecture Decisions, Known Gotchas, Solved Problems, Useful Patterns) before touching code. Honour locked Architecture Decisions even if surrounding code suggests otherwise.
+4. Run `git status` and `git log -1` — verify in-flight files match HANDOFF.md's In-Flight section, and the last commit hash/message matches the expected state. If they diverge, treat the working tree as authoritative and update HANDOFF.md before proceeding.
 
 ### At each checkpoint
 
 1. Mark completed tasks in `tasks/todo.md`.
 2. Overwrite `HANDOFF.md` with current state (use `HANDOFF.template.md` as reference).
 3. Add an entry to `tasks/lessons.md` if a non-obvious pattern was encountered.
+4. After any significant discovery, append to the relevant section of `tasks/agent_memory.md` (problem / root cause / solution). lessons.md is the chronological log; agent_memory.md is the structured reference — don't duplicate.
 
 ### At session end
 
