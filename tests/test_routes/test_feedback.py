@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.factories import make_analysis
+from tests.factories import make_analysis, make_profile, make_user
 
 
 @pytest.mark.asyncio
@@ -42,3 +42,34 @@ async def test_get_feedback_filters_by_analysis(app_client, db_session):
     rows = resp.json()
     assert len(rows) == 1
     assert rows[0]["analysis_id"] == "an-A"
+
+
+@pytest.mark.asyncio
+async def test_post_feedback_rejects_cross_user_analysis(app_client, db_session):
+    other_user = await make_user(
+        db_session, id="other-feedback-user", email="other-feedback@example.com"
+    )
+    profile = await make_profile(db_session, user_id=other_user.id)
+    analysis = await make_analysis(db_session, profile=profile, user_id=other_user.id)
+    await db_session.commit()
+
+    resp = await app_client.post(
+        "/api/feedback",
+        json={"analysis_id": analysis.id, "rating": 1},
+    )
+
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_feedback_rejects_cross_user_analysis(app_client, db_session):
+    other_user = await make_user(
+        db_session, id="other-feedback-list-user", email="other-feedback-list@example.com"
+    )
+    profile = await make_profile(db_session, user_id=other_user.id)
+    analysis = await make_analysis(db_session, profile=profile, user_id=other_user.id)
+    await db_session.commit()
+
+    resp = await app_client.get("/api/feedback", params={"analysis_id": analysis.id})
+
+    assert resp.status_code == 404

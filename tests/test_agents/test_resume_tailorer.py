@@ -22,13 +22,26 @@ PRIOR = PriorOutputs(
 )
 HAPPY = json.dumps(
     {
+        "headline": "ML Engineer",
+        "summary": "Builds Python ML systems.",
+        "skills": ["Python"],
+        "experience": [
+            {
+                "company": "Acme",
+                "role": "Engineer",
+                "dates": "2022-2024",
+                "bullets": ["Built ML pipeline with Python"],
+            }
+        ],
+        "projects": [],
+        "education": [],
         "tailored_bullets": [
             {
                 "original": "Built ML pipeline",
                 "rewritten": "Engineered end-to-end ML pipeline with Python",
                 "rationale": "adds JD keyword",
             }
-        ]
+        ],
     }
 )
 MALFORMED = [HAPPY[:10], json.dumps({"tailored_bullets": "not-a-list"})]
@@ -41,8 +54,12 @@ async def test_resume_tailorer_happy():
         return HAPPY
 
     with patch.object(ResumeTailorerAgent, "_call", new=_call):
-        result = await ResumeTailorerAgent().run("profile", "jd " * 15, PRIOR)
+        result = await ResumeTailorerAgent().run(
+            "## CV Text\nAcme Engineer. Built ML pipeline with Python.", "jd " * 15, PRIOR
+        )
     assert isinstance(result, ResumeTailorerOutput)
+    assert result.headline == "ML Engineer"
+    assert result.skills == ["Python"]
     assert result.tailored_bullets[0].original == "Built ML pipeline"
 
 

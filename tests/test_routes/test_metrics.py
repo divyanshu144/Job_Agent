@@ -99,6 +99,15 @@ async def test_runs_requires_auth(unauthenticated_client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_cost_routes_reject_non_admin(app_client: AsyncClient):
+    summary = await app_client.get("/api/metrics/costs/summary")
+    runs = await app_client.get("/api/metrics/costs/runs")
+
+    assert summary.status_code == 403
+    assert runs.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_summary_tiering_fields_empty_db(authed_client: AsyncClient):
     """Empty DB: tiering fields return safe defaults (0.0 / 1.0)."""
     r = await authed_client.get("/api/metrics/costs/summary")

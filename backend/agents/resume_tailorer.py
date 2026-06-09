@@ -17,7 +17,9 @@ class ResumeTailorerAgent(BaseAgent):
         raw = await self._call(system, jd)
         try:
             output = ResumeTailorerOutput.model_validate(_parse_json(raw))
-            output.validation_warnings = validate_resume_tailorer(output, prior)
+            output.validation_warnings = validate_resume_tailorer(
+                output, prior, source_text=profile
+            )
             return output
         except (json.JSONDecodeError, ValidationError, AgentError) as e:
             raise AgentError(f"resume_tailorer: {e}") from e

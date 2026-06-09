@@ -69,6 +69,7 @@ async def build_profile(
     yaml_path: str | None = None,
     cv_path: str | None = None,
     user_id: str | None = None,
+    cv_text: str | None = None,
 ) -> Profile:
     """Build a Profile row from YAML + CV.
 
@@ -79,10 +80,36 @@ async def build_profile(
     cv_path = cv_path or settings.cv_path
 
     yaml_text = _read_yaml(yaml_path)
-    cv_text = await extract_text_from_file(cv_path)
+    if cv_text is None:
+        cv_text = await extract_text_from_file(cv_path)
 
     merged = _assemble_merged(yaml_text, cv_text)
 
+    profile = Profile(
+        yaml_data=yaml_text,
+        cv_text=cv_text,
+        merged_profile=merged,
+        last_refreshed_at=datetime.now(timezone.utc),
+        user_id=user_id,
+    )
+    db.add(profile)
+    await db.flush()
+    return profile
+
+
+async def build_profile_from_text(
+    db: AsyncSession,
+    *,
+    yaml_text: str,
+    cv_text: str,
+    user_id: str,
+) -> Profile:
+    """Create a user-owned Profile row from already-parsed content.
+
+    Used for authenticated uploads so user CV bytes never write through the
+    legacy shared settings.cv_path file.
+    """
+    merged = _assemble_merged(yaml_text, cv_text)
     profile = Profile(
         yaml_data=yaml_text,
         cv_text=cv_text,

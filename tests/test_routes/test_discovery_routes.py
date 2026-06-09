@@ -4,7 +4,31 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 import backend.models  # noqa: F401
+from backend.models import User
+from backend.services.auth_service import get_current_user
+
+
+@pytest.fixture(autouse=True)
+def admin_user(app_client):
+    from backend.main import app
+
+    previous = app.dependency_overrides.get(get_current_user)
+    app.dependency_overrides[get_current_user] = lambda: User(
+        id="admin-user",
+        email="admin@example.com",
+        hashed_password="x",
+        is_active=True,
+        is_admin=True,
+        created_at=datetime.now(timezone.utc),
+    )
+    yield
+    if previous is None:
+        app.dependency_overrides.pop(get_current_user, None)
+    else:
+        app.dependency_overrides[get_current_user] = previous
 
 
 async def test_trigger_discovery_returns_run_id(app_client):

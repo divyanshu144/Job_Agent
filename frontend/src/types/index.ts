@@ -2,6 +2,10 @@
 export interface GapItem { skill: string; impact: string; rationale: string; }
 export interface ResourceItem { skill: string; courses: string[]; books: string[]; projects: string[]; estimated_hours: number; }
 export interface BulletItem { original: string; rewritten: string; rationale: string; }
+export interface OmittedItem { field: string; value: string; reason: string; }
+export interface ResumeExperienceItem { company?: string | null; role?: string | null; dates?: string | null; bullets: string[]; }
+export interface ResumeProjectItem { name: string; description?: string | null; bullets: string[]; }
+export interface ResumeEducationItem { institution?: string | null; degree?: string | null; dates?: string | null; }
 // validation_warnings is a meta-field (exclude=True in Python) — never present in API responses
 export interface ValidationWarning { agent: string; rule: string; detail: string; severity: 'warn' | 'error'; }
 export interface JobParserOutput { required_skills: string[]; nice_to_have: string[]; years_experience: number | null; role_type: string; seniority: string; company?: string | null; validation_warnings?: ValidationWarning[]; }
@@ -10,7 +14,17 @@ export interface GapAnalystOutput { critical_gaps: GapItem[]; nice_to_have_gaps:
 export interface PlannerMeta { total_llm_calls: number; retried_gaps: string[]; low_confidence_gaps: string[]; gap_confidences: Record<string, number>; }
 export interface ResourcePlannerOutput { gaps: ResourceItem[]; planner_meta?: PlannerMeta | null; validation_warnings?: ValidationWarning[]; }
 export interface CoverLetterOutput { subject: string; body: string; tone_notes: string; validation_warnings?: ValidationWarning[]; }
-export interface ResumeTailorerOutput { tailored_bullets: BulletItem[]; validation_warnings?: ValidationWarning[]; }
+export interface ResumeTailorerOutput {
+  headline: string;
+  summary: string;
+  skills: string[];
+  experience: ResumeExperienceItem[];
+  projects: ResumeProjectItem[];
+  education: ResumeEducationItem[];
+  tailored_bullets: BulletItem[];
+  omitted_items: OmittedItem[];
+  validation_warnings?: ValidationWarning[];
+}
 export interface ProfileResponse { id: string; yaml_data: string; cv_text: string; merged_profile: string; last_refreshed_at: string; warnings: string[]; }
 export interface AnalysisSummary { id: string; jd_text: string; profile_id: string; created_at: string; partial: boolean; evaluate_only: boolean; status?: string | null; role_type?: string | null; company?: string | null; match_score?: number | null; }
 export interface AnalysisDetail {

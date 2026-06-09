@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from backend.models import Analysis, Profile
+from tests.factories import make_analysis, make_profile, make_user
 
 _USER_ID = "test-user-id"  # matches conftest._FAKE_USER (the auth override)
 
@@ -65,6 +66,22 @@ async def test_patch_status_not_found_returns_404(app_client):
         "/api/analysis/nonexistent-id/status",
         json={"status": "applied"},
     )
+    assert resp.status_code == 404
+
+
+async def test_patch_status_rejects_cross_user_analysis(app_client, db_session):
+    other_user = await make_user(
+        db_session, id="other-status-user", email="other-status@example.com"
+    )
+    profile = await make_profile(db_session, user_id=other_user.id)
+    analysis = await make_analysis(db_session, profile=profile, user_id=other_user.id)
+    await db_session.commit()
+
+    resp = await app_client.patch(
+        f"/api/analysis/{analysis.id}/status",
+        json={"status": "applied"},
+    )
+
     assert resp.status_code == 404
 
 

@@ -14,7 +14,8 @@ from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import create_async_engine
 from testcontainers.postgres import PostgresContainer
 
-from backend.database import _run_upgrade
+from backend import models  # noqa: F401
+from backend.database import Base, _run_upgrade
 
 _REQUIRED = {"users", "alembic_version"}
 
@@ -40,3 +41,39 @@ def test_run_upgrade_brings_clean_db_to_head() -> None:
     missing = _REQUIRED - tables
     assert not missing, f"boot migration path missing tables: {missing}"
     assert "alembic_version" in tables, "alembic_version table must exist after upgrade"
+
+
+def test_run_upgrade_stamps_complete_legacy_schema() -> None:
+    """_run_upgrade must not replay 0001 against a complete pre-Alembic schema."""
+    with PostgresContainer("postgres:16", driver="asyncpg") as pg:
+        url = pg.get_connection_url()
+
+        async def _create_legacy_schema() -> None:
+            engine = create_async_engine(url)
+            try:
+                async with engine.begin() as conn:
+                    await conn.run_sync(Base.metadata.create_all)
+            finally:
+                await engine.dispose()
+
+        asyncio.run(_create_legacy_schema())
+
+        _run_upgrade(url)
+
+        async def _tables_and_revision() -> tuple[set[str], str | None]:
+            engine = create_async_engine(url)
+            try:
+                async with engine.connect() as conn:
+                    tables = set(await conn.run_sync(lambda c: inspect(c).get_table_names()))
+                    revision = (
+                        await conn.exec_driver_sql("select version_num from alembic_version")
+                    ).scalar_one_or_none()
+                    return tables, revision
+            finally:
+                await engine.dispose()
+
+        tables, revision = asyncio.run(_tables_and_revision())
+
+    missing = _REQUIRED - tables
+    assert not missing, f"legacy boot stamp path missing tables: {missing}"
+    assert revision == "0001_initial"

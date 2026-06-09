@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
-from backend.models import User
+from backend.models import Analysis, User
 from backend.schemas import AnalyseRequest
 from backend.services.auth_service import get_current_user
 from backend.services.orchestrator import run_evaluate_pipeline, run_generate_pipeline
@@ -23,8 +24,10 @@ async def _event_stream(
         yield f"event: {event.name}\ndata: {json.dumps(event.data)}\n\n"
 
 
-async def _generate_stream(analysis_id: str, db: AsyncSession) -> AsyncGenerator[str, None]:
-    async for event in run_generate_pipeline(analysis_id, db):
+async def _generate_stream(
+    analysis_id: str, db: AsyncSession, user_id: str
+) -> AsyncGenerator[str, None]:
+    async for event in run_generate_pipeline(analysis_id, db, user_id=user_id):
         yield f"event: {event.name}\ndata: {json.dumps(event.data)}\n\n"
 
 
@@ -48,9 +51,18 @@ async def generate_analysis(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
+    analysis = (
+        await db.execute(
+            select(Analysis)
+            .where(Analysis.id == analysis_id)
+            .where(or_(Analysis.user_id == current_user.id, Analysis.user_id.is_(None)))
+        )
+    ).scalar_one_or_none()
+    if analysis is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {analysis_id} not found")
     headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
     return StreamingResponse(
-        _generate_stream(analysis_id, db),
+        _generate_stream(analysis_id, db, current_user.id),
         media_type="text/event-stream",
         headers=headers,
     )

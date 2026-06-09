@@ -8,7 +8,7 @@ from backend.agents.base import HAIKU
 from backend.database import get_db
 from backend.models import LLMCall, User
 from backend.schemas import AgentCost, CostSummary, RunCost
-from backend.services.auth_service import get_current_user
+from backend.services.auth_service import require_admin
 from backend.services.cost_calculator import COST_PER_MILLION
 
 _SONNET_INPUT_PER_M = COST_PER_MILLION["claude-sonnet-4-6"]["input"]
@@ -23,7 +23,7 @@ router = APIRouter(tags=["metrics"])
 
 @router.get("/metrics/costs/summary", response_model=CostSummary)
 async def get_cost_summary(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> CostSummary:
     row = (
@@ -103,7 +103,7 @@ async def get_cost_summary(
 
 @router.get("/metrics/costs/runs", response_model=list[RunCost])
 async def get_cost_runs(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> list[RunCost]:
     runs: list[RunCost] = []

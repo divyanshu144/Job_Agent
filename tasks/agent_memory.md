@@ -21,7 +21,10 @@
 - All timestamp columns are timestamptz (DateTime(timezone=True)); _utcnow()
   stays tz-aware UTC. Forced by correctness, not optional.
 - Alembic is the single source of truth for schema. create_all is confined to
-  the test fixture. [SHIPPED] App boot runs `alembic upgrade head`.
+  the test fixture. [SHIPPED] App boot detects a complete pre-Alembic schema
+  with no alembic_version, stamps head, then runs `alembic upgrade head`.
+  Transitional local-volume bridge only; fresh DBs created by migrations never
+  hit the stamp branch.
 - FK enforcement ON by default in tests (prod-parity). @pytest.mark.relaxed_fks
   is the sanctioned escape hatch and is used by zero tests.
 - OUT of scope (do not implement without explicit approval): JSON->JSONB,
@@ -51,7 +54,10 @@
   raises RuntimeError: asyncio.run() cannot be called from a running event loop.
   Fix: extract a sync _run_upgrade(url) helper and call it via
   await asyncio.to_thread(_run_upgrade, url) — the thread has no running loop,
-  so alembic's asyncio.run() proceeds normally.
+  so alembic's asyncio.run() proceeds normally. Docker/Uvicorn needs a second
+  guard: force asyncio.DefaultEventLoopPolicy() around the Alembic commands and
+  restore the previous policy after. to_thread alone was not enough in the
+  uvicorn[standard] container context.
 
 ## Solved Problems
 - Rotating uuid4() in the cache key made sha256(jd::profile.id) unstable. Fix:

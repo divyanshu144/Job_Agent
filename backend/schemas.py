@@ -26,6 +26,31 @@ class BulletItem(BaseModel):
     rationale: str
 
 
+class OmittedItem(BaseModel):
+    field: str
+    value: str
+    reason: str
+
+
+class ResumeExperienceItem(BaseModel):
+    company: str | None = None
+    role: str | None = None
+    dates: str | None = None
+    bullets: list[str] = Field(default_factory=list)
+
+
+class ResumeProjectItem(BaseModel):
+    name: str
+    description: str | None = None
+    bullets: list[str] = Field(default_factory=list)
+
+
+class ResumeEducationItem(BaseModel):
+    institution: str | None = None
+    degree: str | None = None
+    dates: str | None = None
+
+
 class ValidationWarning(BaseModel):
     """Produced by backend/evals/validators.py after each agent run.
     exclude=True on the field means it is stripped from model_dump() and
@@ -84,7 +109,14 @@ class CoverLetterOutput(BaseModel):
 
 
 class ResumeTailorerOutput(BaseModel):
-    tailored_bullets: list[BulletItem]
+    headline: str = ""
+    summary: str = ""
+    skills: list[str] = Field(default_factory=list)
+    experience: list[ResumeExperienceItem] = Field(default_factory=list)
+    projects: list[ResumeProjectItem] = Field(default_factory=list)
+    education: list[ResumeEducationItem] = Field(default_factory=list)
+    tailored_bullets: list[BulletItem] = Field(default_factory=list)
+    omitted_items: list[OmittedItem] = Field(default_factory=list)
     validation_warnings: list[ValidationWarning] = Field(default_factory=list, exclude=True)
 
 

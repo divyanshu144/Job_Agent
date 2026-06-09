@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models import CampaignJob, User
-from backend.services.auth_service import get_current_user
+from backend.services.auth_service import require_admin
 from backend.services.campaign_orchestrator import run_campaign
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ async def _run_and_clear(run_id: str) -> None:
 
 @router.post("/campaign/run", status_code=202)
 async def trigger_campaign(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ) -> dict[str, str]:
     """Kick off run_campaign in the background; return 202 immediately. A full
     run takes minutes, so we never block the request. 409 if one is in progress."""
@@ -61,7 +61,7 @@ async def trigger_campaign(
 @router.get("/campaign/status")
 async def campaign_status(
     limit: int = Query(default=5, ge=1, le=50),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Last run info + CampaignJob counts by status + the most recent failed

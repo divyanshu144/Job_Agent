@@ -9,6 +9,7 @@ from httpx import AsyncClient
 
 from backend.models import Analysis, Contact, JobResult, Profile, User
 from backend.services.auth_service import get_current_user
+from tests.factories import make_analysis, make_profile, make_user
 
 
 @pytest.fixture
@@ -18,7 +19,7 @@ def fake_user():
         email="test@test.com",
         hashed_password="x",
         is_active=True,
-        is_admin=False,
+        is_admin=True,
         created_at=datetime.now(timezone.utc),
     )
 
@@ -121,9 +122,45 @@ async def test_list_contacts_returns_sorted_by_confidence(
 
 
 @pytest.mark.asyncio
+async def test_contacts_reject_cross_user_analysis(authed_client: AsyncClient, db_session):
+    other_user = await make_user(
+        db_session, id="other-contact-user", email="other-contact@example.com"
+    )
+    profile = await make_profile(db_session, user_id=other_user.id)
+    analysis = await make_analysis(db_session, profile=profile, user_id=other_user.id)
+    db_session.add(
+        Contact(
+            id="other-contact",
+            analysis_id=analysis.id,
+            email="other@example.com",
+            source="hunter",
+            confidence=0.9,
+            status="discovered",
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    await db_session.commit()
+
+    list_resp = await authed_client.get(f"/api/contacts?analysis_id={analysis.id}")
+    draft_resp = await authed_client.post("/api/contacts/other-contact/draft", json={})
+
+    assert list_resp.status_code == 404
+    assert draft_resp.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_discover_requires_auth(unauthenticated_client: AsyncClient):
     r = await unauthenticated_client.post("/api/contacts/discover", json={"analysis_id": "anal-1"})
     assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_contact_routes_reject_non_admin(app_client: AsyncClient):
+    list_resp = await app_client.get("/api/contacts?analysis_id=anal-1")
+    discover_resp = await app_client.post("/api/contacts/discover", json={"analysis_id": "anal-1"})
+
+    assert list_resp.status_code == 403
+    assert discover_resp.status_code == 403
 
 
 @pytest.mark.asyncio

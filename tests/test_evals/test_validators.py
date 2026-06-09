@@ -20,6 +20,8 @@ from backend.schemas import (
     PriorOutputs,
     ResourceItem,
     ResourcePlannerOutput,
+    ResumeEducationItem,
+    ResumeExperienceItem,
     ResumeTailorerOutput,
 )
 
@@ -296,7 +298,58 @@ def test_resume_tailorer_non_empty_bullets_no_error():
 def test_resume_tailorer_empty_bullets_is_error():
     out = _rt(tailored_bullets=[])
     warnings = validate_resume_tailorer(out, EMPTY_PRIOR)
-    assert any(w.rule == "no_bullets" and w.severity == "error" for w in warnings)
+    assert any(w.rule == "no_resume_content" and w.severity == "error" for w in warnings)
+
+
+def test_resume_tailorer_structured_content_no_empty_error():
+    out = _rt(summary="Backend engineer", skills=["Python"])
+    warnings = validate_resume_tailorer(out, EMPTY_PRIOR)
+    assert not any(w.rule == "no_resume_content" for w in warnings)
+
+
+def test_resume_tailorer_omits_unsupported_factual_fields():
+    out = _rt(
+        summary="Backend engineer",
+        skills=["Python", "Kubernetes"],
+        experience=[
+            ResumeExperienceItem(
+                company="Invented Corp",
+                role="Engineer",
+                bullets=["Built Python services on Kubernetes"],
+            )
+        ],
+        education=[ResumeEducationItem(degree="PhD Computer Science", institution="Uni")],
+    )
+
+    warnings = validate_resume_tailorer(
+        out,
+        EMPTY_PRIOR,
+        source_text="## CV Text\nEngineer at Acme. Built Python services. BSc Mathematics.",
+    )
+
+    assert out.skills == ["Python"]
+    assert out.experience[0].company is None
+    assert out.education[0].degree is None
+    assert {item.value for item in out.omitted_items} == {
+        "Kubernetes",
+        "Invented Corp",
+        "PhD Computer Science",
+    }
+    assert any(w.rule == "unsupported_skill_omitted" for w in warnings)
+    assert any(w.rule == "unsupported_bullet_skill" for w in warnings)
+
+
+def test_resume_tailorer_skill_aliases_are_supported():
+    out = _rt(summary="Backend engineer", skills=["PostgreSQL", "Kubernetes"])
+
+    validate_resume_tailorer(
+        out,
+        EMPTY_PRIOR,
+        source_text="## CV Text\nWorked with Postgres and k8s in production.",
+    )
+
+    assert out.skills == ["PostgreSQL", "Kubernetes"]
+    assert out.omitted_items == []
 
 
 # ---------------------------------------------------------------------------

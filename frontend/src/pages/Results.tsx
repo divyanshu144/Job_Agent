@@ -7,6 +7,7 @@ import { ScoreCard } from "../components/ScoreCard";
 import { GapList } from "../components/GapList";
 import { ResourcePanel } from "../components/ResourcePanel";
 import { DocViewer } from "../components/DocViewer";
+import { useAuth } from "../context/AuthContext";
 
 type Tab = "score" | "gaps" | "resources" | "letter" | "resume" | "cold_email";
 const TABS: { id: Tab; label: string }[] = [
@@ -20,6 +21,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 export function Results() {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
   const [data, setData] = useState<AnalysisDetail | null>(null);
   const [tab, setTab] = useState<Tab>("score");
   const [error, setError] = useState<string | null>(null);
@@ -134,9 +136,27 @@ export function Results() {
     api.submitFeedback(data.id, rating).catch(() => setFeedbackRating(null));
   };
 
+  const downloadResume = async () => {
+    if (!data) return;
+    try {
+      const blob = await api.downloadResumeDocx(data.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `jobfit-resume-${data.id}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
   if (error) return <p className="p-6 text-red-600">{error}</p>;
   if (!data) return <p className="p-6 text-slate-500">Loading…</p>;
   const r = data.results;
+  const tabs = user?.is_admin ? TABS : TABS.filter((t) => t.id !== "cold_email");
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-4">
@@ -173,7 +193,7 @@ export function Results() {
       {data.evaluate_only && !generating && (
         <div className="flex items-center gap-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-sm text-blue-800 flex-1">
-            Evaluation complete. Generate your cover letter, resource plan, and resume bullets.
+            Evaluation complete. Generate your cover letter, resource plan, and tailored resume.
           </p>
           <button
             onClick={generate}
@@ -207,7 +227,7 @@ export function Results() {
       )}
 
       <div className="flex gap-2 border-b">
-        {TABS
+        {tabs
           .filter((t) => t.id !== "cold_email" || !!r.job_parser?.company)
           .map((t) => (
             <button
@@ -252,17 +272,72 @@ export function Results() {
         {tab === "resume" && (
           r.resume_tailorer
             ? (
-              <div className="space-y-4">
-                {r.resume_tailorer.tailored_bullets.map((b, i) => (
-                  <div key={i} className="border rounded-lg p-4 space-y-2 text-sm">
-                    <p className="text-slate-400 line-through">{b.original}</p>
-                    <p className="text-slate-900 font-medium">{b.rewritten}</p>
-                    <p className="text-xs text-slate-400 italic">{b.rationale}</p>
+              <div className="space-y-5 text-sm">
+                <div className="flex justify-end">
+                  <button
+                    onClick={downloadResume}
+                    className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-medium hover:bg-slate-700"
+                  >
+                    Download DOCX
+                  </button>
+                </div>
+
+                {(r.resume_tailorer.omitted_items ?? []).length > 0 && (
+                  <div className="border border-amber-200 bg-amber-50 rounded-lg p-3 space-y-1">
+                    {(r.resume_tailorer.omitted_items ?? []).map((item, i) => (
+                      <p key={i} className="text-amber-800">
+                        Omitted {item.value} because it was {item.reason}.
+                      </p>
+                    ))}
                   </div>
-                ))}
+                )}
+
+                {r.resume_tailorer.headline && (
+                  <h2 className="text-lg font-semibold text-slate-900">{r.resume_tailorer.headline}</h2>
+                )}
+                {r.resume_tailorer.summary && (
+                  <section>
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase mb-1">Summary</h3>
+                    <p className="text-slate-700 whitespace-pre-wrap">{r.resume_tailorer.summary}</p>
+                  </section>
+                )}
+                {(r.resume_tailorer.skills ?? []).length > 0 && (
+                  <section>
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase mb-1">Skills</h3>
+                    <p className="text-slate-700">{(r.resume_tailorer.skills ?? []).join(", ")}</p>
+                  </section>
+                )}
+                {(r.resume_tailorer.experience ?? []).length > 0 && (
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase">Experience</h3>
+                    {(r.resume_tailorer.experience ?? []).map((item, i) => (
+                      <div key={i} className="space-y-1">
+                        <p className="font-medium text-slate-900">
+                          {[item.role, item.company].filter(Boolean).join(" - ")}
+                          {item.dates ? ` (${item.dates})` : ""}
+                        </p>
+                        <ul className="list-disc pl-5 space-y-1 text-slate-700">
+                          {(item.bullets ?? []).map((bullet, j) => <li key={j}>{bullet}</li>)}
+                        </ul>
+                      </div>
+                    ))}
+                  </section>
+                )}
+                {(r.resume_tailorer.tailored_bullets ?? []).length > 0 && (
+                  <section className="space-y-3">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase">Bullet Rewrites</h3>
+                    {(r.resume_tailorer.tailored_bullets ?? []).map((b, i) => (
+                      <div key={i} className="border rounded-lg p-4 space-y-2">
+                        <p className="text-slate-400 line-through">{b.original}</p>
+                        <p className="text-slate-900 font-medium">{b.rewritten}</p>
+                        <p className="text-xs text-slate-400 italic">{b.rationale}</p>
+                      </div>
+                    ))}
+                  </section>
+                )}
               </div>
             )
-            : <p className="text-sm text-slate-400 italic">Generate documents to see resume bullets.</p>
+            : <p className="text-sm text-slate-400 italic">Generate documents to see tailored resume.</p>
         )}
 
         {tab === "cold_email" && (

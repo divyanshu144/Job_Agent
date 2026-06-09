@@ -4,6 +4,7 @@ import asyncio
 from typing import Any, AsyncGenerator
 
 from alembic.config import Config
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -19,6 +20,23 @@ class Base(DeclarativeBase):
 _connect_args: dict[str, Any] = {"ssl": True} if settings.db_ssl else {}
 engine = create_async_engine(settings.database_url, echo=False, connect_args=_connect_args)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+_INITIAL_SCHEMA_TABLES = {
+    "analyses",
+    "campaign_jobs",
+    "contacts",
+    "discovery_batches",
+    "discovery_runs",
+    "feedback",
+    "invite_tokens",
+    "job_results",
+    "jobs",
+    "llm_calls",
+    "pipeline_events",
+    "profiles",
+    "saved_jobs",
+    "users",
+}
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -40,7 +58,35 @@ def _run_upgrade(url: str) -> None:
     """
     cfg = Config("alembic.ini")
     cfg.set_main_option("sqlalchemy.url", url)
-    command.upgrade(cfg, "head")
+    previous_policy = asyncio.get_event_loop_policy()
+    asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+    try:
+        # Safe only for current-model create_all DBs; table presence is not a drift audit.
+        if asyncio.run(_has_complete_unstamped_schema(url)):
+            command.stamp(cfg, "head")
+        command.upgrade(cfg, "head")
+    finally:
+        asyncio.set_event_loop_policy(previous_policy)
+
+
+async def _has_complete_unstamped_schema(url: str) -> bool:
+    """Detect local databases created before Alembic managed startup.
+
+    Older development databases were initialized with SQLAlchemy `create_all`,
+    so they can contain the full schema without an `alembic_version` row. In
+    that exact case, stamp the database before upgrading instead of replaying
+    the initial migration and failing on already-existing tables.
+    """
+    probe_engine = create_async_engine(url, echo=False, connect_args=_connect_args)
+    try:
+        async with probe_engine.connect() as conn:
+            tables = await conn.run_sync(
+                lambda sync_conn: set(inspect(sync_conn).get_table_names())
+            )
+    finally:
+        await probe_engine.dispose()
+
+    return "alembic_version" not in tables and _INITIAL_SCHEMA_TABLES.issubset(tables)
 
 
 async def init_db() -> None:

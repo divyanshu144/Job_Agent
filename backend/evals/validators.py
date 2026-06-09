@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Literal
 
 from backend.schemas import (
@@ -18,6 +19,55 @@ logger = logging.getLogger(__name__)
 
 _VALID_SENIORITIES = {"Junior", "Mid", "Senior", "Lead", "Staff", "Principal"}
 
+_SKILL_ALIASES: dict[str, set[str]] = {
+    "amazon web services": {"amazon web services", "aws"},
+    "javascript": {"javascript", "js"},
+    "kubernetes": {"kubernetes", "k8s"},
+    "node.js": {"node.js", "nodejs", "node"},
+    "postgresql": {"postgresql", "postgres"},
+    "typescript": {"typescript", "ts"},
+}
+
+_KNOWN_SKILLS: set[str] = {
+    "airflow",
+    "aws",
+    "azure",
+    "bigquery",
+    "c++",
+    "css",
+    "dbt",
+    "django",
+    "docker",
+    "fastapi",
+    "flask",
+    "gcp",
+    "go",
+    "graphql",
+    "html",
+    "java",
+    "javascript",
+    "kafka",
+    "kubernetes",
+    "langchain",
+    "linux",
+    "mongodb",
+    "mysql",
+    "node.js",
+    "pandas",
+    "postgresql",
+    "python",
+    "pytorch",
+    "react",
+    "redis",
+    "ruby",
+    "rust",
+    "sql",
+    "sqlalchemy",
+    "tensorflow",
+    "terraform",
+    "typescript",
+}
+
 
 def _warn(
     agent: str,
@@ -28,6 +78,50 @@ def _warn(
     w = ValidationWarning(agent=agent, rule=rule, detail=detail, severity=severity)
     logger.warning("[%s] %s: %s", agent, rule, detail)
     return w
+
+
+def _canonical_skill(value: str) -> str:
+    needle = value.strip().lower()
+    for canonical, aliases in _SKILL_ALIASES.items():
+        if needle == canonical or needle in aliases:
+            return canonical
+    return needle
+
+
+def _aliases_for_skill(value: str) -> set[str]:
+    canonical = _canonical_skill(value)
+    return _SKILL_ALIASES.get(canonical, {value.strip().lower(), canonical})
+
+
+def _literal_present(text: str, value: str) -> bool:
+    needle = value.strip().lower()
+    if not needle:
+        return False
+    haystack = text.lower()
+    if re.search(r"^[a-z0-9 .#/+_-]+$", needle):
+        return re.search(rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", haystack) is not None
+    return needle in haystack
+
+
+def _skill_present(text: str, skill: str) -> bool:
+    return any(_literal_present(text, alias) for alias in _aliases_for_skill(skill))
+
+
+def _extract_cv_text(profile_text: str | None) -> str:
+    if not profile_text:
+        return ""
+    marker = "## CV Text"
+    if marker in profile_text:
+        return profile_text.split(marker, 1)[1]
+    return profile_text
+
+
+def _append_omission(output: ResumeTailorerOutput, field: str, value: str, reason: str) -> None:
+    if any(item.field == field and item.value == value for item in output.omitted_items):
+        return
+    from backend.schemas import OmittedItem
+
+    output.omitted_items.append(OmittedItem(field=field, value=value, reason=reason))
 
 
 def validate_job_parser(output: JobParserOutput, prior: PriorOutputs) -> list[ValidationWarning]:
@@ -174,21 +268,78 @@ def validate_cover_letter(
 
 
 def validate_resume_tailorer(
-    output: ResumeTailorerOutput, prior: PriorOutputs
+    output: ResumeTailorerOutput, prior: PriorOutputs, source_text: str | None = None
 ) -> list[ValidationWarning]:
     warnings: list[ValidationWarning] = []
-    if not output.tailored_bullets:
+    if not output.tailored_bullets and not (
+        output.summary or output.skills or output.experience or output.projects or output.education
+    ):
         warnings.append(
             _warn(
                 "resume_tailorer",
-                "no_bullets",
-                "tailored_bullets is empty",
+                "no_resume_content",
+                "resume output has no structured content or tailored_bullets",
                 severity="error",
             )
         )
-    for bullet in output.tailored_bullets:
-        orig_words = set(bullet.original.split())
-        new_words = set(bullet.rewritten.split())
+    cv_text = _extract_cv_text(source_text)
+    if cv_text:
+        supported_skills: list[str] = []
+        for skill in output.skills:
+            if _skill_present(cv_text, skill):
+                supported_skills.append(skill)
+            else:
+                _append_omission(output, "skills", skill, "not found in your resume")
+                warnings.append(
+                    _warn(
+                        "resume_tailorer",
+                        "unsupported_skill_omitted",
+                        f"omitted skill '{skill}' because it was not found in cv_text",
+                    )
+                )
+        output.skills = supported_skills
+
+        for exp in output.experience:
+            if exp.company and not _literal_present(cv_text, exp.company):
+                _append_omission(
+                    output, "experience.company", exp.company, "not found in your resume"
+                )
+                warnings.append(
+                    _warn(
+                        "resume_tailorer",
+                        "unsupported_employer_omitted",
+                        f"omitted employer '{exp.company}' because it was not found in cv_text",
+                    )
+                )
+                exp.company = None
+            for prose_bullet in exp.bullets:
+                lower_bullet = prose_bullet.lower()
+                for skill in _KNOWN_SKILLS:
+                    if _literal_present(lower_bullet, skill) and not _skill_present(cv_text, skill):
+                        warnings.append(
+                            _warn(
+                                "resume_tailorer",
+                                "unsupported_bullet_skill",
+                                f"bullet mentions '{skill}' but it was not found in cv_text",
+                            )
+                        )
+
+        for education in output.education:
+            if education.degree and not _literal_present(cv_text, education.degree):
+                _append_omission(
+                    output, "education.degree", education.degree, "not found in your resume"
+                )
+                warnings.append(
+                    _warn(
+                        "resume_tailorer",
+                        "unsupported_degree_omitted",
+                        f"omitted degree '{education.degree}' because it was not found in cv_text",
+                    )
+                )
+                education.degree = None
+    for rewrite in output.tailored_bullets:
+        orig_words = set(rewrite.original.split())
+        new_words = set(rewrite.rewritten.split())
         union = orig_words | new_words
         if union:
             diff_ratio = len(new_words - orig_words) / len(union)
@@ -198,7 +349,7 @@ def validate_resume_tailorer(
                         "resume_tailorer",
                         "bullet_too_similar",
                         f"rewritten differs from original by only {diff_ratio:.0%} "
-                        f"(minimum 20%): '{bullet.original[:60]}'",
+                        f"(minimum 20%): '{rewrite.original[:60]}'",
                     )
                 )
     return warnings

@@ -60,13 +60,13 @@ export function ProfileSetup() {
 
       {/* CV Upload */}
       <div className="border-2 border-dashed border-slate-300 rounded-xl p-5 flex flex-col items-center gap-3 text-center">
-        <p className="text-sm font-medium text-slate-700">Upload your CV (PDF)</p>
-        <p className="text-xs text-slate-400">Replaces the existing CV and rebuilds your profile</p>
+        <p className="text-sm font-medium text-slate-700">Upload your resume/CV</p>
+        <p className="text-xs text-slate-400">PDF or DOCX. Replaces the existing CV text and rebuilds your profile</p>
         <label className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors ${uploading ? "bg-slate-200 text-slate-400" : "bg-slate-900 text-white hover:bg-slate-700"}`}>
-          {uploading ? "Uploading…" : "Choose PDF"}
-          <input ref={fileRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={handleCvUpload} disabled={busy} />
+          {uploading ? "Uploading…" : "Choose File"}
+          <input ref={fileRef} type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handleCvUpload} disabled={busy} />
         </label>
-        {uploadSuccess && <p className="text-green-600 text-sm font-medium">CV uploaded and profile rebuilt!</p>}
+        {uploadSuccess && <p className="text-green-600 text-sm font-medium">Resume uploaded and profile rebuilt!</p>}
       </div>
 
       {error && <p className="text-red-600 text-sm">{error}</p>}

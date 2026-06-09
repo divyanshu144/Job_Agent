@@ -2,9 +2,27 @@ import type { ProfileResponse, AnalysisDetail, AgentName, SSECallbacks, Discover
 
 const BASE = "/api";
 
+function _detailToMessage(detail: unknown, fallback: string): string {
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item) return String(item.msg);
+        return null;
+      })
+      .filter(Boolean);
+    if (messages.length) return messages.join("; ");
+  }
+  if (detail && typeof detail === "object" && "message" in detail) {
+    return String(detail.message);
+  }
+  return fallback;
+}
+
 async function _errorMessage(r: Response, method: string, path: string): Promise<never> {
   const detail = await r.json().then((j) => j?.detail ?? null).catch(() => null);
-  throw new Error(detail ?? `${method} ${path} failed: ${r.status}`);
+  throw new Error(_detailToMessage(detail, `${method} ${path} failed: ${r.status}`));
 }
 
 async function get<T>(path: string): Promise<T> {
@@ -28,17 +46,22 @@ export const api = {
   getProfile: () => get<ProfileResponse>("/profile"),
   refreshProfile: async (): Promise<ProfileResponse> => {
     const r = await fetch(`${BASE}/profile/refresh`, { method: "POST", credentials: "include" });
-    if (!r.ok) throw new Error(`Refresh failed: ${r.status}`);
+    if (!r.ok) return _errorMessage(r, "POST", "/profile/refresh");
     return r.json() as Promise<ProfileResponse>;
   },
   uploadCv: async (file: File): Promise<ProfileResponse> => {
     const form = new FormData();
     form.append("file", file);
     const r = await fetch(`${BASE}/profile/cv`, { method: "POST", body: form, credentials: "include" });
-    if (!r.ok) throw new Error(`CV upload failed: ${r.status}`);
+    if (!r.ok) return _errorMessage(r, "POST", "/profile/cv");
     return r.json() as Promise<ProfileResponse>;
   },
   getAnalysis: (id: string) => get<AnalysisDetail>(`/analysis/${id}`),
+  downloadResumeDocx: async (id: string): Promise<Blob> => {
+    const r = await fetch(`${BASE}/analysis/${id}/resume.docx`, { credentials: "include" });
+    if (!r.ok) return _errorMessage(r, "GET", `/analysis/${id}/resume.docx`);
+    return r.blob();
+  },
   listHistory: () => get<AnalysisSummary[]>("/history"),
   submitFeedback: (analysisId: string, rating: number, agentName?: string, note?: string) =>
     post<Feedback>("/feedback", { analysis_id: analysisId, rating, agent_name: agentName ?? null, note: note ?? null }),
@@ -73,7 +96,7 @@ export const api = {
   getSavedJobs: () => get<DiscoveryFeedResponse>("/discovery/saved"),
   saveJob: async (jobId: string): Promise<{ id: string; saved: boolean }> => {
     const r = await fetch(`${BASE}/discovery/jobs/${jobId}/save`, { method: "PATCH", credentials: "include" });
-    if (!r.ok) throw new Error(`Save job failed: ${r.status}`);
+    if (!r.ok) return _errorMessage(r, "PATCH", `/discovery/jobs/${jobId}/save`);
     return r.json() as Promise<{ id: string; saved: boolean }>;
   },
   getMe: async (): Promise<User | null> => {
@@ -91,8 +114,13 @@ export const api = {
       credentials: "include",
     });
     if (!r.ok) {
-      const err = await r.json().catch(() => ({ detail: "Login failed" }));
-      throw new Error(err.detail || "Login failed");
+      if (r.status === 401) {
+        throw new Error(
+          "Invalid email or password. If this is your first time here, create an account first.",
+        );
+      }
+      const err = await r.json().catch(() => ({ detail: null }));
+      throw new Error(_detailToMessage(err.detail, `Login failed: ${r.status}`));
     }
     return r.json() as Promise<User>;
   },
@@ -104,8 +132,8 @@ export const api = {
       credentials: "include",
     });
     if (!r.ok) {
-      const err = await r.json().catch(() => ({ detail: "Registration failed" }));
-      throw new Error(err.detail || "Registration failed");
+      const err = await r.json().catch(() => ({ detail: null }));
+      throw new Error(_detailToMessage(err.detail, `Registration failed: ${r.status}`));
     }
     return r.json() as Promise<User>;
   },

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import pytest
 
 from backend.models import Analysis, JobResult, Profile
+from tests.factories import make_analysis, make_profile, make_user
 
 _USER_ID = "test-user-id"  # matches conftest._FAKE_USER (the auth override)
 
@@ -82,3 +83,78 @@ async def test_history_includes_denormalized_meta(client_with_data):
 async def test_history_requires_auth(unauthenticated_client):
     resp = await unauthenticated_client.get("/api/history")
     assert resp.status_code == 401
+
+
+async def test_get_analysis_rejects_cross_user_analysis(app_client, db_session):
+    other_user = await make_user(
+        db_session, id="other-history-user", email="other-history@example.com"
+    )
+    profile = await make_profile(db_session, user_id=other_user.id)
+    analysis = await make_analysis(db_session, profile=profile, user_id=other_user.id)
+    await db_session.commit()
+
+    resp = await app_client.get(f"/api/analysis/{analysis.id}")
+
+    assert resp.status_code == 404
+
+
+async def test_download_resume_docx_for_owned_analysis(app_client, db_session):
+    profile = await make_profile(db_session, user_id=_USER_ID)
+    analysis = await make_analysis(db_session, profile=profile, user_id=_USER_ID)
+    db_session.add(
+        JobResult(
+            analysis_id=analysis.id,
+            agent_name="resume_tailorer",
+            output_json=json.dumps(
+                {
+                    "headline": "Backend Engineer",
+                    "summary": "Builds APIs.",
+                    "skills": ["Python"],
+                    "experience": [
+                        {
+                            "company": "Acme",
+                            "role": "Engineer",
+                            "dates": "2022-2024",
+                            "bullets": ["Built FastAPI services"],
+                        }
+                    ],
+                    "projects": [],
+                    "education": [],
+                    "tailored_bullets": [],
+                    "omitted_items": [],
+                }
+            ),
+        )
+    )
+    await db_session.commit()
+
+    resp = await app_client.get(f"/api/analysis/{analysis.id}/resume.docx")
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert resp.content.startswith(b"PK")
+
+
+async def test_download_resume_docx_rejects_cross_user_analysis(app_client, db_session):
+    other_user = await make_user(
+        db_session, id="other-resume-user", email="other-resume@example.com"
+    )
+    profile = await make_profile(db_session, user_id=other_user.id)
+    analysis = await make_analysis(db_session, profile=profile, user_id=other_user.id)
+    await db_session.commit()
+
+    resp = await app_client.get(f"/api/analysis/{analysis.id}/resume.docx")
+
+    assert resp.status_code == 404
+
+
+async def test_download_resume_docx_requires_generated_resume(app_client, db_session):
+    profile = await make_profile(db_session, user_id=_USER_ID)
+    analysis = await make_analysis(db_session, profile=profile, user_id=_USER_ID)
+    await db_session.commit()
+
+    resp = await app_client.get(f"/api/analysis/{analysis.id}/resume.docx")
+
+    assert resp.status_code == 404

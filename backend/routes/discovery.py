@@ -17,7 +17,7 @@ from backend.schemas import (
     FunnelMetrics,
     SourceStatusItem,
 )
-from backend.services.auth_service import get_current_user
+from backend.services.auth_service import require_admin
 from backend.services.discovery import (
     _get_configured_sources,
     run_all_discovery,
@@ -72,7 +72,7 @@ def _job_row_to_item(row: object, is_saved: bool = False) -> DiscoveryFeedItem:
 @router.post("/discovery/run")
 async def trigger_discovery(
     source: str = Query(default="hn"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     if source not in _VALID_SOURCES:
@@ -86,7 +86,7 @@ async def trigger_discovery(
 
 @router.post("/discovery/run/all")
 async def trigger_all_discovery(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """Start a background run that fetches from all configured sources concurrently."""
@@ -97,7 +97,7 @@ async def trigger_all_discovery(
 @router.post("/discovery/run/batch", response_model=BatchDiscoveryResponse)
 async def trigger_batch_discovery(
     source: str = Query(default="hn"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> BatchDiscoveryResponse:
     """Submit a discovery run via Anthropic Batch API (50% cost discount).
@@ -116,7 +116,7 @@ async def trigger_batch_discovery(
 
 @router.post("/discovery/run/batch/all", response_model=BatchDiscoveryResponse)
 async def trigger_batch_all_discovery(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> BatchDiscoveryResponse:
     """Submit a Batch API run across ALL configured sources in one batch (50% discount)."""
@@ -126,7 +126,7 @@ async def trigger_batch_all_discovery(
 
 @router.get("/discovery/sources", response_model=DiscoverySourcesResponse)
 async def get_discovery_sources(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ) -> DiscoverySourcesResponse:
     """Return which sources have credentials configured. Never exposes key values."""
     configured = set(_get_configured_sources())
@@ -144,7 +144,7 @@ async def get_discovery_sources(
 @router.get("/discovery/runs/{run_id}", response_model=DiscoveryRunResponse)
 async def get_discovery_run(
     run_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryRunResponse:
     run = (
@@ -157,7 +157,7 @@ async def get_discovery_run(
 
 @router.get("/discovery/runs", response_model=list[DiscoveryRunResponse])
 async def list_discovery_runs(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> list[DiscoveryRunResponse]:
     runs = (
@@ -171,7 +171,7 @@ async def list_discovery_runs(
 @router.patch("/discovery/jobs/{job_id}/save")
 async def toggle_save_job(
     job_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
     job = (await db.execute(select(Job).where(Job.id == job_id))).scalar_one_or_none()
@@ -201,7 +201,7 @@ async def get_discovery_feed(
     min_score: int = Query(default=0, ge=0, le=100),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryFeedResponse:
     # Most-recent Analysis per job (correlated scalar subquery) — avoids the duplicate
@@ -241,7 +241,7 @@ async def get_discovery_feed(
 async def get_saved_jobs(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryFeedResponse:
     latest_analysis_id = (

@@ -29,9 +29,9 @@ function Nav() {
       <span className="font-bold text-slate-900 mr-4">JobFit</span>
       <NavLink to="/" end className={link}>Profile</NavLink>
       <NavLink to="/analyse" className={link}>Analyse</NavLink>
-      <NavLink to="/discover" className={link}>Discover</NavLink>
-      <NavLink to="/saved" className={link}>Saved</NavLink>
-      <NavLink to="/costs" className={link}>Costs</NavLink>
+      {user.is_admin && <NavLink to="/discover" className={link}>Discover</NavLink>}
+      {user.is_admin && <NavLink to="/saved" className={link}>Saved</NavLink>}
+      {user.is_admin && <NavLink to="/costs" className={link}>Costs</NavLink>}
       <div className="ml-auto flex items-center gap-3">
         <span className="text-xs text-slate-500">{user.email}</span>
         {user.is_admin && (

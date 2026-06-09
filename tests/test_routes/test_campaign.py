@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from backend.models import CampaignJob, DiscoveryRun, Job
+from backend.models import CampaignJob, DiscoveryRun, Job, User
+from backend.services.auth_service import get_current_user
 
 
 @pytest.fixture(autouse=True)
@@ -20,9 +21,29 @@ def _reset_state():
     campaign._state.update(running=False)
 
 
-async def test_run_returns_202_and_run_id(app_client):
+@pytest.fixture
+def admin_client(app_client):
+    from backend.main import app
+
+    previous = app.dependency_overrides.get(get_current_user)
+    app.dependency_overrides[get_current_user] = lambda: User(
+        id="admin-user",
+        email="admin@example.com",
+        hashed_password="x",
+        is_active=True,
+        is_admin=True,
+        created_at=datetime.now(timezone.utc),
+    )
+    yield app_client
+    if previous is None:
+        app.dependency_overrides.pop(get_current_user, None)
+    else:
+        app.dependency_overrides[get_current_user] = previous
+
+
+async def test_run_returns_202_and_run_id(admin_client):
     with patch("backend.routes.campaign.run_campaign", new=AsyncMock()) as mock_run:
-        resp = await app_client.post("/api/campaign/run")
+        resp = await admin_client.post("/api/campaign/run")
         assert resp.status_code == 202
         body = resp.json()
         assert body["run_id"]
@@ -34,15 +55,15 @@ async def test_run_returns_202_and_run_id(app_client):
     assert campaign._state["running"] is False  # reset after the run completes
 
 
-async def test_run_returns_409_when_already_running(app_client):
+async def test_run_returns_409_when_already_running(admin_client):
     from backend.routes import campaign
 
     campaign._state["running"] = True
-    resp = await app_client.post("/api/campaign/run")
+    resp = await admin_client.post("/api/campaign/run")
     assert resp.status_code == 409
 
 
-async def test_status_reports_counts_and_recent_failures(app_client, Session):
+async def test_status_reports_counts_and_recent_failures(admin_client, Session):
     async with Session() as s:
         # PG enforces campaign_jobs.job_id FK → seed the parent jobs (and a run).
         run = DiscoveryRun(source="hn", status="complete", started_at=datetime.now(timezone.utc))
@@ -66,7 +87,7 @@ async def test_status_reports_counts_and_recent_failures(app_client, Session):
         )
         await s.commit()
 
-    resp = await app_client.get("/api/campaign/status")
+    resp = await admin_client.get("/api/campaign/status")
     assert resp.status_code == 200
     body = resp.json()
     assert body["counts"] == {"queued": 1, "drafted": 1, "failed": 2}

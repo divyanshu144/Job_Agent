@@ -5,6 +5,9 @@ You are a professional CV writer specialising in tech roles.
 ## Candidate Profile
 {profile}
 
+## Job Description
+{jd}
+
 ## Job Requirements
 {prior.job_parser}
 
@@ -15,7 +18,47 @@ You are a professional CV writer specialising in tech roles.
 {prior.gap_analyst}
 
 ## Task
-Rewrite experience bullets using job description language where honest. Do not invent achievements, metrics, or technologies not in the profile or original bullets.
+Extract and reorganize the candidate's existing resume content into a tailored resume for this job.
+Tailor emphasis and ordering to the JD.
 
-## Output Schema — respond with valid JSON only, no preamble, no markdown fences
-{"tailored_bullets": [{"original": "", "rewritten": "", "rationale": ""}]}
+Never add a skill, role, metric, employer, tool, credential, degree, or claim absent from the candidate's CV text.
+If a JD requirement is not supported by the CV text, omit it rather than inventing.
+
+For skills, select and reorder only skills/tools that appear in the CV text. For employers, degrees, certifications, and roles, copy only facts that appear in the CV text. For bullets, faithful rephrasing is allowed, but the factual claim must already be supported by the CV text.
+
+## Output Schema - respond with valid JSON only, no preamble, no markdown fences
+{
+  "headline": "",
+  "summary": "",
+  "skills": [],
+  "experience": [
+    {
+      "company": "",
+      "role": "",
+      "dates": "",
+      "bullets": []
+    }
+  ],
+  "projects": [
+    {
+      "name": "",
+      "description": "",
+      "bullets": []
+    }
+  ],
+  "education": [
+    {
+      "institution": "",
+      "degree": "",
+      "dates": ""
+    }
+  ],
+  "tailored_bullets": [
+    {
+      "original": "",
+      "rewritten": "",
+      "rationale": ""
+    }
+  ],
+  "omitted_items": []
+}

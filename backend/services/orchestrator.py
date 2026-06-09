@@ -296,7 +296,7 @@ async def run_evaluate_pipeline(
 
 
 async def run_generate_pipeline(
-    analysis_id: str, db: AsyncSession
+    analysis_id: str, db: AsyncSession, user_id: str | None = None
 ) -> AsyncGenerator[SSEEvent, None]:
     """Phase 2: resource_planner → [cover_letter ∥ resume_tailorer].
 
@@ -308,6 +308,11 @@ async def run_generate_pipeline(
         await db.execute(select(Analysis).where(Analysis.id == analysis_id))
     ).scalar_one_or_none()
     if analysis is None:
+        yield SSEEvent(
+            "pipeline_error", {"agent": "system", "error": f"Analysis {analysis_id} not found"}
+        )
+        return
+    if user_id is not None and analysis.user_id != user_id:
         yield SSEEvent(
             "pipeline_error", {"agent": "system", "error": f"Analysis {analysis_id} not found"}
         )

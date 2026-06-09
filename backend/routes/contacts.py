@@ -13,7 +13,7 @@ from backend.database import get_db
 from backend.models import Analysis, Contact, Profile, User
 from backend.schemas import ContactRead, DiscoverRequest, DraftResponse, SendResponse
 from backend.services import gmail_service
-from backend.services.auth_service import get_current_user
+from backend.services.auth_service import require_admin
 from backend.services.contact_discovery import ContactDiscoveryUnavailable, discover_contacts
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ router = APIRouter(tags=["contacts"])
 @router.get("/contacts", response_model=list[ContactRead])
 async def list_contacts(
     analysis_id: str = Query(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> list[ContactRead]:
     analysis = (
@@ -43,7 +43,7 @@ async def list_contacts(
 @router.post("/contacts/discover", response_model=list[ContactRead])
 async def discover(
     body: DiscoverRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> list[ContactRead]:
     analysis = (
@@ -68,7 +68,7 @@ async def discover(
 @router.post("/contacts/{contact_id}/draft", response_model=DraftResponse)
 async def draft_email(
     contact_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DraftResponse:
     contact = (
@@ -109,7 +109,7 @@ async def draft_email(
 @router.post("/contacts/{contact_id}/send", response_model=SendResponse)
 async def send_email(
     contact_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> SendResponse:
     contact = (
