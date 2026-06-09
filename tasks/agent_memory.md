@@ -1,0 +1,73 @@
+# Agent Memory — Durable Structured Reference
+
+> Companion to `tasks/lessons.md`. lessons.md is the chronological "what broke / what we
+> learned" log; this file is the durable **structured reference**. They coexist — don't duplicate.
+
+## Architecture Decisions
+<!-- Locked choices. A subagent reading cold must NOT reverse these even if a
+     stub's name or surrounding code suggests otherwise. -->
+- Drafts-only, no autonomous send. Human-in-the-loop is the feature AND the
+  portfolio signal. The campaign orchestrator creates Gmail drafts only. Manual
+  per-contact send (/contacts/{id}/send) is human-triggered and fine; NOTHING in
+  the autonomous orchestrator may ever call a send path.
+- Backend Gmail uses google-api-python-client + OAuth (gmail.compose). NEVER the
+  Gmail MCP — MCP is Claude.ai-chat-only, unavailable server-side.
+- Campaign orchestrator: each job gets its own AsyncSession (never shared across
+  jobs). Sequential steps within one job may share that job's session.
+- Artifact flow: PDF threads resume_tailor -> draft_create directly. It does NOT
+  pass through cold_email (cold_email returns body text only).
+- Postgres everywhere; SQLite + aiosqlite fully retired. Tests run on
+  testcontainers Postgres.
+- All timestamp columns are timestamptz (DateTime(timezone=True)); _utcnow()
+  stays tz-aware UTC. Forced by correctness, not optional.
+- Alembic is the single source of truth for schema. create_all is confined to
+  the test fixture. [PENDING MERGE: feat/boot-alembic-upgrade] App boot runs
+  `alembic upgrade head`.
+- FK enforcement ON by default in tests (prod-parity). @pytest.mark.relaxed_fks
+  is the sanctioned escape hatch and is used by zero tests.
+- OUT of scope (do not implement without explicit approval): JSON->JSONB,
+  connection-pool tuning, multi-domain support, prompt caching (dormant below
+  the cacheable-prefix threshold).
+- Job sources: Reed, Adzuna, HN, Remotive, plus Greenhouse/Lever/Ashby via
+  assets/target_companies.json. RULED OUT: LinkedIn, Indeed, Wellfound
+  (ToS/fragility/Selenium). YC v0.1 companies API dropped (exposes no ATS link).
+
+## Known Gotchas
+- asyncpg rejects tz-aware datetimes into a non-tz (timestamp WITHOUT time zone)
+  column; SQLite silently accepted them. Use timestamptz.
+- Greenhouse: legacy boards.greenhouse.io/{slug}/jobs.json 404s. Use
+  boards-api.greenhouse.io/v1/boards/{slug}/jobs; content is HTML-escaped, so
+  unescape -> strip before storing.
+- SQLite silently accepts dangling FKs; Postgres enforces them. Migrating
+  surfaces hidden test-seed debt — seed FK-valid parents via factories.
+- Alembic upgrade-from-empty must create tables in FK-dependency order (jobs
+  before campaign_jobs) or Postgres errors "relation does not exist".
+- init_db PRAGMA table_info / ALTER TABLE ADD COLUMN is SQLite-only — hard syntax
+  error on Postgres. Alembic owns migrations now.
+- pdflatex needs texlive on PATH for real runs; mock the subprocess in tests.
+- Haiku's real minimum cacheable prefix is 4096 tokens, not the documented 2048
+  (verified empirically against the live API).
+
+## Solved Problems
+- Rotating uuid4() in the cache key made sha256(jd::profile.id) unstable. Fix:
+  profile_content_hash(merged_profile) + a unified analysis_cache_key() helper.
+- Non-deterministic merged_profile from unordered dict iteration. Fix: removed
+  GitHub integration entirely (root-cause elimination beat patching ordering).
+- Stale test fixtures during merges (a test built Profile(github_data=...) after
+  that field was removed). Caught by running make check after EACH merge.
+- _record_failure created duplicate CampaignJob rows when a job errored after
+  being queued. Fix: made it an upsert.
+
+## Useful Patterns
+- Test DB isolation: session-scoped testcontainers Postgres; per-test
+  connection-level transaction + nested SAVEPOINT, roll back after each test
+  (SQLAlchemy "join an external transaction"). Do NOT recreate schema or truncate
+  per test.
+- tests/factories.py: make_user/make_profile/make_analysis/make_discovery_run/
+  make_job seed FK-valid parents + flush.
+- pdflatex self-correction: on non-zero exit, retry once feeding the log tail
+  into the correction prompt; raise on the second failure.
+- Orchestrator resilience: per-job try/except — one job failing logs and the run
+  continues; never abort the batch.
+- Validate a live endpoint's response shape before building an orchestrator on an
+  external API (caught both the YC and Greenhouse issues pre-ship).
