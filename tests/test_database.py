@@ -18,6 +18,9 @@ async def test_profile_insert(session):
     await session.refresh(p)
     assert p.id is not None
     assert p.last_refreshed_at is not None
+    assert p.profile_review_data == "{}"
+    assert p.review_status == "draft"
+    assert p.reviewed_at is None
 
 
 async def test_analysis_with_results(session):

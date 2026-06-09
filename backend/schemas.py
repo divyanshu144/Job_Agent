@@ -120,6 +120,40 @@ class ResumeTailorerOutput(BaseModel):
     validation_warnings: list[ValidationWarning] = Field(default_factory=list, exclude=True)
 
 
+class ProfileReviewProject(BaseModel):
+    name: str = ""
+    description: str = ""
+    highlights: list[str] = Field(default_factory=list)
+
+
+class ProfileReviewExperience(BaseModel):
+    company: str = ""
+    role: str = ""
+    dates: str = ""
+    highlights: list[str] = Field(default_factory=list)
+
+
+class ProfileReviewLink(BaseModel):
+    label: str = ""
+    url: str = ""
+
+
+class ProfileWorkPreferences(BaseModel):
+    locations: list[str] = Field(default_factory=list)
+    remote: str | None = None
+    role_types: list[str] = Field(default_factory=list)
+    industries: list[str] = Field(default_factory=list)
+
+
+class ProfileReviewData(BaseModel):
+    target_role: str = ""
+    key_skills: list[str] = Field(default_factory=list)
+    projects: list[ProfileReviewProject] = Field(default_factory=list)
+    experience: list[ProfileReviewExperience] = Field(default_factory=list)
+    links: list[ProfileReviewLink] = Field(default_factory=list)
+    work_preferences: ProfileWorkPreferences = Field(default_factory=ProfileWorkPreferences)
+
+
 class PriorOutputs(BaseModel):
     job_parser: JobParserOutput | None = None
     match_scorer: MatchScorerOutput | None = None
@@ -153,8 +187,23 @@ class ProfileResponse(BaseModel):
     yaml_data: str
     cv_text: str
     merged_profile: str
+    profile_review_data: str = "{}"
+    review_status: str = "draft"
+    reviewed_at: datetime | None = None
     last_refreshed_at: datetime
     warnings: list[str] = []
+
+
+class ProfileReviewResponse(BaseModel):
+    profile_id: str
+    review_data: ProfileReviewData
+    review_status: str
+    reviewed_at: datetime | None = None
+    has_cv_text: bool = False
+
+
+class ProfileReviewUpdate(BaseModel):
+    review_data: ProfileReviewData
 
 
 class PipelineDoneData(BaseModel):
@@ -187,6 +236,7 @@ class AnalysisDetail(BaseModel):
     evaluate_only: bool
     status: str | None = None
     results: dict[str, dict]  # type: ignore[type-arg]
+    result_errors: dict[str, str] = Field(default_factory=dict)
 
 
 class FunnelMetrics(BaseModel):

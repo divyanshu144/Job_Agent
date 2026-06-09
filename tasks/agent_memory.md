@@ -76,6 +76,9 @@
   per test.
 - tests/factories.py: make_user/make_profile/make_analysis/make_discovery_run/
   make_job seed FK-valid parents + flush.
+- Route-created profile snapshots that must be visible to a later request need
+  an explicit commit. Returning a flushed-but-uncommitted Profile from one
+  request can make the next request create or select a different bootstrap row.
 - pdflatex self-correction: on non-zero exit, retry once feeding the log tail
   into the correction prompt; raise on the second failure.
 - Orchestrator resilience: per-job try/except — one job failing logs and the run

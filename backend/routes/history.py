@@ -55,7 +55,12 @@ async def get_analysis(
     if analysis is None:
         raise HTTPException(status_code=404, detail=f"Analysis {analysis_id} not found")
     results_map = {
-        r.agent_name: json.loads(r.output_json) if r.output_json else {} for r in analysis.results
+        r.agent_name: json.loads(r.output_json) for r in analysis.results if r.output_json
+    }
+    result_errors = {
+        r.agent_name: r.error
+        for r in analysis.results
+        if r.error and r.agent_name not in results_map
     }
     return AnalysisDetail(
         id=analysis.id,
@@ -65,6 +70,7 @@ async def get_analysis(
         partial=analysis.partial,
         evaluate_only=analysis.evaluate_only,
         results=results_map,
+        result_errors=result_errors,
     )
 
 

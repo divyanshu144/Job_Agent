@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
 from backend.models import Profile
+from backend.schemas import ProfileReviewData
 from backend.services.cv_parser import extract_text_from_file
 
 logger = logging.getLogger(__name__)
@@ -37,8 +39,110 @@ search_profiles: []
 """
 
 
-def _assemble_merged(yaml_data: str, cv_text: str) -> str:
+def default_profile_yaml() -> str:
+    return _DEFAULT_PROFILE_YAML
+
+
+def parse_profile_review_data(raw_text: str) -> ProfileReviewData:
+    if not raw_text.strip():
+        return ProfileReviewData()
+    try:
+        return ProfileReviewData.model_validate(json.loads(raw_text))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return ProfileReviewData()
+
+
+def serialize_profile_review_data(review_data: ProfileReviewData) -> str:
+    return review_data.model_dump_json()
+
+
+def _clean_list(values: list[str]) -> list[str]:
+    return [value.strip() for value in values if value.strip()]
+
+
+def build_profile_review_text(review_data: ProfileReviewData) -> str:
+    sections: list[str] = []
+
+    if review_data.target_role.strip():
+        sections.append("Target Role\n" + review_data.target_role.strip())
+
+    skills = _clean_list(review_data.key_skills)
+    if skills:
+        sections.append("Key Skills\n" + "\n".join(f"- {skill}" for skill in skills))
+
+    projects: list[str] = []
+    for project in review_data.projects:
+        name = project.name.strip()
+        description = project.description.strip()
+        highlights = _clean_list(project.highlights)
+        if not (name or description or highlights):
+            continue
+        lines = [name or "Project"]
+        if description:
+            lines.append(description)
+        lines.extend(f"- {highlight}" for highlight in highlights)
+        projects.append("\n".join(lines))
+    if projects:
+        sections.append("Projects\n" + "\n\n".join(projects))
+
+    experience_items: list[str] = []
+    for item in review_data.experience:
+        heading = " - ".join(part for part in [item.role.strip(), item.company.strip()] if part)
+        dates = item.dates.strip()
+        highlights = _clean_list(item.highlights)
+        if not (heading or dates or highlights):
+            continue
+        lines = [heading or "Experience"]
+        if dates:
+            lines.append(dates)
+        lines.extend(f"- {highlight}" for highlight in highlights)
+        experience_items.append("\n".join(lines))
+    if experience_items:
+        sections.append("Experience\n" + "\n\n".join(experience_items))
+
+    links: list[str] = []
+    for link in review_data.links:
+        label = link.label.strip()
+        url = link.url.strip()
+        if label and url:
+            links.append(f"- {label}: {url}")
+        elif url:
+            links.append(f"- {url}")
+    if links:
+        sections.append("Links\n" + "\n".join(links))
+
+    preferences = review_data.work_preferences
+    pref_lines: list[str] = []
+    locations = _clean_list(preferences.locations)
+    role_types = _clean_list(preferences.role_types)
+    industries = _clean_list(preferences.industries)
+    if locations:
+        pref_lines.append("Locations: " + ", ".join(locations))
+    if preferences.remote and preferences.remote.strip():
+        pref_lines.append("Remote: " + preferences.remote.strip())
+    if role_types:
+        pref_lines.append("Role types: " + ", ".join(role_types))
+    if industries:
+        pref_lines.append("Industries: " + ", ".join(industries))
+    if pref_lines:
+        sections.append("Work Preferences\n" + "\n".join(pref_lines))
+
+    return "\n\n".join(sections)
+
+
+def _assemble_merged(
+    yaml_data: str, cv_text: str, profile_review_data: str | ProfileReviewData | None = None
+) -> str:
     parts = ["## Candidate Profile (YAML)\n" + yaml_data]
+    if profile_review_data is not None:
+        review_data = (
+            profile_review_data
+            if isinstance(profile_review_data, ProfileReviewData)
+            else parse_profile_review_data(profile_review_data)
+        )
+        review_text = build_profile_review_text(review_data)
+        if review_text.strip():
+            parts.append("## Profile Review\n" + review_text)
     if cv_text.strip():
         parts.append("## CV Text\n" + cv_text[:8000])
     return "\n\n---\n\n".join(parts)
@@ -70,6 +174,9 @@ async def build_profile(
     cv_path: str | None = None,
     user_id: str | None = None,
     cv_text: str | None = None,
+    profile_review_data: str | ProfileReviewData | None = None,
+    review_status: str = "draft",
+    reviewed_at: datetime | None = None,
 ) -> Profile:
     """Build a Profile row from YAML + CV.
 
@@ -83,11 +190,19 @@ async def build_profile(
     if cv_text is None:
         cv_text = await extract_text_from_file(cv_path)
 
-    merged = _assemble_merged(yaml_text, cv_text)
+    review_text = (
+        serialize_profile_review_data(profile_review_data)
+        if isinstance(profile_review_data, ProfileReviewData)
+        else (profile_review_data or "{}")
+    )
+    merged = _assemble_merged(yaml_text, cv_text, review_text if user_id else None)
 
     profile = Profile(
         yaml_data=yaml_text,
         cv_text=cv_text,
+        profile_review_data=review_text,
+        review_status=review_status,
+        reviewed_at=reviewed_at,
         merged_profile=merged,
         last_refreshed_at=datetime.now(timezone.utc),
         user_id=user_id,
@@ -103,16 +218,27 @@ async def build_profile_from_text(
     yaml_text: str,
     cv_text: str,
     user_id: str,
+    profile_review_data: str | ProfileReviewData | None = None,
+    review_status: str = "draft",
+    reviewed_at: datetime | None = None,
 ) -> Profile:
     """Create a user-owned Profile row from already-parsed content.
 
     Used for authenticated uploads so user CV bytes never write through the
     legacy shared settings.cv_path file.
     """
-    merged = _assemble_merged(yaml_text, cv_text)
+    review_text = (
+        serialize_profile_review_data(profile_review_data)
+        if isinstance(profile_review_data, ProfileReviewData)
+        else (profile_review_data or "{}")
+    )
+    merged = _assemble_merged(yaml_text, cv_text, review_text)
     profile = Profile(
         yaml_data=yaml_text,
         cv_text=cv_text,
+        profile_review_data=review_text,
+        review_status=review_status,
+        reviewed_at=reviewed_at,
         merged_profile=merged,
         last_refreshed_at=datetime.now(timezone.utc),
         user_id=user_id,

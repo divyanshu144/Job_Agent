@@ -61,6 +61,27 @@ async def test_get_analysis_detail(client_with_data):
     data = resp.json()
     assert data["id"] == analysis_id
     assert "match_scorer" in data["results"]
+    assert data["result_errors"] == {}
+
+
+async def test_get_analysis_detail_includes_failed_agent_errors(app_client, db_session):
+    profile = await make_profile(db_session, user_id=_USER_ID)
+    analysis = await make_analysis(db_session, profile=profile, user_id=_USER_ID)
+    db_session.add(
+        JobResult(
+            analysis_id=analysis.id,
+            agent_name="resume_tailorer",
+            error="resume_tailorer: invalid JSON",
+        )
+    )
+    await db_session.commit()
+
+    resp = await app_client.get(f"/api/analysis/{analysis.id}")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["results"] == {}
+    assert data["result_errors"]["resume_tailorer"] == "resume_tailorer: invalid JSON"
 
 
 async def test_history_pagination(client_with_data):

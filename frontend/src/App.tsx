@@ -9,6 +9,7 @@ import { Discover } from "./pages/Discover";
 import { Costs } from "./pages/Costs";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
+import { AdminInvites } from "./pages/AdminInvites";
 
 const link = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-2 text-sm font-medium rounded-md ${isActive ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:text-slate-900"}`;
@@ -32,6 +33,7 @@ function Nav() {
       {user.is_admin && <NavLink to="/discover" className={link}>Discover</NavLink>}
       {user.is_admin && <NavLink to="/saved" className={link}>Saved</NavLink>}
       {user.is_admin && <NavLink to="/costs" className={link}>Costs</NavLink>}
+      {user.is_admin && <NavLink to="/admin/invites" className={link}>Invites</NavLink>}
       <div className="ml-auto flex items-center gap-3">
         <span className="text-xs text-slate-500">{user.email}</span>
         {user.is_admin && (
@@ -64,6 +66,7 @@ export default function App() {
               <Route path="/discover" element={<ProtectedRoute><Discover /></ProtectedRoute>} />
               <Route path="/saved" element={<ProtectedRoute><Saved /></ProtectedRoute>} />
               <Route path="/costs" element={<ProtectedRoute><Costs /></ProtectedRoute>} />
+              <Route path="/admin/invites" element={<ProtectedRoute><AdminInvites /></ProtectedRoute>} />
             </Routes>
           </main>
         </div>

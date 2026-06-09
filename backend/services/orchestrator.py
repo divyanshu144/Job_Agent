@@ -23,6 +23,7 @@ from backend.schemas import (
     JobParserOutput,
     MatchScorerOutput,
     PriorOutputs,
+    ResourcePlannerOutput,
 )
 from backend.services.instrumentation import new_trace_id, span
 from backend.services.profile_builder import (
@@ -317,12 +318,6 @@ async def run_generate_pipeline(
             "pipeline_error", {"agent": "system", "error": f"Analysis {analysis_id} not found"}
         )
         return
-    if not analysis.evaluate_only:
-        yield SSEEvent(
-            "pipeline_error",
-            {"agent": "system", "error": "Documents already generated for this analysis"},
-        )
-        return
 
     profile = (
         await db.execute(select(Profile).where(Profile.id == analysis.profile_id))
@@ -335,6 +330,16 @@ async def run_generate_pipeline(
         .scalars()
         .all()
     )
+    existing_outputs = {row.agent_name for row in stored if row.output_json}
+    phase2_agents = {"resource_planner", "cover_letter", "resume_tailorer"}
+    missing_phase2 = phase2_agents - existing_outputs
+    if not analysis.evaluate_only and not missing_phase2:
+        yield SSEEvent(
+            "pipeline_error",
+            {"agent": "system", "error": "Documents already generated for this analysis"},
+        )
+        return
+
     prior = PriorOutputs()
     for row in stored:
         if not row.output_json:
@@ -348,33 +353,43 @@ async def run_generate_pipeline(
             )
         elif row.agent_name == "gap_analyst":
             prior = prior.model_copy(update={"gap_analyst": GapAnalystOutput.model_validate(data)})
+        elif row.agent_name == "resource_planner":
+            prior = prior.model_copy(
+                update={"resource_planner": ResourcePlannerOutput.model_validate(data)}
+            )
 
-    yield SSEEvent("pipeline_start", {"total_agents": 3})
+    yield SSEEvent("pipeline_start", {"total_agents": len(missing_phase2)})
 
     results: dict[str, dict[str, Any]] = {}
     errors: dict[str, str] = {}
     partial = False
 
     # resource_planner runs first (gap_analyst output feeds into it)
-    rp_agent = ResourcePlannerAgent()
-    rp_agent.with_tracking(db, analysis_id=analysis.id)
-    yield SSEEvent("agent_start", {"agent": "resource_planner"})
-    try:
-        async with span(db, kind="span", name="resource_planner", analysis_id=analysis.id):
-            rp_output = await rp_agent.run(full, analysis.jd_text, prior)
-        prior = prior.model_copy(update={"resource_planner": rp_output})
-        results["resource_planner"] = rp_output.model_dump()
-        yield SSEEvent(
-            "agent_done", {"agent": "resource_planner", "output": rp_output.model_dump()}
-        )
-    except AgentError as e:
-        partial = True
-        errors["resource_planner"] = str(e)
-        yield SSEEvent("pipeline_error", {"agent": "resource_planner", "error": str(e)})
+    if "resource_planner" in missing_phase2:
+        rp_agent = ResourcePlannerAgent()
+        rp_agent.with_tracking(db, analysis_id=analysis.id)
+        yield SSEEvent("agent_start", {"agent": "resource_planner"})
+        try:
+            async with span(db, kind="span", name="resource_planner", analysis_id=analysis.id):
+                rp_output = await rp_agent.run(full, analysis.jd_text, prior)
+            prior = prior.model_copy(update={"resource_planner": rp_output})
+            results["resource_planner"] = rp_output.model_dump()
+            yield SSEEvent(
+                "agent_done", {"agent": "resource_planner", "output": rp_output.model_dump()}
+            )
+        except AgentError as e:
+            partial = True
+            errors["resource_planner"] = str(e)
+            yield SSEEvent("pipeline_error", {"agent": "resource_planner", "error": str(e)})
 
     # cover_letter + resume_tailorer run in parallel
-    yield SSEEvent("agent_start", {"agent": "cover_letter"})
-    yield SSEEvent("agent_start", {"agent": "resume_tailorer"})
+    parallel_jobs: list[tuple[str, type]] = []
+    if "cover_letter" in missing_phase2:
+        yield SSEEvent("agent_start", {"agent": "cover_letter"})
+        parallel_jobs.append(("cover_letter", CoverLetterAgent))
+    if "resume_tailorer" in missing_phase2:
+        yield SSEEvent("agent_start", {"agent": "resume_tailorer"})
+        parallel_jobs.append(("resume_tailorer", ResumeTailorerAgent))
 
     # Each parallel agent gets its own session — sharing the route session across
     # concurrent coroutines corrupts SQLAlchemy's unit-of-work state.
@@ -389,15 +404,17 @@ async def run_generate_pipeline(
             async with span(own_db, kind="span", name=name, analysis_id=aid):
                 return await agent.run(profile_str, jd, p)
 
-    cl_result: Any
-    rt_result: Any
-    cl_result, rt_result = await asyncio.gather(
-        _tracked("cover_letter", CoverLetterAgent, full, analysis.jd_text, prior),
-        _tracked("resume_tailorer", ResumeTailorerAgent, full, analysis.jd_text, prior),
-        return_exceptions=True,
-    )
+    parallel_results: list[Any] = []
+    if parallel_jobs:
+        parallel_results = await asyncio.gather(
+            *[
+                _tracked(agent_name, agent_class, full, analysis.jd_text, prior)
+                for agent_name, agent_class in parallel_jobs
+            ],
+            return_exceptions=True,
+        )
 
-    for agent_name, result in [("cover_letter", cl_result), ("resume_tailorer", rt_result)]:
+    for (agent_name, _agent_class), result in zip(parallel_jobs, parallel_results):
         if isinstance(result, BaseException):
             partial = True
             errors[agent_name] = str(result)
@@ -417,7 +434,8 @@ async def run_generate_pipeline(
         )
     for name, err in errors.items():
         db.add(JobResult(analysis_id=analysis_id, agent_name=name, error=err))
-    analysis.evaluate_only = False
+    completed_phase2 = existing_outputs | set(results)
+    analysis.evaluate_only = not phase2_agents <= completed_phase2
     if partial:
         analysis.partial = True
     quality_signals = _build_quality_signals(prior)

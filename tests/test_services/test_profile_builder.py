@@ -1,5 +1,13 @@
 from unittest.mock import AsyncMock, patch
 
+from backend.schemas import (
+    ProfileReviewData,
+    ProfileReviewExperience,
+    ProfileReviewLink,
+    ProfileReviewProject,
+    ProfileWorkPreferences,
+)
+
 
 async def test_build_profile_merges_sources(session, tmp_path):
     yaml_path = tmp_path / "profile.yaml"
@@ -19,6 +27,7 @@ async def test_build_profile_merges_sources(session, tmp_path):
     assert profile.cv_text == "My CV body text"
     assert "## Candidate Profile" in profile.merged_profile
     assert "My CV body text" in profile.merged_profile
+    assert "## Profile Review" not in profile.merged_profile
 
 
 async def test_get_or_build_returns_cached(session, tmp_path):
@@ -74,3 +83,92 @@ async def test_build_profile_uses_starter_yaml_when_missing(session, tmp_path):
     assert "name: Candidate" in profile.yaml_data
     assert profile.cv_text == "Uploaded CV text"
     assert "Uploaded CV text" in profile.merged_profile
+
+
+def test_profile_review_data_parse_falls_back_to_defaults():
+    from backend.services.profile_builder import parse_profile_review_data
+
+    assert parse_profile_review_data("").target_role == ""
+    assert parse_profile_review_data("{not json").key_skills == []
+    assert parse_profile_review_data('{"target_role": "ML Engineer"}').target_role == "ML Engineer"
+
+
+def test_profile_review_data_serializes_round_trip():
+    from backend.services.profile_builder import (
+        parse_profile_review_data,
+        serialize_profile_review_data,
+    )
+
+    data = ProfileReviewData(target_role="Backend Engineer", key_skills=["Python"])
+    raw = serialize_profile_review_data(data)
+
+    assert parse_profile_review_data(raw).target_role == "Backend Engineer"
+    assert parse_profile_review_data(raw).key_skills == ["Python"]
+
+
+def test_build_profile_review_text_renders_all_review_sections():
+    from backend.services.profile_builder import build_profile_review_text
+
+    data = ProfileReviewData(
+        target_role="AI Engineer",
+        key_skills=["Python", "PostgreSQL"],
+        projects=[
+            ProfileReviewProject(
+                name="Job Agent",
+                description="Application assistant",
+                highlights=["Built matching pipeline"],
+            )
+        ],
+        experience=[
+            ProfileReviewExperience(
+                company="Acme",
+                role="Backend Engineer",
+                dates="2022-2024",
+                highlights=["Shipped APIs"],
+            )
+        ],
+        links=[ProfileReviewLink(label="GitHub", url="https://github.com/example")],
+        work_preferences=ProfileWorkPreferences(
+            locations=["London"],
+            remote="Hybrid",
+            role_types=["Full-time"],
+            industries=["AI"],
+        ),
+    )
+
+    rendered = build_profile_review_text(data)
+
+    assert "Target Role\nAI Engineer" in rendered
+    assert "- Python" in rendered
+    assert "Job Agent" in rendered
+    assert "Backend Engineer - Acme" in rendered
+    assert "GitHub: https://github.com/example" in rendered
+    assert "Locations: London" in rendered
+    assert "Remote: Hybrid" in rendered
+    assert "Role types: Full-time" in rendered
+    assert "Industries: AI" in rendered
+
+
+async def test_build_profile_from_text_includes_review_data_and_cv_text(session):
+    from backend.services.profile_builder import build_profile_from_text
+
+    profile = await build_profile_from_text(
+        session,
+        yaml_text="identity:\n  name: User\n",
+        cv_text="Uploaded CV text with Python and FastAPI.",
+        user_id="test-user-id",
+        profile_review_data=ProfileReviewData(
+            target_role="Platform Engineer",
+            key_skills=["Python", "FastAPI"],
+        ),
+        review_status="saved",
+    )
+
+    assert profile.profile_review_data != "{}"
+    assert profile.review_status == "saved"
+    assert "## Candidate Profile (YAML)" in profile.merged_profile
+    assert "## Profile Review" in profile.merged_profile
+    assert "Platform Engineer" in profile.merged_profile
+    assert "- FastAPI" in profile.merged_profile
+    assert "## CV Text" in profile.merged_profile
+    assert "Uploaded CV text with Python" in profile.merged_profile

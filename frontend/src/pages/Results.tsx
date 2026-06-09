@@ -28,6 +28,7 @@ export function Results() {
   const [generating, setGenerating] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
   const [genStates, setGenStates] = useState<Partial<Record<AgentName, AgentStatus>>>({});
+  const [genErrors, setGenErrors] = useState<Partial<Record<AgentName, string>>>({});
   const cancelRef = useRef<(() => void) | null>(null);
 
   // Cold Email state
@@ -76,11 +77,15 @@ export function Results() {
   const generate = () => {
     if (!data) return;
     setGenerating(true);
+    setGenErrors({});
     setGenStates(Object.fromEntries(PHASE2_AGENTS.map((a) => [a, "pending"])));
     cancelRef.current = streamGenerate(data.id, {
       onAgentStart: ({ agent }) => setGenStates((p) => ({ ...p, [agent]: "running" })),
       onAgentDone: ({ agent }) => setGenStates((p) => ({ ...p, [agent]: "done" })),
-      onPipelineError: ({ agent }) => setGenStates((p) => ({ ...p, [agent]: "error" })),
+      onPipelineError: ({ agent, error }) => {
+        setGenStates((p) => ({ ...p, [agent]: "error" }));
+        setGenErrors((p) => ({ ...p, [agent]: error }));
+      },
       onPipelineDone: () => {
         api.getAnalysis(data.id).then(setData).finally(() => setGenerating(false));
       },
@@ -156,6 +161,7 @@ export function Results() {
   if (error) return <p className="p-6 text-red-600">{error}</p>;
   if (!data) return <p className="p-6 text-slate-500">Loading…</p>;
   const r = data.results;
+  const resultErrors = data.result_errors ?? {};
   const tabs = user?.is_admin ? TABS : TABS.filter((t) => t.id !== "cold_email");
 
   return (
@@ -223,6 +229,15 @@ export function Results() {
               </span>
             ))}
           </div>
+          {Object.entries(genErrors).length > 0 && (
+            <div className="mt-3 space-y-1">
+              {Object.entries(genErrors).map(([agent, message]) => (
+                <p key={agent} className="text-xs text-red-600">
+                  {agent.replace("_", " ")} failed: {message}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -337,7 +352,23 @@ export function Results() {
                 )}
               </div>
             )
-            : <p className="text-sm text-slate-400 italic">Generate documents to see tailored resume.</p>
+            : resultErrors.resume_tailorer
+              ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                  <p className="font-medium">Resume generation failed.</p>
+                  <p className="mt-1">{resultErrors.resume_tailorer}</p>
+                  {data.evaluate_only && (
+                    <button
+                      onClick={generate}
+                      disabled={generating}
+                      className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      Retry resume generation
+                    </button>
+                  )}
+                </div>
+              )
+              : <p className="text-sm text-slate-400 italic">Generate documents to see tailored resume.</p>
         )}
 
         {tab === "cold_email" && (

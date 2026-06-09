@@ -1,4 +1,4 @@
-import type { ProfileResponse, AnalysisDetail, AgentName, SSECallbacks, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback, AnalysisSummary } from "../types";
+import type { ProfileResponse, ProfileReviewData, ProfileReviewResponse, AnalysisDetail, AgentName, SSECallbacks, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback, AnalysisSummary, InviteResponse } from "../types";
 
 const BASE = "/api";
 
@@ -22,6 +22,11 @@ function _detailToMessage(detail: unknown, fallback: string): string {
 
 async function _errorMessage(r: Response, method: string, path: string): Promise<never> {
   const detail = await r.json().then((j) => j?.detail ?? null).catch(() => null);
+  if (r.status === 404 && path === "/profile/review") {
+    throw new Error(
+      "Profile review API is not available on the running backend. Restart the backend so /api/profile/review is registered.",
+    );
+  }
   throw new Error(_detailToMessage(detail, `${method} ${path} failed: ${r.status}`));
 }
 
@@ -42,8 +47,22 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return r.json() as Promise<T>;
 }
 
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const r = await fetch(`${BASE}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    credentials: "include",
+  });
+  if (!r.ok) return _errorMessage(r, "PUT", path);
+  return r.json() as Promise<T>;
+}
+
 export const api = {
   getProfile: () => get<ProfileResponse>("/profile"),
+  getProfileReview: () => get<ProfileReviewResponse>("/profile/review"),
+  saveProfileReview: (reviewData: ProfileReviewData) =>
+    put<ProfileReviewResponse>("/profile/review", { review_data: reviewData }),
   refreshProfile: async (): Promise<ProfileResponse> => {
     const r = await fetch(`${BASE}/profile/refresh`, { method: "POST", credentials: "include" });
     if (!r.ok) return _errorMessage(r, "POST", "/profile/refresh");
@@ -137,6 +156,8 @@ export const api = {
     }
     return r.json() as Promise<User>;
   },
+  createInvite: (email?: string) =>
+    post<InviteResponse>("/auth/invite", { email: email?.trim() || null }),
   logout: async (): Promise<void> => {
     await fetch(`${BASE}/auth/logout`, { method: "POST", credentials: "include" });
   },

@@ -6,10 +6,11 @@ export function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const inviteToken = searchParams.get("token") ?? undefined;
+  const inviteTokenFromUrl = searchParams.get("token") ?? "";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteToken, setInviteToken] = useState(inviteTokenFromUrl);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -18,7 +19,7 @@ export function Register() {
     setError(null);
     setLoading(true);
     try {
-      await register(email, password, inviteToken);
+      await register(email, password, inviteToken.trim() || undefined);
       navigate("/");
     } catch (err) {
       setError((err as Error).message);
@@ -33,7 +34,7 @@ export function Register() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Create account</h1>
           {inviteToken ? (
-            <p className="text-sm text-emerald-600 mt-1">You have a valid invite.</p>
+            <p className="text-sm text-emerald-600 mt-1">Invite token added.</p>
           ) : (
             <p className="text-sm text-slate-500 mt-1">First user gets admin access.</p>
           )}
@@ -63,6 +64,15 @@ export function Register() {
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
             <p className="text-xs text-slate-400">Minimum 8 characters</p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-700">Invite token</label>
+            <input
+              value={inviteToken}
+              onChange={(e) => setInviteToken(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-200"
+              placeholder="Required after the first admin account"
+            />
           </div>
           <button
             type="submit"

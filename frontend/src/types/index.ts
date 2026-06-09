@@ -25,7 +25,59 @@ export interface ResumeTailorerOutput {
   omitted_items: OmittedItem[];
   validation_warnings?: ValidationWarning[];
 }
-export interface ProfileResponse { id: string; yaml_data: string; cv_text: string; merged_profile: string; last_refreshed_at: string; warnings: string[]; }
+export interface ProfileResponse {
+  id: string;
+  yaml_data: string;
+  cv_text: string;
+  merged_profile: string;
+  profile_review_data: string;
+  review_status: string;
+  reviewed_at?: string | null;
+  last_refreshed_at: string;
+  warnings: string[];
+}
+
+export interface ProfileReviewProject {
+  name: string;
+  description: string;
+  highlights: string[];
+}
+
+export interface ProfileReviewExperience {
+  company: string;
+  role: string;
+  dates: string;
+  highlights: string[];
+}
+
+export interface ProfileReviewLink {
+  label: string;
+  url: string;
+}
+
+export interface ProfileWorkPreferences {
+  locations: string[];
+  remote?: string | null;
+  role_types: string[];
+  industries: string[];
+}
+
+export interface ProfileReviewData {
+  target_role: string;
+  key_skills: string[];
+  projects: ProfileReviewProject[];
+  experience: ProfileReviewExperience[];
+  links: ProfileReviewLink[];
+  work_preferences: ProfileWorkPreferences;
+}
+
+export interface ProfileReviewResponse {
+  profile_id: string;
+  review_data: ProfileReviewData;
+  review_status: string;
+  reviewed_at?: string | null;
+  has_cv_text: boolean;
+}
 export interface AnalysisSummary { id: string; jd_text: string; profile_id: string; created_at: string; partial: boolean; evaluate_only: boolean; status?: string | null; role_type?: string | null; company?: string | null; match_score?: number | null; }
 export interface AnalysisDetail {
   id: string; jd_text: string; profile_id: string; created_at: string; partial: boolean; evaluate_only: boolean;
@@ -34,6 +86,7 @@ export interface AnalysisDetail {
     gap_analyst?: GapAnalystOutput; resource_planner?: ResourcePlannerOutput;
     cover_letter?: CoverLetterOutput; resume_tailorer?: ResumeTailorerOutput;
   };
+  result_errors?: Partial<Record<AgentName, string>>;
 }
 export type AgentName = "job_parser"|"match_scorer"|"gap_analyst"|"resource_planner"|"cover_letter"|"resume_tailorer";
 export const AGENT_ORDER: AgentName[] = ["job_parser","match_scorer","gap_analyst","resource_planner","cover_letter","resume_tailorer"];
@@ -108,6 +161,12 @@ export interface User {
   email: string;
   is_admin: boolean;
   created_at: string;
+}
+
+export interface InviteResponse {
+  invite_url: string;
+  token: string;
+  expires_at: string;
 }
 
 export interface AgentCost {

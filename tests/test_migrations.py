@@ -59,3 +59,28 @@ def test_alembic_upgrade_head_builds_full_schema_on_clean_db():
     assert not missing, f"alembic upgrade head missing tables: {missing}"
     # campaign_jobs FKs jobs — both present proves dependency ordering worked.
     assert {"jobs", "campaign_jobs"} <= tables
+
+
+def test_alembic_upgrade_head_adds_profile_review_columns():
+    with PostgresContainer("postgres:16", driver="asyncpg") as pg:
+        url = pg.get_connection_url()
+        cfg = Config("alembic.ini")
+        cfg.set_main_option("sqlalchemy.url", url)
+
+        command.upgrade(cfg, "head")
+
+        async def _profile_columns() -> set[str]:
+            engine = create_async_engine(url)
+            try:
+                async with engine.connect() as conn:
+                    return set(
+                        await conn.run_sync(
+                            lambda c: [col["name"] for col in inspect(c).get_columns("profiles")]
+                        )
+                    )
+            finally:
+                await engine.dispose()
+
+        columns = asyncio.run(_profile_columns())
+
+    assert {"profile_review_data", "review_status", "reviewed_at"} <= columns

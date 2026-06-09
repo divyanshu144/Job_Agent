@@ -28,6 +28,11 @@ class Profile(Base):
     yaml_data: Mapped[str] = mapped_column(Text)
     cv_text: Mapped[str] = mapped_column(Text, default="")
     merged_profile: Mapped[str] = mapped_column(Text, default="")
+    profile_review_data: Mapped[str] = mapped_column(Text, default="{}")
+    review_status: Mapped[str] = mapped_column(String, default="draft")
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
     last_refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     user_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("users.id"), nullable=True, default=None
