@@ -1,58 +1,43 @@
 # Session Handoff
 
 **Updated:** 2026-06-10
-**Branch:** main — uncommitted "profile review" feature in working tree
+**Branch:** main — clean, synced with origin
 
 ---
 
 ## Current State
 
-An in-flight **profile review** feature is sitting uncommitted on `main` (not authored in the
-current session). It adds review state to the `Profile` model (`profile_review_data`,
-`review_status`, `reviewed_at`), backed by a new Alembic migration
-`0002_add_profile_review_fields.py`, plus supporting changes across `profile_builder`,
-`orchestrator`, `routes/profile`, `routes/history`, and `schemas`. Frontend adds a new
-`AdminInvites.tsx` page, a much-expanded `ProfileSetup.tsx`, and invite-token wiring in
-`Register.tsx`. Tests for the new behaviour are present (profile, history, auth, migrations,
-profile_builder, sse_sequence). Nothing has been committed yet.
+The **multi-user profile review** feature is committed and pushed. It adds review state to the
+`Profile` model (`profile_review_data`, `review_status`, `reviewed_at`) via migration
+`0002_add_profile_review_fields.py`, with supporting changes in `profile_builder`, `orchestrator`,
+`routes/profile`, `routes/history`, and `schemas`. Frontend adds the `AdminInvites` page, an
+expanded `ProfileSetup` review UI, and invite-token registration. Shipped as commit
+`41f7ea6 feat(profile): add multi-user profile review workflow`, pushed to `origin/main`. Working
+tree is clean.
 
 ## Next Action
 
-Decide whether to commit this feature. If yes: run `make check` to confirm green, then commit the
-profile-review changes as one logical unit (model + migration + routes + schemas + services +
-frontend + tests). The last commit is `1b50f59 feat: support docx resumes and tighten access`.
+No work in progress — pick up the next task. If continuing the profile-review area, a natural
+follow-up is exercising the review flow end-to-end in the running app (`make run`) to confirm the
+`review_status` transitions (draft → reviewed) behave as intended in the UI.
 
 ## Why It Stopped
 
-Natural end of an unrelated session (a `claude update` request). The dirty tree is pre-existing
-in-flight work; HANDOFF.md was refreshed to reflect actual working-tree state so it matches reality.
+Natural end of session — feature committed, verified, and pushed; user chose to keep it on `main`
+(no PR).
 
 ## In-Flight
 
-Modified:
-- backend/models.py, backend/routes/history.py, backend/routes/profile.py, backend/schemas.py
-- backend/services/orchestrator.py, backend/services/profile_builder.py
-- frontend/src/App.tsx, frontend/src/api/client.ts, frontend/src/pages/ProfileSetup.tsx,
-  frontend/src/pages/Register.tsx, frontend/src/pages/Results.tsx, frontend/src/types/index.ts
-- tasks/agent_memory.md
-- tests/test_database.py, tests/test_migrations.py, tests/test_orchestrator/test_sse_sequence.py,
-  tests/test_routes/test_history.py, tests/test_routes/test_profile.py,
-  tests/test_services/test_profile_builder.py, tests/test_startup.py
-
-Untracked:
-- alembic/versions/0002_add_profile_review_fields.py
-- frontend/src/pages/AdminInvites.tsx
-- tests/test_routes/test_auth.py
+No uncommitted changes.
 
 ## Open Questions
 
-- Is the profile-review feature ready to commit, or still mid-implementation? (No prior HANDOFF
-  context described it; reconstructed from the diff.)
+None.
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make test` | Not run this session |
-| `make lint` | Not run this session |
-| `make check` | Not run this session |
+| `make test` | ✓ 322 passed, 1 deselected · 80.01% coverage |
+| `make lint` | ✓ clean |
+| `make check` | ✓ clean (run 2026-06-10, pre-commit) |
