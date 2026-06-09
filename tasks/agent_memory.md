@@ -21,8 +21,7 @@
 - All timestamp columns are timestamptz (DateTime(timezone=True)); _utcnow()
   stays tz-aware UTC. Forced by correctness, not optional.
 - Alembic is the single source of truth for schema. create_all is confined to
-  the test fixture. [PENDING MERGE: feat/boot-alembic-upgrade] App boot runs
-  `alembic upgrade head`.
+  the test fixture. [SHIPPED] App boot runs `alembic upgrade head`.
 - FK enforcement ON by default in tests (prod-parity). @pytest.mark.relaxed_fks
   is the sanctioned escape hatch and is used by zero tests.
 - OUT of scope (do not implement without explicit approval): JSON->JSONB,
@@ -47,6 +46,12 @@
 - pdflatex needs texlive on PATH for real runs; mock the subprocess in tests.
 - Haiku's real minimum cacheable prefix is 4096 tokens, not the documented 2048
   (verified empirically against the live API).
+- alembic/env.py calls asyncio.run() internally (run_migrations_online). Calling
+  command.upgrade() from inside a running event loop (e.g. a FastAPI lifespan)
+  raises RuntimeError: asyncio.run() cannot be called from a running event loop.
+  Fix: extract a sync _run_upgrade(url) helper and call it via
+  await asyncio.to_thread(_run_upgrade, url) — the thread has no running loop,
+  so alembic's asyncio.run() proceeds normally.
 
 ## Solved Problems
 - Rotating uuid4() in the cache key made sha256(jd::profile.id) unstable. Fix:
