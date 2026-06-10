@@ -1,54 +1,56 @@
 # Session Handoff
 
 **Updated:** 2026-06-10
-**Branch:** main — BaseAgent self-correction shipped (commit pending)
+**Branch:** main — supervised live run in progress; pipeline proven on one job
 
 ---
 
 ## Current State
 
-BaseAgent now self-corrects ONCE on `invalid_output`. `AgentError` + `_parse_json`
-moved to `base.py` (re-exported from `job_parser.py` for back-compat).
-`BaseAgent._call_structured(system, user, output_cls, *, label)` calls the model,
-validates into `output_cls`, and on bad JSON / ValidationError / parse-AgentError
-re-calls once with `_correction_prompt` (the validation error + `prior_raw[:500]`
-fed back), logging a `PipelineEvent(kind="retry")`. Hard cap 2 calls; transient
-errors (rate limit/timeout/connection) propagate untouched (SDK owns those).
-Six agents migrated: job_parser, match_scorer, gap_analyst, cover_letter,
-resume_tailorer, cold_email_agent. resource_planner excluded (bespoke multi-call
-accounting) — zero lines changed. orchestrator.py — zero lines changed.
+The pipeline now runs **end-to-end against real services** (the long-standing gate
+is cleared). Docker is the run environment: app image has texlive + an `./assets`
+volume mount; `.env` carries all creds (incl. a de-spaced `GMAIL_CLIENT_ID`).
 
-The earlier resume_tailorer omitted_items prompt bug is also fixed (commit
-`9c79720`); self-correction is now the safety net for transient model slips.
+A bounded single-job trace (Stripe role, via `docker compose exec`) went
+`discovered → scored → résumé compiled → contact found (Hunter) → cold email →
+Gmail draft` successfully (one `drafted` CampaignJob). Two content fixes were then
+shipped and **verified live in the rebuilt container**:
+- résumé tailoring constrained to **one page** (`resume_latex._SYSTEM`),
+- résumé + cold email **humanized, em/en dashes banned** across all three content
+  prompts. Verified: tailored résumé 1 page, zero AI-introduced dashes (the 5 `---`
+  left are pre-existing in the user's own base résumé), cold email dash-free and
+  human-toned.
+
+`target_companies.json` curated: Stripe removed (its 499 mostly-sales listings made
+it a poor first batch); now Netlify / Ramp / Vercel / Linear.
 
 ## Next Action
 
-No work in progress. Candidate follow-ups: surface `kind="retry"` self-correction
-counts in the admin cost/telemetry dashboard, or extend bounded backoff config for
-transient codes. Neither started.
+Run a real small-batch campaign: confirm the curated targets, then trigger
+discovery for `source="targets"` (produces `scored` jobs) followed by
+`run_campaign(threshold=0.75)`. Watch `/api/campaign/status`. Or first clean up the
+trace's leftover rows + the test Gmail draft.
 
 ## Why It Stopped
 
-Task complete — self-correction loop implemented; `make check` green; constrained
-files verified untouched.
+Verification complete; awaiting the call on scope of the first real `run_campaign`.
 
 ## In-Flight
 
-Uncommitted:
-- backend/agents/base.py (AgentError/_parse_json + _call_structured/_correction_prompt/_log_retry)
-- backend/agents/{job_parser,match_scorer,gap_analyst,cover_letter,resume_tailorer,cold_email_agent}.py
-- tests/test_agents/test_base_self_correction.py (new), test_resume_tailorer.py, test_match_scorer.py
-- tasks/agent_memory.md, tasks/lessons.md, HANDOFF.md
+No uncommitted changes after this commit. Real artifacts from the trace: one Gmail
+draft (Stripe "Account Executive, AI Sales") in the user's Drafts — may want to
+delete; one Hunter credit spent; leftover dev-DB rows (DiscoveryRun/Job/Analysis/
+CampaignJob=drafted/Contact) — harmless, that Job won't be re-processed.
 
 ## Open Questions
 
-None.
+- Scope/threshold for the first real `run_campaign`?
+- Strip the 5 `---` from the user's base `resume.tex`? (their file; their call)
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make test` | ✓ 393 passed, 1 deselected · 80.15% coverage |
-| `make lint` | ✓ clean (ruff + mypy + pydantic→TS drift) |
-| `make check` | ✓ clean (run 2026-06-10) |
-| orchestrator.py / resource_planner.py | ✓ zero lines changed (git diff empty) |
+| `make test` | ✓ 393 passed, 1 deselected · 80.15% |
+| `make lint` | ✓ clean |
+| live single-job trace | ✓ end-to-end (drafted); 1-page + dash-free verified post-rebuild |

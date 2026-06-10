@@ -1,5 +1,4 @@
 [
-  { "name": "Stripe", "ats": "greenhouse", "slug": "stripe" },
   { "name": "Netlify", "ats": "lever", "slug": "netlify" },
   { "name": "Ramp", "ats": "ashby", "slug": "ramp" },
   { "name": "Vercel", "ats": "greenhouse", "slug": "vercel" },
