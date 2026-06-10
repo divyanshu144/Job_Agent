@@ -8,6 +8,23 @@ Fix: what the correct approach is
 Avoid: what not to do next time
 -->
 
+## [2026-06-10] A JSON-output prompt must show every array's element shape
+
+Pattern: resume_tailorer failed repeatedly (and retry never helped) because the prompt's
+output-schema example showed `"omitted_items": []` — an empty array with no element shape, while
+every other array (experience, projects, tailored_bullets) showed a sample object. The model
+guessed and emitted plain strings; `OmittedItem` requires `{field, value, reason}`, so
+`model_validate` raised ValidationError → AgentError on every call. Retry re-ran the identical
+prompt with no error feedback, so it failed identically each time (deterministic, not transient).
+
+Fix: Give `omitted_items` the same `{field, value, reason}` object example as the other arrays.
+Added a regression test that parses the prompt's JSON example and asserts the element shape, so it
+can't silently drift back to `[]`.
+
+Avoid: Leaving `"field": []` shapeless in a JSON-output prompt when the schema element is an
+object. Treating a deterministic (same-input, same-output) failure as something retry can fix —
+retry only helps transient failures, or when the prior error is fed back for self-correction.
+
 ## [2026-06-10] Pipeline retry: extend the existing partial-retry; one error boundary
 
 Pattern: The temptation on "add retry" was to build a new retry subsystem. But Phase-2

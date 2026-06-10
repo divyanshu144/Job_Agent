@@ -60,5 +60,11 @@ For skills, select and reorder only skills/tools that appear in the CV text. For
       "rationale": ""
     }
   ],
-  "omitted_items": []
+  "omitted_items": [
+    {
+      "field": "",
+      "value": "",
+      "reason": ""
+    }
+  ]
 }

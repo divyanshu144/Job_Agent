@@ -74,3 +74,36 @@ async def test_resume_tailorer_malformed(bad):
     with patch.object(ResumeTailorerAgent, "_call", new=_call):
         with pytest.raises(AgentError):
             await ResumeTailorerAgent().run("profile", "jd " * 15, PRIOR)
+
+
+def test_prompt_demonstrates_omitted_items_element_shape():
+    """Regression: an empty `"omitted_items": []` in the prompt left the model to
+    guess the shape (it emitted strings → OmittedItem ValidationError → repeated
+    retry failures). The example must show the {field, value, reason} object."""
+    from backend.agents.base import PROMPTS_DIR
+
+    text = (PROMPTS_DIR / "resume_tailorer.md").read_text()
+    schema_text = text[text.index("## Output Schema") :]
+    schema = json.loads(schema_text[schema_text.index("{") : schema_text.rindex("}") + 1])
+
+    assert schema["omitted_items"], "omitted_items must demonstrate its element shape, not be []"
+    assert set(schema["omitted_items"][0]) == {"field", "value", "reason"}
+
+
+async def test_resume_tailorer_accepts_omitted_items_objects():
+    from backend.agents.resume_tailorer import ResumeTailorerAgent
+
+    payload = json.loads(HAPPY)
+    payload["omitted_items"] = [
+        {"field": "skills", "value": "Kubernetes", "reason": "not present in CV text"}
+    ]
+
+    async def _call(self, s, u):
+        return json.dumps(payload)
+
+    with patch.object(ResumeTailorerAgent, "_call", new=_call):
+        result = await ResumeTailorerAgent().run(
+            "## CV Text\nAcme Engineer. Built ML pipeline with Python.", "jd " * 15, PRIOR
+        )
+    assert result.omitted_items[0].field == "skills"
+    assert result.omitted_items[0].reason == "not present in CV text"
