@@ -24,11 +24,16 @@ _SYSTEM = (
     "the preamble, \\documentclass, packages, custom macros, layout, and overall "
     "document structure. "
     "LENGTH: the resume MUST remain ONE page. The tailored version must be no "
-    "longer than the original — do NOT add bullets, sections, or sentences, and do "
+    "longer than the original. Do NOT add bullets, sections, or sentences, and do "
     "NOT lengthen the summary. To emphasise relevance, rewrite or shorten existing "
     "text in place; if space is tight, cut or condense the least-relevant bullets "
     "so it fits on one page. "
-    "Return ONLY the complete modified .tex source — no commentary and no markdown "
+    "VOICE: in the summary and bullet text you rewrite, use plain human language. "
+    "Never use em-dashes (—) or en-dashes (–); use commas or periods. Avoid "
+    "AI/corporate buzzwords (leverage, spearheaded, passionate, robust, dynamic, "
+    "seamless, results-driven). Leave date ranges and all other preserved structure "
+    "exactly as-is. "
+    "Return ONLY the complete modified .tex source, no commentary and no markdown "
     "code fences."
 )
 

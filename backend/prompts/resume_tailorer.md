@@ -26,6 +26,9 @@ If a JD requirement is not supported by the CV text, omit it rather than inventi
 
 For skills, select and reorder only skills/tools that appear in the CV text. For employers, degrees, certifications, and roles, copy only facts that appear in the CV text. For bullets, faithful rephrasing is allowed, but the factual claim must already be supported by the CV text.
 
+## Voice
+Write the summary and bullet text like a real person, not an AI. Never use em-dashes (—) or en-dashes (–) in any field; use commas or periods instead. Avoid AI/corporate buzzwords (leverage, spearheaded, passionate, thrilled, robust, dynamic, seamless, results-driven). Prefer plain, concrete, specific language and vary sentence structure.
+
 ## Output Schema - respond with valid JSON only, no preamble, no markdown fences
 {
   "headline": "",
