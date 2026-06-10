@@ -1,4 +1,4 @@
-import type { ProfileResponse, ProfileReviewData, ProfileReviewResponse, AnalysisDetail, AgentName, SSECallbacks, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback, AnalysisSummary, InviteResponse } from "../types";
+import type { ProfileResponse, ProfileReviewData, ProfileReviewResponse, AnalysisDetail, AgentName, SSECallbacks, RetryRequest, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback, AnalysisSummary, InviteResponse } from "../types";
 
 const BASE = "/api";
 
@@ -223,4 +223,16 @@ export function streamAnalysis(jd: string, callbacks: SSECallbacks): () => void 
 
 export function streamGenerate(analysisId: string, callbacks: SSECallbacks): () => void {
   return _streamSSE(`${BASE}/analyse/generate/${analysisId}`, { method: "POST" }, callbacks);
+}
+
+export function retryAnalysis(
+  analysisId: string,
+  body: RetryRequest,
+  callbacks: SSECallbacks,
+): () => void {
+  return _streamSSE(
+    `${BASE}/analysis/${analysisId}/retry`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    callbacks,
+  );
 }

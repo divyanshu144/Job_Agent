@@ -8,6 +8,20 @@ Fix: what the correct approach is
 Avoid: what not to do next time
 -->
 
+## [2026-06-10] Pipeline retry: extend the existing partial-retry; one error boundary
+
+Pattern: The temptation on "add retry" was to build a new retry subsystem. But Phase-2
+generate already re-ran only the *missing* agents — a working partial-retry seed. And raw
+`str(exc)` was leaking to users via `JobResult.error` → `result_errors`.
+
+Fix: The existing Phase-2 partial retry was the seed for the generalised `run_steps()` runner —
+extending what exists beats rebuilding. `to_user_error()` as a single error boundary keeps raw
+exceptions out of user-visible surfaces — wire it wherever `JobResult.error` is written (both
+pipelines + the parallel gather), and keep the raw detail in `PipelineEvent`/logs only.
+
+Avoid: Standing up a parallel retry path when one already exists in a narrower form. Writing
+`str(exc)` anywhere it can reach SSE, `JobResult.error`, or `result_errors`.
+
 ## [2026-06-07] Verify external API shapes with a live call before building normalizers
 
 Pattern: The new discovery sources were coded + unit-tested against *assumed* response shapes

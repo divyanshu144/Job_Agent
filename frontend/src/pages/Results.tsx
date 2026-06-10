@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { api, streamGenerate } from "../api/client";
-import type { AnalysisDetail, AgentName, AgentStatus, Contact } from "../types";
+import { api, streamGenerate, retryAnalysis } from "../api/client";
+import type { AnalysisDetail, AgentName, AgentStatus, Contact, Step, RetryRequest } from "../types";
 import { PHASE2_AGENTS } from "../types";
 import { ScoreCard } from "../components/ScoreCard";
 import { GapList } from "../components/GapList";
@@ -19,6 +19,29 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "cold_email", label: "Cold Email" },
 ];
 
+const STEP_LABELS: Record<string, string> = {
+  job_parser: "Job Parser",
+  match_scorer: "Match Scorer",
+  gap_analyst: "Gap Analyst",
+  resource_planner: "Resource Planner",
+  cover_letter: "Cover Letter",
+  resume_tailorer: "Resume Tailorer",
+};
+
+function stepIndicator(status: string): { icon: string; cls: string } {
+  switch (status) {
+    case "success":
+    case "done":
+      return { icon: "✓", cls: "text-green-600" };
+    case "error":
+      return { icon: "✗", cls: "text-red-600" };
+    case "running":
+      return { icon: "…", cls: "text-blue-600" };
+    default:
+      return { icon: "–", cls: "text-slate-400" };
+  }
+}
+
 export function Results() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -29,6 +52,8 @@ export function Results() {
   const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
   const [genStates, setGenStates] = useState<Partial<Record<AgentName, AgentStatus>>>({});
   const [genErrors, setGenErrors] = useState<Partial<Record<AgentName, string>>>({});
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryRunning, setRetryRunning] = useState<Partial<Record<string, AgentStatus>>>({});
   const cancelRef = useRef<(() => void) | null>(null);
 
   // Cold Email state
@@ -88,6 +113,24 @@ export function Results() {
       },
       onPipelineDone: () => {
         api.getAnalysis(data.id).then(setData).finally(() => setGenerating(false));
+      },
+    });
+  };
+
+  const runRetry = (agents?: string[]) => {
+    if (!data || isRetrying) return;
+    setIsRetrying(true);
+    setRetryRunning({});
+    const body: RetryRequest = agents ? { agents, scope: "failed" } : { scope: "failed" };
+    cancelRef.current = retryAnalysis(data.id, body, {
+      onAgentStart: ({ agent }) => setRetryRunning((p) => ({ ...p, [agent]: "running" })),
+      onAgentDone: ({ agent }) => setRetryRunning((p) => ({ ...p, [agent]: "done" })),
+      onPipelineError: ({ agent }) => setRetryRunning((p) => ({ ...p, [agent]: "error" })),
+      onPipelineDone: () => {
+        api.getAnalysis(data.id).then(setData).finally(() => {
+          setIsRetrying(false);
+          setRetryRunning({});
+        });
       },
     });
   };
@@ -161,7 +204,8 @@ export function Results() {
   if (error) return <p className="p-6 text-red-600">{error}</p>;
   if (!data) return <p className="p-6 text-slate-500">Loading…</p>;
   const r = data.results;
-  const resultErrors = data.result_errors ?? {};
+  const steps: Step[] = data.steps ?? [];
+  const effectiveStatus = (s: Step): string => retryRunning[s.name] ?? s.status;
   const tabs = user?.is_admin ? TABS : TABS.filter((t) => t.id !== "cold_email");
 
   return (
@@ -194,6 +238,51 @@ export function Results() {
       </div>
       {data.partial && (
         <p className="text-amber-600 text-sm">⚠ Partial results — some agents failed.</p>
+      )}
+
+      {steps.length > 0 && (
+        <div className="text-xs text-slate-600 space-y-2 border border-slate-200 rounded-lg p-3">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-slate-500 uppercase">Pipeline steps</span>
+            {data.partial && (
+              <button
+                onClick={() => runRetry()}
+                disabled={isRetrying}
+                className="px-2 py-1 rounded bg-slate-900 text-white text-xs hover:bg-slate-700 disabled:opacity-50"
+              >
+                Retry all failed
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {steps.map((s, i) => {
+              const status = effectiveStatus(s);
+              const ind = stepIndicator(status);
+              const divider = i > 0 && s.phase === 2 && steps[i - 1].phase === 1;
+              return (
+                <span key={s.name} className="flex items-center gap-1">
+                  {divider && <span className="text-slate-300 mr-2">|</span>}
+                  <span
+                    className={ind.cls}
+                    title={status === "error" ? s.message ?? "" : undefined}
+                  >
+                    {ind.icon}
+                  </span>
+                  <span>{STEP_LABELS[s.name] ?? s.name}</span>
+                  {status === "error" && (
+                    <button
+                      onClick={() => runRetry([s.name])}
+                      disabled={isRetrying}
+                      className="text-blue-600 underline disabled:opacity-50"
+                    >
+                      retry
+                    </button>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {data.evaluate_only && !generating && (
@@ -293,7 +382,7 @@ export function Results() {
                     onClick={downloadResume}
                     className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-medium hover:bg-slate-700"
                   >
-                    Download DOCX
+                    Download Resume (.docx)
                   </button>
                 </div>
 
@@ -352,23 +441,7 @@ export function Results() {
                 )}
               </div>
             )
-            : resultErrors.resume_tailorer
-              ? (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                  <p className="font-medium">Resume generation failed.</p>
-                  <p className="mt-1">{resultErrors.resume_tailorer}</p>
-                  {data.evaluate_only && (
-                    <button
-                      onClick={generate}
-                      disabled={generating}
-                      className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
-                    >
-                      Retry resume generation
-                    </button>
-                  )}
-                </div>
-              )
-              : <p className="text-sm text-slate-400 italic">Generate documents to see tailored resume.</p>
+            : <p className="text-sm text-slate-400 italic">Generate documents to see tailored resume.</p>
         )}
 
         {tab === "cold_email" && (
