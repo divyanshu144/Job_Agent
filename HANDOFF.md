@@ -1,56 +1,51 @@
 # Session Handoff
 
 **Updated:** 2026-06-10
-**Branch:** main — supervised live run in progress; pipeline proven on one job
+**Branch:** main — plan delivered; unrelated WIP uncommitted in tree
 
 ---
 
 ## Current State
 
-The pipeline now runs **end-to-end against real services** (the long-standing gate
-is cleared). Docker is the run environment: app image has texlive + an `./assets`
-volume mount; `.env` carries all creds (incl. a de-spaced `GMAIL_CLIENT_ID`).
+Two unrelated threads in the working tree:
 
-A bounded single-job trace (Stripe role, via `docker compose exec`) went
-`discovered → scored → résumé compiled → contact found (Hunter) → cold email →
-Gmail draft` successfully (one `drafted` CampaignJob). Two content fixes were then
-shipped and **verified live in the rebuilt container**:
-- résumé tailoring constrained to **one page** (`resume_latex._SYSTEM`),
-- résumé + cold email **humanized, em/en dashes banned** across all three content
-  prompts. Verified: tailored résumé 1 page, zero AI-introduced dashes (the 5 `---`
-  left are pre-existing in the user's own base résumé), cold email dash-free and
-  human-toned.
+1. **Multi-tenant overnight campaign — PLAN ONLY, delivered (no code written).**
+   Recommendation + prompt-by-prompt plan returned in chat for approval. Summary:
+   build a parallel multi-tenant campaign path (Redis + Celery worker/beat,
+   per-user `UserTargetCompany`, `CampaignRun`, `LLMCall.user_id` + per-user caps,
+   nightly dispatcher) that REUSES `run_evaluate_pipeline`/`run_generate_pipeline`
+   (driven from a Celery task) + the existing user-scoped `/history`,
+   `/analysis/{id}`, and resume `.docx`. Admin `campaign_orchestrator`
+   (Hunter/Gmail/LaTeX) stays untouched. Flagged risks: async-pipeline-in-Celery
+   bridge; concurrent per-user cost-cap accuracy. Suggested first spike: a
+   campaign-job evaluate/generate driver invoked outside a request (plan unit 4).
+   Awaiting approval before any code.
 
-`target_companies.json` curated: Stripe removed (its 499 mostly-sales listings made
-it a poor first batch); now Netlify / Ramp / Vercel / Linear.
+2. **Work at a Startup source + `job_shortlist` service — COMMITTED** as
+   `94c28fb` (owner-confirmed prior-session WIP; `make check` green, 411 passed,
+   80.93%). Committed alone, no campaign work mixed in.
 
 ## Next Action
 
-Run a real small-batch campaign: confirm the curated targets, then trigger
-discovery for `source="targets"` (produces `scored` jobs) followed by
-`run_campaign(threshold=0.75)`. Watch `/api/campaign/status`. Or first clean up the
-trace's leftover rows + the test Gmail draft.
+Approve / adjust the multi-tenant campaign plan, then implement plan unit 1
+(Celery+Redis skeleton) or unit 4 (the de-risking spike). Separately, the WIP
+author should finish + commit (or stash) the Work-at-a-Startup source.
 
 ## Why It Stopped
 
-Verification complete; awaiting the call on scope of the first real `run_campaign`.
+Plan delivered; awaiting approval. No code to commit for the planned feature.
 
 ## In-Flight
 
-No uncommitted changes after this commit. Real artifacts from the trace: one Gmail
-draft (Stripe "Account Executive, AI Sales") in the user's Drafts — may want to
-delete; one Hunter credit spent; leftover dev-DB rows (DiscoveryRun/Job/Analysis/
-CampaignJob=drafted/Contact) — harmless, that Job won't be re-processed.
+No uncommitted changes (WAAS WIP committed as `94c28fb`).
 
 ## Open Questions
 
-- Scope/threshold for the first real `run_campaign`?
-- Strip the 5 `---` from the user's base `resume.tex`? (their file; their call)
+- Cap model: `User` fields vs. a `UserCampaignSettings` table?
+- Include on-demand "run my campaign now" in v1, or nightly-only?
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make test` | ✓ 393 passed, 1 deselected · 80.15% |
-| `make lint` | ✓ clean |
-| live single-job trace | ✓ end-to-end (drafted); 1-page + dash-free verified post-rebuild |
+| `make check` | ✓ 411 passed, 1 deselected · 80.93% (with WAAS WIP) |
