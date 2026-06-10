@@ -227,6 +227,19 @@ class AnalysisSummary(BaseModel):
     match_score: int | None = None
 
 
+class RetryRequest(BaseModel):
+    agents: list[str] | None = None
+    scope: Literal["failed", "all"] = "failed"
+
+
+class Step(BaseModel):
+    name: str
+    phase: int  # 1 (evaluate) | 2 (generate)
+    status: Literal["success", "error", "pending"]
+    error_code: str | None = None
+    message: str | None = None  # user-safe; never str(exc)
+
+
 class AnalysisDetail(BaseModel):
     id: str
     jd_text: str
@@ -237,6 +250,7 @@ class AnalysisDetail(BaseModel):
     status: str | None = None
     results: dict[str, dict]  # type: ignore[type-arg]
     result_errors: dict[str, str] = Field(default_factory=dict)
+    steps: list[Step] = Field(default_factory=list)
 
 
 class FunnelMetrics(BaseModel):

@@ -110,11 +110,13 @@ async def test_phase1_agent_failure_writes_error_span_and_joberror(session):
     )
     assert len(err_spans) == 1
 
-    # JobResult.error populated for the failed agent
+    # JobResult.error carries a USER-SAFE message (raw str(exc) stays in the
+    # PipelineEvent error span checked above), plus a structured error_code.
     jr = (
         await session.execute(select(JobResult).where(JobResult.agent_name == "match_scorer"))
     ).scalar_one()
-    assert jr.error is not None and "boom" in jr.error
+    assert jr.error is not None and "boom" not in jr.error
+    assert jr.error_code == "invalid_output"
 
 
 async def test_discovery_phase1_failure_writes_failure_event(session):

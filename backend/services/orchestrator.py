@@ -3,16 +3,19 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Protocol
 
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents.base import SONNET
 from backend.agents.cover_letter import CoverLetterAgent
 from backend.agents.gap_analyst import GapAnalystAgent
-from backend.agents.job_parser import AgentError, JobParserAgent
+from backend.agents.job_parser import JobParserAgent
 from backend.agents.match_scorer import MatchScorerAgent
 from backend.agents.resource_planner import ResourcePlannerAgent
 from backend.agents.resume_tailorer import ResumeTailorerAgent
@@ -26,11 +29,56 @@ from backend.schemas import (
     ResourcePlannerOutput,
 )
 from backend.services.instrumentation import new_trace_id, span
+from backend.services.job_result import upsert_job_result
+from backend.services.pipeline_errors import to_user_error
 from backend.services.profile_builder import (
     build_compact_profile,
     get_or_build_profile,
     profile_content_hash,
 )
+
+logger = logging.getLogger(__name__)
+
+# Canonical step order — the single source of truth for both phases.
+PHASE1: list[str] = ["job_parser", "match_scorer", "gap_analyst"]
+PHASE2: list[str] = ["resource_planner", "cover_letter", "resume_tailorer"]
+ALL_STEPS: list[str] = PHASE1 + PHASE2
+_PARALLEL_PHASE2 = ("cover_letter", "resume_tailorer")
+
+_PRIOR_MODELS: dict[str, type[BaseModel]] = {
+    "job_parser": JobParserOutput,
+    "match_scorer": MatchScorerOutput,
+    "gap_analyst": GapAnalystOutput,
+    "resource_planner": ResourcePlannerOutput,
+}
+
+_AGENT_CLASSES: dict[str, type] = {
+    "job_parser": JobParserAgent,
+    "match_scorer": MatchScorerAgent,
+    "gap_analyst": GapAnalystAgent,
+    "resource_planner": ResourcePlannerAgent,
+    "cover_letter": CoverLetterAgent,
+    "resume_tailorer": ResumeTailorerAgent,
+}
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _rebuild_prior(rows: list[JobResult]) -> PriorOutputs:
+    """Reconstruct PriorOutputs from stored JobResult output rows (prefer outputs)."""
+    prior = PriorOutputs()
+    for row in rows:
+        if not row.output_json:
+            continue
+        model = _PRIOR_MODELS.get(row.agent_name)
+        if model is None:
+            continue
+        prior = prior.model_copy(
+            update={row.agent_name: model.model_validate(json.loads(row.output_json))}
+        )
+    return prior
 
 
 def analysis_cache_key(jd: str, profile: Profile) -> str:
@@ -134,7 +182,7 @@ async def _run_phase1(
         ("gap_analyst", GapAnalystAgent(), full),
     ]
 
-    errors: dict[str, str] = {}
+    errors: dict[str, tuple[str, str]] = {}
     try:
         for agent_name, agent, profile_str in phase1_agents:
             agent.model = model  # type: ignore[attr-defined]
@@ -146,21 +194,17 @@ async def _run_phase1(
                     output = await agent.run(profile_str, jd, prior)
                 prior = prior.model_copy(update={agent_name: output})
                 results[agent_name] = output.model_dump()
-            except AgentError as e:
+            except Exception as e:
+                logger.exception("phase1 agent %s failed", agent_name)
                 partial = True
-                errors[agent_name] = str(e)
+                ue = to_user_error(agent_name, e)
+                errors[agent_name] = (ue.message, ue.code)
     finally:
         analysis.partial = partial
         for name, data in results.items():
-            db.add(
-                JobResult(
-                    analysis_id=analysis.id,
-                    agent_name=name,
-                    output_json=json.dumps(data),
-                )
-            )
-        for name, err in errors.items():
-            db.add(JobResult(analysis_id=analysis.id, agent_name=name, error=err))
+            await upsert_job_result(db, analysis.id, name, output_json=json.dumps(data))
+        for name, (msg, code) in errors.items():
+            await upsert_job_result(db, analysis.id, name, error=msg, error_code=code)
         await db.commit()
 
     score = results.get("match_scorer", {}).get("score", 0)
@@ -250,7 +294,7 @@ async def run_evaluate_pipeline(
         ("gap_analyst", GapAnalystAgent(), full),
     ]
 
-    errors: dict[str, str] = {}
+    errors: dict[str, tuple[str, str]] = {}
     try:
         for agent_name, agent, profile_str in phase1:
             agent.with_tracking(db, analysis_id=analysis.id)  # type: ignore[attr-defined]
@@ -261,10 +305,15 @@ async def run_evaluate_pipeline(
                 prior = prior.model_copy(update={agent_name: output})
                 results[agent_name] = output.model_dump()
                 yield SSEEvent("agent_done", {"agent": agent_name, "output": output.model_dump()})
-            except AgentError as e:
+            except Exception as e:
+                logger.exception("phase1 agent %s failed", agent_name)
                 partial = True
-                errors[agent_name] = str(e)
-                yield SSEEvent("pipeline_error", {"agent": agent_name, "error": str(e)})
+                ue = to_user_error(agent_name, e)
+                errors[agent_name] = (ue.message, ue.code)
+                yield SSEEvent(
+                    "pipeline_error",
+                    {"agent": agent_name, "error": ue.message, "code": ue.code},
+                )
     finally:
         analysis.partial = partial
         # Denormalize role/company/score onto the Analysis for the History list.
@@ -273,15 +322,9 @@ async def run_evaluate_pipeline(
         analysis.company = jp_out.get("company")
         analysis.match_score = results.get("match_scorer", {}).get("score")
         for name, output in results.items():
-            db.add(
-                JobResult(
-                    analysis_id=analysis.id,
-                    agent_name=name,
-                    output_json=json.dumps(output),
-                )
-            )
-        for name, err in errors.items():
-            db.add(JobResult(analysis_id=analysis.id, agent_name=name, error=err))
+            await upsert_job_result(db, analysis.id, name, output_json=json.dumps(output))
+        for name, (msg, code) in errors.items():
+            await upsert_job_result(db, analysis.id, name, error=msg, error_code=code)
         await db.commit()
 
     score = results.get("match_scorer", {}).get("score", 0)
@@ -296,26 +339,33 @@ async def run_evaluate_pipeline(
     )
 
 
-async def run_generate_pipeline(
-    analysis_id: str, db: AsyncSession, user_id: str | None = None
+async def run_steps(
+    analysis_id: str,
+    agents: list[str],
+    db: AsyncSession,
+    user_id: str | None = None,
 ) -> AsyncGenerator[SSEEvent, None]:
-    """Phase 2: resource_planner → [cover_letter ∥ resume_tailorer].
+    """Run a subset of pipeline steps against an EXISTING analysis, in place.
 
-    Loads Phase 1 results from DB to rebuild PriorOutputs.
-    Appends Phase 2 JobResult rows and sets evaluate_only=False on the Analysis.
+    The single runner for both phases. Rebuilds PriorOutputs from stored rows,
+    runs the requested agents in canonical dependency order (Phase-1 sequential,
+    then resource_planner, then cover_letter ∥ resume_tailorer), upserts each
+    result, and recomputes denormalized fields / evaluate_only / partial /
+    quality_signals from the full stored set. Never creates a second Analysis.
     """
     new_trace_id()
     analysis = (
         await db.execute(select(Analysis).where(Analysis.id == analysis_id))
     ).scalar_one_or_none()
-    if analysis is None:
+    if analysis is None or (
+        user_id is not None and analysis.user_id is not None and analysis.user_id != user_id
+    ):
         yield SSEEvent(
             "pipeline_error", {"agent": "system", "error": f"Analysis {analysis_id} not found"}
         )
-        return
-    if user_id is not None and analysis.user_id != user_id:
         yield SSEEvent(
-            "pipeline_error", {"agent": "system", "error": f"Analysis {analysis_id} not found"}
+            "pipeline_done",
+            {"analysis_id": analysis_id, "score": 0, "partial": True, "evaluate_only": True},
         )
         return
 
@@ -323,134 +373,231 @@ async def run_generate_pipeline(
         await db.execute(select(Profile).where(Profile.id == analysis.profile_id))
     ).scalar_one_or_none()
     full = profile.merged_profile if profile else ""
+    compact = build_compact_profile(profile.yaml_data, profile.cv_text) if profile else ""
+    profile_for = {
+        "job_parser": compact,
+        "match_scorer": compact,
+        "gap_analyst": full,
+        "resource_planner": full,
+        "cover_letter": full,
+        "resume_tailorer": full,
+    }
 
-    # Rebuild PriorOutputs from stored Phase 1 results
     stored = (
         (await db.execute(select(JobResult).where(JobResult.analysis_id == analysis_id)))
         .scalars()
         .all()
     )
-    existing_outputs = {row.agent_name for row in stored if row.output_json}
-    phase2_agents = {"resource_planner", "cover_letter", "resume_tailorer"}
-    missing_phase2 = phase2_agents - existing_outputs
-    if not analysis.evaluate_only and not missing_phase2:
+    prior = _rebuild_prior(list(stored))
+
+    requested = [s for s in ALL_STEPS if s in set(agents)]
+    yield SSEEvent("pipeline_start", {"total_agents": len(requested)})
+
+    parallel = [s for s in _PARALLEL_PHASE2 if s in requested]
+    sequential = [s for s in requested if s not in parallel]
+
+    for name in sequential:
+        agent = _AGENT_CLASSES[name]()
+        agent.with_tracking(db, analysis_id=analysis.id)
+        yield SSEEvent("agent_start", {"agent": name})
+        try:
+            async with span(db, kind="span", name=name, analysis_id=analysis.id):
+                output = await agent.run(profile_for[name], analysis.jd_text, prior)
+            prior = prior.model_copy(update={name: output})
+            await upsert_job_result(
+                db, analysis.id, name, output_json=json.dumps(output.model_dump())
+            )
+            yield SSEEvent("agent_done", {"agent": name, "output": output.model_dump()})
+        except Exception as e:
+            logger.exception("step %s failed", name)
+            ue = to_user_error(name, e)
+            await upsert_job_result(db, analysis.id, name, error=ue.message, error_code=ue.code)
+            yield SSEEvent("pipeline_error", {"agent": name, "error": ue.message, "code": ue.code})
+
+    if parallel:
+        for name in parallel:
+            yield SSEEvent("agent_start", {"agent": name})
+        aid = analysis.id
+        jd = analysis.jd_text
+        snapshot = prior
+
+        async def _tracked(name: str) -> Any:
+            # Own session per coroutine — sharing the route session across
+            # concurrent coroutines corrupts SQLAlchemy's unit-of-work state.
+            async with SessionLocal() as own_db:
+                agent = _AGENT_CLASSES[name]()
+                agent.with_tracking(own_db, analysis_id=aid)
+                async with span(own_db, kind="span", name=name, analysis_id=aid):
+                    return await agent.run(full, jd, snapshot)
+
+        results = await asyncio.gather(*[_tracked(n) for n in parallel], return_exceptions=True)
+        for name, result in zip(parallel, results):
+            if isinstance(result, BaseException):
+                # Never swallow shutdown signals — re-raise before the catch.
+                if isinstance(result, (KeyboardInterrupt, SystemExit)):
+                    raise result
+                logger.error("step %s failed", name, exc_info=result)
+                exc = result if isinstance(result, Exception) else Exception(str(result))
+                ue = to_user_error(name, exc)
+                await upsert_job_result(db, analysis.id, name, error=ue.message, error_code=ue.code)
+                yield SSEEvent(
+                    "pipeline_error", {"agent": name, "error": ue.message, "code": ue.code}
+                )
+            else:
+                await upsert_job_result(
+                    db, analysis.id, name, output_json=json.dumps(result.model_dump())
+                )
+                yield SSEEvent("agent_done", {"agent": name, "output": result.model_dump()})
+
+    # Finalize from the full stored set (not just this run's results).
+    final_rows = (
+        (await db.execute(select(JobResult).where(JobResult.analysis_id == analysis_id)))
+        .scalars()
+        .all()
+    )
+    output_agents = {r.agent_name for r in final_rows if r.output_json}
+    final_prior = _rebuild_prior(list(final_rows))
+    if final_prior.job_parser is not None:
+        analysis.role_type = final_prior.job_parser.role_type
+        analysis.company = final_prior.job_parser.company
+    if final_prior.match_scorer is not None:
+        analysis.match_score = final_prior.match_scorer.score
+    # evaluate_only is governed by Phase-2 completion ONLY (a Phase-1 retry never flips it).
+    analysis.evaluate_only = not set(PHASE2) <= output_agents
+    # partial is False only when every step across both phases has an output.
+    analysis.partial = not set(ALL_STEPS) <= output_agents
+    quality_signals = _build_quality_signals(final_prior)
+    analysis.quality_signals = json.dumps(quality_signals)
+    await db.commit()
+
+    score = (
+        final_prior.match_scorer.score if final_prior.match_scorer else (analysis.match_score or 0)
+    )
+    yield SSEEvent(
+        "pipeline_done",
+        {
+            "analysis_id": analysis_id,
+            "score": score,
+            "partial": analysis.partial,
+            "evaluate_only": analysis.evaluate_only,
+            "quality_signals": quality_signals,
+        },
+    )
+
+
+async def run_generate_pipeline(
+    analysis_id: str, db: AsyncSession, user_id: str | None = None
+) -> AsyncGenerator[SSEEvent, None]:
+    """Phase 2 entry: run the missing Phase-2 steps for an analysis. Thin wrapper
+    over run_steps (the single runner)."""
+    analysis = (
+        await db.execute(select(Analysis).where(Analysis.id == analysis_id))
+    ).scalar_one_or_none()
+    if analysis is None or (
+        user_id is not None and analysis.user_id is not None and analysis.user_id != user_id
+    ):
+        yield SSEEvent(
+            "pipeline_error", {"agent": "system", "error": f"Analysis {analysis_id} not found"}
+        )
+        return
+
+    output_agents = await _output_agents(db, analysis_id)
+    missing = [s for s in PHASE2 if s not in output_agents]
+    if not missing:
         yield SSEEvent(
             "pipeline_error",
             {"agent": "system", "error": "Documents already generated for this analysis"},
         )
         return
 
-    prior = PriorOutputs()
-    for row in stored:
-        if not row.output_json:
-            continue
-        data = json.loads(row.output_json)
-        if row.agent_name == "job_parser":
-            prior = prior.model_copy(update={"job_parser": JobParserOutput.model_validate(data)})
-        elif row.agent_name == "match_scorer":
-            prior = prior.model_copy(
-                update={"match_scorer": MatchScorerOutput.model_validate(data)}
-            )
-        elif row.agent_name == "gap_analyst":
-            prior = prior.model_copy(update={"gap_analyst": GapAnalystOutput.model_validate(data)})
-        elif row.agent_name == "resource_planner":
-            prior = prior.model_copy(
-                update={"resource_planner": ResourcePlannerOutput.model_validate(data)}
-            )
+    async for event in run_steps(analysis_id, missing, db, user_id):
+        yield event
 
-    yield SSEEvent("pipeline_start", {"total_agents": len(missing_phase2)})
 
-    results: dict[str, dict[str, Any]] = {}
-    errors: dict[str, str] = {}
-    partial = False
+async def run_retry_pipeline(
+    analysis_id: str,
+    db: AsyncSession,
+    *,
+    agents: list[str] | None = None,
+    scope: str = "failed",
+    is_admin: bool = False,
+    user_id: str | None = None,
+) -> AsyncGenerator[SSEEvent, None]:
+    """Re-run failed/missing steps (scope=failed) or all steps (scope=all, admin).
 
-    # resource_planner runs first (gap_analyst output feeds into it)
-    if "resource_planner" in missing_phase2:
-        rp_agent = ResourcePlannerAgent()
-        rp_agent.with_tracking(db, analysis_id=analysis.id)
-        yield SSEEvent("agent_start", {"agent": "resource_planner"})
-        try:
-            async with span(db, kind="span", name="resource_planner", analysis_id=analysis.id):
-                rp_output = await rp_agent.run(full, analysis.jd_text, prior)
-            prior = prior.model_copy(update={"resource_planner": rp_output})
-            results["resource_planner"] = rp_output.model_dump()
-            yield SSEEvent(
-                "agent_done", {"agent": "resource_planner", "output": rp_output.model_dump()}
-            )
-        except AgentError as e:
-            partial = True
-            errors["resource_planner"] = str(e)
-            yield SSEEvent("pipeline_error", {"agent": "resource_planner", "error": str(e)})
-
-    # cover_letter + resume_tailorer run in parallel
-    parallel_jobs: list[tuple[str, type]] = []
-    if "cover_letter" in missing_phase2:
-        yield SSEEvent("agent_start", {"agent": "cover_letter"})
-        parallel_jobs.append(("cover_letter", CoverLetterAgent))
-    if "resume_tailorer" in missing_phase2:
-        yield SSEEvent("agent_start", {"agent": "resume_tailorer"})
-        parallel_jobs.append(("resume_tailorer", ResumeTailorerAgent))
-
-    # Each parallel agent gets its own session — sharing the route session across
-    # concurrent coroutines corrupts SQLAlchemy's unit-of-work state.
-    aid = analysis.id
-
-    async def _tracked(
-        name: str, AgentClass: type, profile_str: str, jd: str, p: PriorOutputs
-    ) -> Any:
-        async with SessionLocal() as own_db:
-            agent = AgentClass()
-            agent.with_tracking(own_db, analysis_id=aid)
-            async with span(own_db, kind="span", name=name, analysis_id=aid):
-                return await agent.run(profile_str, jd, p)
-
-    parallel_results: list[Any] = []
-    if parallel_jobs:
-        parallel_results = await asyncio.gather(
-            *[
-                _tracked(agent_name, agent_class, full, analysis.jd_text, prior)
-                for agent_name, agent_class in parallel_jobs
-            ],
-            return_exceptions=True,
+    Never re-runs a succeeded step unless scope=all. Claims a DB-level lock
+    (Analysis.retry_running_at) so concurrent retries don't double-charge.
+    """
+    analysis = (
+        await db.execute(select(Analysis).where(Analysis.id == analysis_id))
+    ).scalar_one_or_none()
+    if analysis is None or (
+        user_id is not None and analysis.user_id is not None and analysis.user_id != user_id
+    ):
+        yield SSEEvent(
+            "pipeline_error", {"agent": "system", "error": f"Analysis {analysis_id} not found"}
         )
+        return
 
-    for (agent_name, _agent_class), result in zip(parallel_jobs, parallel_results):
-        if isinstance(result, BaseException):
-            partial = True
-            errors[agent_name] = str(result)
-            yield SSEEvent("pipeline_error", {"agent": agent_name, "error": str(result)})
-        else:
-            results[agent_name] = result.model_dump()
-            yield SSEEvent("agent_done", {"agent": agent_name, "output": result.model_dump()})
+    output_agents = await _output_agents(db, analysis_id)
+    named = set(agents) if agents else set(ALL_STEPS)
+    if scope == "all" and is_admin:
+        resolved = [s for s in ALL_STEPS if s in named]
+    else:
+        # failed/missing only — never re-run a succeeded step
+        resolved = [s for s in ALL_STEPS if s in named and s not in output_agents]
 
-    # Persist Phase 2 results and mark analysis complete
-    for name, output in results.items():
-        db.add(
-            JobResult(
-                analysis_id=analysis_id,
-                agent_name=name,
-                output_json=json.dumps(output),
-            )
+    if not resolved:
+        async for event in _nothing_to_retry(analysis):
+            yield event
+        return
+
+    # Atomic claim: only one retry may hold retry_running_at at a time.
+    claimed = (
+        await db.execute(
+            update(Analysis)
+            .where(Analysis.id == analysis_id, Analysis.retry_running_at.is_(None))
+            .values(retry_running_at=_utcnow())
+            .returning(Analysis.id)
         )
-    for name, err in errors.items():
-        db.add(JobResult(analysis_id=analysis_id, agent_name=name, error=err))
-    completed_phase2 = existing_outputs | set(results)
-    analysis.evaluate_only = not phase2_agents <= completed_phase2
-    if partial:
-        analysis.partial = True
-    quality_signals = _build_quality_signals(prior)
-    analysis.quality_signals = json.dumps(quality_signals)
+    ).scalar_one_or_none()
     await db.commit()
+    if claimed is None:
+        yield SSEEvent(
+            "pipeline_error",
+            {"agent": "system", "error": "A retry is already in progress. Please wait."},
+        )
+        async for event in _nothing_to_retry(analysis):
+            yield event
+        return
 
-    score = prior.match_scorer.score if prior.match_scorer else 0
+    try:
+        async for event in run_steps(analysis_id, resolved, db, user_id):
+            yield event
+    finally:
+        await db.execute(
+            update(Analysis).where(Analysis.id == analysis_id).values(retry_running_at=None)
+        )
+        await db.commit()
+
+
+async def _output_agents(db: AsyncSession, analysis_id: str) -> set[str]:
+    rows = (
+        (await db.execute(select(JobResult).where(JobResult.analysis_id == analysis_id)))
+        .scalars()
+        .all()
+    )
+    return {r.agent_name for r in rows if r.output_json}
+
+
+async def _nothing_to_retry(analysis: Analysis) -> AsyncGenerator[SSEEvent, None]:
     yield SSEEvent(
         "pipeline_done",
         {
-            "analysis_id": analysis_id,
-            "score": score,
-            "partial": partial or analysis.partial,
-            "evaluate_only": False,
-            "quality_signals": quality_signals,
+            "analysis_id": analysis.id,
+            "score": analysis.match_score or 0,
+            "partial": analysis.partial,
+            "evaluate_only": analysis.evaluate_only,
         },
     )
 

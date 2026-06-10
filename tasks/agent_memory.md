@@ -38,8 +38,17 @@
   and Gmail-draft routes. Regular tier (any authenticated user): analysis,
   score, gaps, cover letter, resume tailoring (interactive), resume .docx
   download, profile. is_admin on User — first registered user is admin.
+- Pipeline retry: JobResult is one row per (analysis, agent) enforced by
+  upsert. to_user_error() is the sole boundary — raw str(exc) never reaches
+  JobResult.error, SSE, or result_errors. Retry never re-runs a succeeded
+  step (scope=failed default). Analysis.retry_running_at is the concurrency
+  claim (conditional UPDATE, not in-process lock). run_steps() is the single
+  runner for both phases.
 
 ## Known Gotchas
+- Phase-2 gather: narrow BaseException → Exception but explicitly re-raise
+  KeyboardInterrupt and SystemExit before the catch — swallowing those causes
+  silent hangs on shutdown.
 - asyncpg rejects tz-aware datetimes into a non-tz (timestamp WITHOUT time zone)
   column; SQLite silently accepted them. Use timestamptz.
 - Greenhouse: legacy boards.greenhouse.io/{slug}/jobs.json 404s. Use

@@ -1,37 +1,46 @@
 # Session Handoff
 
 **Updated:** 2026-06-10
-**Branch:** main — synced with origin (commit pending for the admin-gating guard)
+**Branch:** main — pipeline-retry backend complete (commit pending)
 
 ---
 
 ## Current State
 
-Admin tier-enforcement is confirmed and guarded. The implementation already
-existed (the "tighten access" half of commit `1b50f59`): `User.is_admin`,
-first-registered-user-is-admin in `register()`, the `require_admin` dependency
-(`auth_service.py`), and its application to every admin-only route (discovery,
-campaign, metrics/cost, contacts/cold-email/draft/send). No literal admin email
-anywhere. This session added a consolidated gating matrix and recorded the
-locked decision — it did not rebuild the feature.
+The pipeline **retry backend** (Prompts 1–6) is implemented and verified.
+New: `services/pipeline_errors.py` (to_user_error boundary), `services/job_result.py`
+(upsert — one row per (analysis, agent)), Alembic `0003_pipeline_retry`
+(JobResult.error_code/retry_count, Analysis.retry_running_at, one-time dedup).
+`orchestrator.py` now has `run_steps()` as the single runner for both phases;
+`run_generate_pipeline` is a thin wrapper; `run_retry_pipeline` adds the
+DB-claim concurrency guard and resolves failed/missing steps (never re-runs a
+succeeded step unless scope=all+admin). Phase-1 catches broad Exception and
+maps via to_user_error; Phase-2 gather narrows BaseException→Exception while
+re-raising KeyboardInterrupt/SystemExit. Route `POST /api/analysis/{id}/retry`
+(SSE, ownership-scoped). `AnalysisDetail.steps` derived in the history route;
+`result_errors` now user-safe. SSE event names unchanged → client.ts untouched.
 
 ## Next Action
 
-No work in progress. If continuing, the natural follow-up is the previously
-explored (plan-only) **agent error-handling / retry** feature — see that plan in
-the conversation; nothing committed for it yet.
+Frontend wiring (Prompt 7, not in this pass): a per-step status strip + retry
+buttons in `Results.tsx`, `retryAnalysis`/`streamRetry` in `api/client.ts`, and
+`Step`/`RetryRequest` TS types. Backend is ready and tested.
 
 ## Why It Stopped
 
-Natural end of task — admin-gating confirmed, matrix test added, `make check`
-green, memory updated.
+Task complete — Prompts 1–6 implemented, `make check` green.
 
 ## In-Flight
 
 To be committed in this checkpoint:
-- tests/test_routes/test_admin_gating.py (new — 47-case gating matrix)
-- tasks/agent_memory.md (Architecture Decision: admin enforcement)
-- HANDOFF.md (this file)
+- backend/services/pipeline_errors.py, backend/services/job_result.py (new)
+- alembic/versions/0003_pipeline_retry_fields.py (new)
+- backend/models.py, backend/schemas.py, backend/services/orchestrator.py,
+  backend/routes/analyse.py, backend/routes/history.py
+- tests/test_services/test_pipeline_errors.py, tests/test_services/test_job_result.py,
+  tests/test_orchestrator/test_retry.py, tests/test_routes/test_retry.py (new)
+- tests/test_orchestrator/test_pipeline_events.py, tests/test_startup.py (updated assertions)
+- tasks/agent_memory.md, tasks/todo.md, HANDOFF.md
 
 ## Open Questions
 
@@ -41,6 +50,6 @@ None.
 
 | Check | Result |
 |---|---|
-| `make test` | ✓ 369 passed, 1 deselected · 80.10% coverage |
+| `make test` | ✓ 385 passed, 1 deselected · 80.33% coverage |
 | `make lint` | ✓ clean (ruff + mypy + pydantic→TS drift) |
 | `make check` | ✓ clean (run 2026-06-10) |

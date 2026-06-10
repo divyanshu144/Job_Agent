@@ -169,6 +169,11 @@ class Analysis(Base):
     match_score: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     # Per-run quality summary (JSON), populated at end of Phase 2 (see orchestrator).
     quality_signals: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    # Concurrency claim for retry: a conditional UPDATE sets this to now() when a
+    # retry starts and clears it in finally. NULL means no retry in flight.
+    retry_running_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
     job_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("jobs.id"), nullable=True, default=None
     )
@@ -186,6 +191,10 @@ class JobResult(Base):
     agent_name: Mapped[str] = mapped_column(String)
     output_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # User-safe error classification (see services/pipeline_errors.py). NULL on success.
+    error_code: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    # Bumped on every upsert; 0 on first write. One row per (analysis, agent).
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
     analysis: Mapped[Analysis] = relationship("Analysis", back_populates="results")
 
 

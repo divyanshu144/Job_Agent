@@ -14,12 +14,17 @@ from backend.schemas import (
     AnalysisDetail,
     AnalysisSummary,
     ResumeTailorerOutput,
+    Step,
     UpdateStatusRequest,
 )
 from backend.services.auth_service import get_current_user
 from backend.services.resume_docx import render_resume_docx
 
 router = APIRouter(tags=["history"])
+
+# Canonical step order for the per-step status strip (mirrors orchestrator).
+_PHASE1 = ["job_parser", "match_scorer", "gap_analyst"]
+_PHASE2 = ["resource_planner", "cover_letter", "resume_tailorer"]
 
 
 @router.get("/history", response_model=list[AnalysisSummary])
@@ -57,11 +62,27 @@ async def get_analysis(
     results_map = {
         r.agent_name: json.loads(r.output_json) for r in analysis.results if r.output_json
     }
-    result_errors = {
-        r.agent_name: r.error
+    # Error rows whose agent has no successful output. r.error already holds a
+    # user-safe message (orchestrator never stores str(exc)); this route passes
+    # it through unchanged, so no internal detail can leak.
+    errors_by_agent = {
+        r.agent_name: (r.error, r.error_code)
         for r in analysis.results
         if r.error and r.agent_name not in results_map
     }
+    result_errors = {agent: msg for agent, (msg, _code) in errors_by_agent.items()}
+
+    steps: list[Step] = []
+    for name in _PHASE1 + _PHASE2:
+        phase = 1 if name in _PHASE1 else 2
+        if name in results_map:
+            steps.append(Step(name=name, phase=phase, status="success"))
+        elif name in errors_by_agent:
+            msg, code = errors_by_agent[name]
+            steps.append(Step(name=name, phase=phase, status="error", error_code=code, message=msg))
+        else:
+            steps.append(Step(name=name, phase=phase, status="pending"))
+
     return AnalysisDetail(
         id=analysis.id,
         jd_text=analysis.jd_text,
@@ -71,6 +92,7 @@ async def get_analysis(
         evaluate_only=analysis.evaluate_only,
         results=results_map,
         result_errors=result_errors,
+        steps=steps,
     )
 
 
