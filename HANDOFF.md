@@ -7,45 +7,44 @@
 
 ## Current State
 
-Two unrelated threads in the working tree:
+**Multi-tenant overnight campaign — APPROVED; plan unit 4 SHIPPED.** Locked
+decisions: separate `UserCampaignSettings` table (not `User` fields); v1 scope
+is on-demand "run now" first, nightly schedule second.
 
-1. **Multi-tenant overnight campaign — PLAN ONLY, delivered (no code written).**
-   Recommendation + prompt-by-prompt plan returned in chat for approval. Summary:
-   build a parallel multi-tenant campaign path (Redis + Celery worker/beat,
-   per-user `UserTargetCompany`, `CampaignRun`, `LLMCall.user_id` + per-user caps,
-   nightly dispatcher) that REUSES `run_evaluate_pipeline`/`run_generate_pipeline`
-   (driven from a Celery task) + the existing user-scoped `/history`,
-   `/analysis/{id}`, and resume `.docx`. Admin `campaign_orchestrator`
-   (Hunter/Gmail/LaTeX) stays untouched. Flagged risks: async-pipeline-in-Celery
-   bridge; concurrent per-user cost-cap accuracy. Suggested first spike: a
-   campaign-job evaluate/generate driver invoked outside a request (plan unit 4).
-   Awaiting approval before any code.
+Plan unit 4 (headless pipeline spike) committed `9a3cff1`: `run_campaign_for_user(
+user_id, db)` (`backend/services/campaign_user.py`) drives `run_evaluate_pipeline`
+→ `run_generate_pipeline` in a plain async function — no FastAPI request, no SSE.
+**Finding: the orchestrator generators are NOT request/SSE-coupled** (SSE
+formatting lives only in `routes/analyse.py`); they persist user-scoped
+Analysis/JobResult, already surfaced by `/history` + `/analysis/{id}` + resume
+`.docx`. `make check` green (412 passed, 81.08%). The load-bearing assumption for
+the whole feature is proven.
 
-2. **Work at a Startup source + `job_shortlist` service — COMMITTED** as
-   `94c28fb` (owner-confirmed prior-session WIP; `make check` green, 411 passed,
-   80.93%). Committed alone, no campaign work mixed in.
+(Prior-session WIP "Work at a Startup source + job_shortlist" was committed
+earlier as `94c28fb`, unrelated.)
 
 ## Next Action
 
-Approve / adjust the multi-tenant campaign plan, then implement plan unit 1
-(Celery+Redis skeleton) or unit 4 (the de-risking spike). Separately, the WIP
-author should finish + commit (or stash) the Work-at-a-Startup source.
+Await direction on the next unit. Spike done; queue work intentionally NOT
+started. Logical next units: unit 2 (`UserTargetCompany` + `/api/targets` CRUD +
+parametrize `fetch_target_jobs`), unit 3 (`LLMCall.user_id` + `UserCampaignSettings`
+caps), then unit 1 (Celery+Redis skeleton) and unit 5 (`run_user_campaign` task).
 
 ## Why It Stopped
 
-Plan delivered; awaiting approval. No code to commit for the planned feature.
+Plan unit 4 complete; reporting the spike finding before any Redis/Celery work,
+as instructed.
 
 ## In-Flight
 
-No uncommitted changes (WAAS WIP committed as `94c28fb`).
+No uncommitted changes.
 
 ## Open Questions
 
-- Cap model: `User` fields vs. a `UserCampaignSettings` table?
-- Include on-demand "run my campaign now" in v1, or nightly-only?
+None (cap model + v1 scope decided).
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 411 passed, 1 deselected · 80.93% (with WAAS WIP) |
+| `make check` | ✓ 412 passed, 1 deselected · 81.08% |
