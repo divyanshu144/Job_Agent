@@ -76,3 +76,5 @@ data/profiles/
 # OS
 Thumbs.db
 .DS_Store
+# Real résumé — operator-provided, never commit PII (use assets/resume.example.tex as the template)
+assets/resume.tex
