@@ -1,34 +1,37 @@
 # Session Handoff
 
 **Updated:** 2026-06-10
-**Branch:** main — clean, synced with origin
+**Branch:** main — synced with origin (commit pending for the admin-gating guard)
 
 ---
 
 ## Current State
 
-The **multi-user profile review** feature is committed and pushed. It adds review state to the
-`Profile` model (`profile_review_data`, `review_status`, `reviewed_at`) via migration
-`0002_add_profile_review_fields.py`, with supporting changes in `profile_builder`, `orchestrator`,
-`routes/profile`, `routes/history`, and `schemas`. Frontend adds the `AdminInvites` page, an
-expanded `ProfileSetup` review UI, and invite-token registration. Shipped as commit
-`41f7ea6 feat(profile): add multi-user profile review workflow`, pushed to `origin/main`. Working
-tree is clean.
+Admin tier-enforcement is confirmed and guarded. The implementation already
+existed (the "tighten access" half of commit `1b50f59`): `User.is_admin`,
+first-registered-user-is-admin in `register()`, the `require_admin` dependency
+(`auth_service.py`), and its application to every admin-only route (discovery,
+campaign, metrics/cost, contacts/cold-email/draft/send). No literal admin email
+anywhere. This session added a consolidated gating matrix and recorded the
+locked decision — it did not rebuild the feature.
 
 ## Next Action
 
-No work in progress — pick up the next task. If continuing the profile-review area, a natural
-follow-up is exercising the review flow end-to-end in the running app (`make run`) to confirm the
-`review_status` transitions (draft → reviewed) behave as intended in the UI.
+No work in progress. If continuing, the natural follow-up is the previously
+explored (plan-only) **agent error-handling / retry** feature — see that plan in
+the conversation; nothing committed for it yet.
 
 ## Why It Stopped
 
-Natural end of session — feature committed, verified, and pushed; user chose to keep it on `main`
-(no PR).
+Natural end of task — admin-gating confirmed, matrix test added, `make check`
+green, memory updated.
 
 ## In-Flight
 
-No uncommitted changes.
+To be committed in this checkpoint:
+- tests/test_routes/test_admin_gating.py (new — 47-case gating matrix)
+- tasks/agent_memory.md (Architecture Decision: admin enforcement)
+- HANDOFF.md (this file)
 
 ## Open Questions
 
@@ -38,6 +41,6 @@ None.
 
 | Check | Result |
 |---|---|
-| `make test` | ✓ 322 passed, 1 deselected · 80.01% coverage |
-| `make lint` | ✓ clean |
-| `make check` | ✓ clean (run 2026-06-10, pre-commit) |
+| `make test` | ✓ 369 passed, 1 deselected · 80.10% coverage |
+| `make lint` | ✓ clean (ruff + mypy + pydantic→TS drift) |
+| `make check` | ✓ clean (run 2026-06-10) |

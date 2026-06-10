@@ -33,6 +33,11 @@
 - Job sources: Reed, Adzuna, HN, Remotive, plus Greenhouse/Lever/Ashby via
   assets/target_companies.json. RULED OUT: LinkedIn, Indeed, Wellfound
   (ToS/fragility/Selenium). YC v0.1 companies API dropped (exposes no ATS link).
+- Admin enforcement: require_admin dependency (server-side, never UI-only)
+  gates discovery, campaign, cost/telemetry, contact-discovery, cold-email,
+  and Gmail-draft routes. Regular tier (any authenticated user): analysis,
+  score, gaps, cover letter, resume tailoring (interactive), resume .docx
+  download, profile. is_admin on User — first registered user is admin.
 
 ## Known Gotchas
 - asyncpg rejects tz-aware datetimes into a non-tz (timestamp WITHOUT time zone)
