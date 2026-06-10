@@ -29,6 +29,9 @@ services:
         condition: service_healthy
     volumes:
       - ./data:/app/data
+      # Real assets (gitignored resume.tex, target_companies.json) at runtime —
+      # mounted, not COPYed, so PII never enters an image layer.
+      - ./assets:/app/assets
 
 volumes:
   jobfit_pgdata:
