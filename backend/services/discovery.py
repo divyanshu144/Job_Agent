@@ -25,6 +25,7 @@ from backend.services.profile_builder import build_compact_profile, get_or_build
 from backend.services.reed_client import fetch_reed_jobs
 from backend.services.remotive_client import fetch_remotive_jobs
 from backend.services.targets_client import _TARGET_FILE, fetch_target_jobs
+from backend.services.workatastartup_client import fetch_workatastartup_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -297,6 +298,8 @@ async def _run_discovery_task(run_id: str, source: str) -> None:
                     raw_jobs = await fetch_remotive_jobs()
                 elif source == "targets":
                     raw_jobs = await fetch_target_jobs()
+                elif source == "workatastartup":
+                    raw_jobs = await fetch_workatastartup_jobs()
                 else:  # "hn" — fetches the monthly "Who is Hiring" thread; no keywords needed
                     raw_jobs = await fetch_hn_jobs()
 
@@ -384,6 +387,8 @@ def _get_configured_sources() -> list[str]:
     credentials and are always included; Reed/Adzuna require keys; the manual
     target list is included only when assets/target_companies.json is populated."""
     sources: list[str] = ["hn", "remotive"]
+    if settings.enable_workatastartup_source:
+        sources.append("workatastartup")
     if settings.reed_api_key:
         sources.append("reed")
     if settings.adzuna_app_id and settings.adzuna_app_key:
@@ -444,6 +449,8 @@ async def _run_source_task(run_id: str, source: str) -> None:
                     raw_jobs = await fetch_remotive_jobs()
                 elif source == "targets":
                     raw_jobs = await fetch_target_jobs()
+                elif source == "workatastartup":
+                    raw_jobs = await fetch_workatastartup_jobs()
                 else:
                     raw_jobs = await fetch_hn_jobs()
 
@@ -608,6 +615,8 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
                         jobs = await fetch_remotive_jobs()
                     elif src == "targets":
                         jobs = await fetch_target_jobs()
+                    elif src == "workatastartup":
+                        jobs = await fetch_workatastartup_jobs()
                     else:
                         jobs = await fetch_hn_jobs()
                     raw_by_source.extend((src, j) for j in jobs)

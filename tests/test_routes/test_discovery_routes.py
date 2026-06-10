@@ -226,6 +226,35 @@ async def test_trigger_discovery_adzuna_source_accepted(app_client):
     assert resp.json()["run_id"] == "run-adzuna"
 
 
+async def test_trigger_discovery_workatastartup_source_accepted_when_enabled(
+    app_client, monkeypatch
+):
+    """source=workatastartup is accepted when the source flag is enabled."""
+    from backend.routes import discovery
+
+    monkeypatch.setattr(discovery.settings, "enable_workatastartup_source", True)
+    with patch(
+        "backend.routes.discovery.run_discovery",
+        new_callable=AsyncMock,
+        return_value="run-workatastartup",
+    ):
+        resp = await app_client.post("/api/discovery/run?source=workatastartup")
+    assert resp.status_code == 200
+    assert resp.json()["run_id"] == "run-workatastartup"
+
+
+async def test_trigger_discovery_workatastartup_source_rejected_when_disabled(
+    app_client, monkeypatch
+):
+    """source=workatastartup is behind ENABLE_WORKATASTARTUP_SOURCE."""
+    from backend.routes import discovery
+
+    monkeypatch.setattr(discovery.settings, "enable_workatastartup_source", False)
+    resp = await app_client.post("/api/discovery/run?source=workatastartup")
+    assert resp.status_code == 422
+    assert "disabled" in resp.json()["detail"]
+
+
 async def test_feed_min_score_filter_excludes_low_score_jobs(app_client, db_session):
     """Jobs below min_score threshold must not appear in the feed."""
     from backend.models import DiscoveryRun, Job, Profile
@@ -278,6 +307,47 @@ async def test_feed_min_score_filter_excludes_low_score_jobs(app_client, db_sess
     assert low.id not in ids
 
 
+async def test_shortlist_returns_ranked_jobs_for_authenticated_user(app_client, db_session):
+    from backend.models import Analysis, DiscoveryRun, Job, Profile
+
+    profile = Profile(
+        id="p-shortlist",
+        yaml_data="x",
+        cv_text="",
+        merged_profile="m",
+        last_refreshed_at=datetime.now(timezone.utc),
+    )
+    run = DiscoveryRun(source="hn", status="complete", started_at=datetime.now(timezone.utc))
+    db_session.add_all([profile, run])
+    await db_session.flush()
+
+    job = Job(
+        sources='["hn"]',
+        source_id="short-1",
+        source_url="https://example.com/apply",
+        title="Backend Engineer",
+        company="Acme",
+        location="Remote",
+        raw_text="Python backend " * 10,
+        dedup_hash="shortlist-route-1",
+        state="scored",
+        relevance_score=81,
+        matched_profiles="[]",
+        discovery_run_id=run.id,
+    )
+    db_session.add(job)
+    await db_session.flush()
+    db_session.add(Analysis(jd_text=job.raw_text, profile_id=profile.id, job_id=job.id))
+    await db_session.commit()
+
+    resp = await app_client.get("/api/discovery/shortlist")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["items"][0]["title"] == "Backend Engineer"
+    assert data["items"][0]["source_url"] == "https://example.com/apply"
+    assert data["items"][0]["recommended_action"] == "apply"
+
+
 async def test_trigger_all_discovery_returns_run_id(app_client):
     """POST /discovery/run/all fires background task and returns run_id immediately."""
     with patch(
@@ -300,6 +370,7 @@ async def test_get_sources_returns_configured(app_client):
     assert "hn" in sources
     assert "reed" in sources
     assert "adzuna" in sources
+    assert "workatastartup" in sources
     # Values must be booleans only — never key strings
     for val in sources.values():
         assert isinstance(val, bool)

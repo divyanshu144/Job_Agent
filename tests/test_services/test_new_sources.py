@@ -35,6 +35,13 @@ def _resp(payload: object) -> MagicMock:
     return r
 
 
+def _text_resp(text: str) -> MagicMock:
+    r = MagicMock()
+    r.raise_for_status = MagicMock()
+    r.text = text
+    return r
+
+
 # ───────────────────────────── Remotive ──────────────────────────────
 
 
@@ -96,6 +103,266 @@ async def test_fetch_remotive_jobs_drops_short_text():
     with patch("httpx.AsyncClient", return_value=_mock_client(_resp(payload))):
         jobs = await remotive_client.fetch_remotive_jobs()
     assert jobs == []
+
+
+# ─────────────────────── WorkAtAStartup ──────────────────────────────
+
+
+def _waas_fixture(jobs: object) -> str:
+    import html
+    import json
+
+    payload = {
+        "component": "jobs/public/pages/HomePage",
+        "props": {"jobs": jobs},
+    }
+    encoded = html.escape(json.dumps(payload), quote=True)
+    return f'<html><body><div data-page="{encoded}"></div></body></html>'
+
+
+async def test_fetch_workatastartup_jobs_happy_path():
+    from backend.services import workatastartup_client
+
+    html = _waas_fixture(
+        [
+            {
+                "id": 91866,
+                "title": "Senior Backend Engineer",
+                "jobType": "Fulltime",
+                "location": "Remote (US)",
+                "roleType": "Backend",
+                "salary": "$160K - $220K",
+                "companyName": "BlueCargo",
+                "companySlug": "bluecargo",
+                "url": "/companies/bluecargo/jobs/4UzRNNM-senior-backend-engineer",
+                "applyUrl": (
+                    "https://account.ycombinator.com/authenticate?continue=https%3A%2F%2F"
+                    "www.workatastartup.com%2Fapplication%3Fsignup_job_id%3D91866"
+                ),
+                "description": (
+                    "<p>Build Python and PostgreSQL systems for logistics workflows with a "
+                    "small product engineering team. Own backend architecture and ship "
+                    "customer-facing automation.</p>"
+                ),
+            }
+        ]
+    )
+
+    with patch("httpx.AsyncClient", return_value=_mock_client(_text_resp(html))):
+        jobs = await workatastartup_client.fetch_workatastartup_jobs()
+
+    assert len(jobs) == 1
+    assert jobs[0].source_id == "workatastartup_91866"
+    assert jobs[0].source_url.startswith("https://account.ycombinator.com/authenticate")
+    assert "Senior Backend Engineer" in jobs[0].raw_text
+    assert "BlueCargo" in jobs[0].raw_text
+    assert (
+        "Canonical WorkAtAStartup URL: "
+        "https://www.ycombinator.com/companies/bluecargo/jobs/4UzRNNM-senior-backend-engineer"
+        in jobs[0].raw_text
+    )
+    assert "External apply URL: https://account.ycombinator.com/authenticate" in jobs[0].raw_text
+    assert "<p>" not in jobs[0].raw_text
+    assert len(jobs[0].dedup_hash) == 64
+
+
+def test_parse_workatastartup_detail_page_with_yc_canonical_url():
+    import html
+    import json
+
+    from backend.services.workatastartup_client import parse_workatastartup_listings
+
+    payload = {
+        "component": "WaasShowJobPage",
+        "props": {
+            "job": {
+                "id": 42,
+                "title": "Founding Engineer",
+                "url": "/companies/acme-ai/jobs/abc-founding-engineer",
+                "applyUrl": "https://example.com/apply?tracking=123",
+                "location": "London",
+                "type": "Full-time",
+                "prettyRole": "Engineering",
+                "companyName": "Acme AI",
+                "description": "Ship reliable product features for AI operations teams.",
+            }
+        },
+    }
+    page = f'<div data-page="{html.escape(json.dumps(payload), quote=True)}"></div>'
+
+    listings = parse_workatastartup_listings(page)
+
+    assert len(listings) == 1
+    assert listings[0].canonical_url == (
+        "https://www.ycombinator.com/companies/acme-ai/jobs/abc-founding-engineer"
+    )
+    assert listings[0].apply_url == "https://example.com/apply?tracking=123"
+
+
+async def test_fetch_workatastartup_jobs_dedupes_by_stable_job_id_not_apply_url():
+    from backend.services import workatastartup_client
+
+    description = (
+        "Build backend services for a public YC startup role with enough detail to pass "
+        "minimum text length."
+    )
+    html = _waas_fixture(
+        [
+            {
+                "id": 7,
+                "title": "Backend Engineer",
+                "location": "Remote",
+                "companyName": "Stable Co",
+                "applyUrl": "https://example.com/apply?utm=one",
+                "description": description,
+            },
+            {
+                "id": 7,
+                "title": "Backend Engineer",
+                "location": "Remote",
+                "companyName": "Stable Co",
+                "applyUrl": "https://example.com/apply?utm=two",
+                "description": description,
+            },
+        ]
+    )
+
+    with patch("httpx.AsyncClient", return_value=_mock_client(_text_resp(html))):
+        jobs = await workatastartup_client.fetch_workatastartup_jobs()
+
+    assert len(jobs) == 1
+    assert jobs[0].source_url == "https://example.com/apply?utm=one"
+
+
+async def test_fetch_workatastartup_jobs_skips_when_no_apply_or_real_url():
+    from backend.services import workatastartup_client
+
+    html = _waas_fixture(
+        [
+            {
+                "id": 11,
+                "title": "Backend Engineer",
+                "location": "Remote",
+                "companyName": "No URL Co",
+                "companySlug": "no-url-co",
+                "description": (
+                    "Build backend systems for a YC startup with enough public detail for "
+                    "the parser to otherwise produce a useful job description."
+                ),
+            }
+        ]
+    )
+
+    with patch("httpx.AsyncClient", return_value=_mock_client(_text_resp(html))):
+        jobs = await workatastartup_client.fetch_workatastartup_jobs()
+
+    assert jobs == []
+
+
+async def test_fetch_workatastartup_jobs_uses_real_payload_url_without_fabrication():
+    from backend.services import workatastartup_client
+
+    html = _waas_fixture(
+        [
+            {
+                "id": 12,
+                "title": "Platform Engineer",
+                "location": "London",
+                "companyName": "Real URL Co",
+                "url": "/companies/real-url-co/jobs/platform-engineer",
+                "description": (
+                    "Own platform services for a YC startup with Python, Postgres, and "
+                    "reliable infrastructure work across customer-facing systems."
+                ),
+            }
+        ]
+    )
+
+    with patch("httpx.AsyncClient", return_value=_mock_client(_text_resp(html))):
+        jobs = await workatastartup_client.fetch_workatastartup_jobs()
+
+    assert len(jobs) == 1
+    assert jobs[0].source_url == (
+        "https://www.ycombinator.com/companies/real-url-co/jobs/platform-engineer"
+    )
+    assert "https://www.workatastartup.com/jobs/12-platform-engineer" not in jobs[0].raw_text
+
+
+async def test_fetch_workatastartup_jobs_parser_exception_returns_empty():
+    from backend.services import workatastartup_client
+
+    with (
+        patch("httpx.AsyncClient", return_value=_mock_client(_text_resp("<html></html>"))),
+        patch.object(
+            workatastartup_client,
+            "parse_workatastartup_listings",
+            side_effect=RuntimeError("shape changed"),
+        ),
+    ):
+        jobs = await workatastartup_client.fetch_workatastartup_jobs()
+
+    assert jobs == []
+
+
+async def test_fetch_workatastartup_jobs_enriches_raw_text():
+    from backend.services import workatastartup_client
+
+    html = _waas_fixture(
+        [
+            {
+                "id": 13,
+                "title": "AI Engineer",
+                "location": "San Francisco",
+                "companyName": "Context Co",
+                "url": "/companies/context-co/jobs/ai-engineer",
+                "companyOneLiner": "AI agents for healthcare teams",
+                "companyDescription": "<p>Context Co builds workflow automation.</p>",
+                "companyBatch": "W24",
+                "companyLocation": "San Francisco, CA",
+                "companyWebsite": "https://context.example",
+                "roleType": "Machine learning",
+                "jobType": "Fulltime",
+                "salaryRange": "$150K - $210K",
+                "equityRange": "0.25% - 0.75%",
+                "minExperience": "4+ years",
+                "skills": ["Python", "LLMs", "PostgreSQL"],
+                "tags": ["Healthcare", "AI"],
+                "remote": "Hybrid",
+                "visa": "Visa sponsorship available",
+                "description": (
+                    "Build AI product features with retrieval, evaluation, and backend "
+                    "systems for clinical operations teams."
+                ),
+            }
+        ]
+    )
+
+    with patch("httpx.AsyncClient", return_value=_mock_client(_text_resp(html))):
+        jobs = await workatastartup_client.fetch_workatastartup_jobs()
+
+    assert len(jobs) == 1
+    raw_text = jobs[0].raw_text
+    assert "Company one-liner: AI agents for healthcare teams" in raw_text
+    assert "Company batch: W24" in raw_text
+    assert "Skills: Python, LLMs, PostgreSQL" in raw_text
+    assert "Tags: Healthcare, AI" in raw_text
+    assert "Visa/sponsorship: Visa sponsorship available" in raw_text
+
+
+async def test_fetch_workatastartup_jobs_http_error_returns_empty():
+    from backend.services import workatastartup_client
+
+    client = _mock_client(_text_resp(""))
+    client.get = AsyncMock(side_effect=httpx.HTTPError("406"))
+    with patch("httpx.AsyncClient", return_value=client):
+        jobs = await workatastartup_client.fetch_workatastartup_jobs()
+    assert jobs == []
+
+
+def test_parse_workatastartup_changed_structure_returns_empty():
+    from backend.services.workatastartup_client import parse_workatastartup_listings
+
+    assert parse_workatastartup_listings("<html><body>No jobs here</body></html>") == []
 
 
 # ──────────────────────────── ATS detect ─────────────────────────────
@@ -302,6 +569,15 @@ def test_get_configured_sources_includes_keyless_sources():
     sources = _get_configured_sources()
     assert "remotive" in sources
     assert "hn" in sources
+
+
+def test_get_configured_sources_workatastartup_gated_on_flag(monkeypatch):
+    from backend.services import discovery
+
+    monkeypatch.setattr(discovery.settings, "enable_workatastartup_source", True)
+    assert "workatastartup" in discovery._get_configured_sources()
+    monkeypatch.setattr(discovery.settings, "enable_workatastartup_source", False)
+    assert "workatastartup" not in discovery._get_configured_sources()
 
 
 def test_get_configured_sources_targets_gated_on_file():

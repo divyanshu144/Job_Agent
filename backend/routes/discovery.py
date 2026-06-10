@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.config import settings
 from backend.database import get_db
 from backend.models import Analysis, DiscoveryRun, Job, SavedJob, User
 from backend.schemas import (
@@ -15,19 +16,34 @@ from backend.schemas import (
     DiscoveryRunResponse,
     DiscoverySourcesResponse,
     FunnelMetrics,
+    JobShortlistResponse,
     SourceStatusItem,
 )
-from backend.services.auth_service import require_admin
+from backend.services.auth_service import get_current_user, require_admin
 from backend.services.discovery import (
     _get_configured_sources,
     run_all_discovery,
     run_batch_discovery,
     run_discovery,
 )
+from backend.services.job_shortlist import get_job_shortlist
 
 router = APIRouter(tags=["discovery"])
 
-_VALID_SOURCES = {"hn", "reed", "adzuna", "remotive", "targets"}
+_VALID_SOURCES = {"hn", "reed", "adzuna", "remotive", "targets", "workatastartup"}
+
+
+def _validate_discovery_source(source: str) -> None:
+    if source not in _VALID_SOURCES:
+        raise HTTPException(
+            status_code=422,
+            detail=(f"Invalid source '{source}'. Must be one of: {sorted(_VALID_SOURCES)}"),
+        )
+    if source == "workatastartup" and not settings.enable_workatastartup_source:
+        raise HTTPException(
+            status_code=422,
+            detail="WorkAtAStartup discovery is disabled. Set ENABLE_WORKATASTARTUP_SOURCE=true.",
+        )
 
 
 def _run_to_response(run: DiscoveryRun) -> DiscoveryRunResponse:
@@ -75,11 +91,7 @@ async def trigger_discovery(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    if source not in _VALID_SOURCES:
-        raise HTTPException(
-            status_code=422,
-            detail=(f"Invalid source '{source}'. Must be one of: {sorted(_VALID_SOURCES)}"),
-        )
+    _validate_discovery_source(source)
     run_id = await run_discovery(source, db)
     return {"run_id": run_id}
 
@@ -105,11 +117,7 @@ async def trigger_batch_discovery(
     Returns immediately. Results appear in /discovery/feed when the batch completes
     (typically 1–60 minutes). Poll /discovery/runs/{run_id} for status.
     """
-    if source not in _VALID_SOURCES:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Invalid source '{source}'. Must be one of: {sorted(_VALID_SOURCES)}",
-        )
+    _validate_discovery_source(source)
     run_id = await run_batch_discovery(source, db)
     return BatchDiscoveryResponse(run_id=run_id)
 
@@ -137,6 +145,7 @@ async def get_discovery_sources(
             "adzuna": "adzuna" in configured,
             "remotive": "remotive" in configured,
             "targets": "targets" in configured,
+            "workatastartup": "workatastartup" in configured,
         }
     )
 
@@ -235,6 +244,16 @@ async def get_discovery_feed(
         total=total,
         has_more=offset + limit < total,
     )
+
+
+@router.get("/discovery/shortlist", response_model=JobShortlistResponse)
+async def get_discovery_shortlist(
+    limit: int = Query(default=10, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> JobShortlistResponse:
+    items = await get_job_shortlist(db, limit=limit)
+    return JobShortlistResponse(items=items)
 
 
 @router.get("/discovery/saved", response_model=DiscoveryFeedResponse)

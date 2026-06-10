@@ -308,6 +308,23 @@ class DiscoveryFeedResponse(BaseModel):
     has_more: bool
 
 
+class JobShortlistItem(BaseModel):
+    id: str
+    title: str
+    company: str
+    location: str | None
+    source: str
+    source_url: str
+    score: int
+    top_match_reasons: list[str]
+    top_gaps: list[str]
+    recommended_action: Literal["apply", "maybe", "skip"]
+
+
+class JobShortlistResponse(BaseModel):
+    items: list[JobShortlistItem]
+
+
 class UserCreate(BaseModel):
     email: str
     password: str

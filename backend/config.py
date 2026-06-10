@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     reed_api_key: str = ""  # reed.co.uk developer API key
     adzuna_app_id: str = ""  # adzuna.co.uk application ID
     adzuna_app_key: str = ""  # adzuna.co.uk application key
+    enable_workatastartup_source: bool = False
 
 
 settings = Settings()
