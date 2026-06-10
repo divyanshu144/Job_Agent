@@ -107,3 +107,28 @@ async def test_resume_tailorer_accepts_omitted_items_objects():
         )
     assert result.omitted_items[0].field == "skills"
     assert result.omitted_items[0].reason == "not present in CV text"
+
+
+async def test_resume_tailorer_self_corrects_omitted_items_strings():
+    """The exact production failure: the model emits omitted_items as plain
+    strings (invalid against OmittedItem). _call_structured feeds the error back
+    and the second attempt returns valid objects — self-healed in one extra call."""
+    from unittest.mock import AsyncMock
+
+    from backend.agents.resume_tailorer import ResumeTailorerAgent
+
+    bad = json.loads(HAPPY)
+    bad["omitted_items"] = ["All experience omitted to avoid fabrication."]  # wrong shape
+    good = json.loads(HAPPY)
+    good["omitted_items"] = [{"field": "skills", "value": "K8s", "reason": "absent from CV"}]
+
+    mock = AsyncMock(side_effect=[json.dumps(bad), json.dumps(good)])
+    with patch.object(ResumeTailorerAgent, "_call", new=mock):
+        result = await ResumeTailorerAgent().run(
+            "## CV Text\nAcme Engineer. Built ML pipeline with Python.", "jd " * 15, PRIOR
+        )
+
+    assert mock.await_count == 2  # one self-correction
+    correction_system = mock.await_args_list[1].args[0]
+    assert "## CORRECTION" in correction_system
+    assert result.omitted_items[0].field == "skills"

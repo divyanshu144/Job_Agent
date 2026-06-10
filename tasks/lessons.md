@@ -8,6 +8,20 @@ Fix: what the correct approach is
 Avoid: what not to do next time
 -->
 
+## [2026-06-10] invalid_output is often deterministic — self-correction, not blind retry
+
+Pattern: An `invalid_output` failure (bad JSON / schema ValidationError) is usually
+deterministic — re-running the *identical* prompt produces the *identical* malformed output, so a
+plain retry never helps. Self-correction works because the model sees its mistake: re-call with the
+validation error + prior response fed back (`BaseAgent._call_structured`, hard cap 2 calls).
+
+Fix: But cap it, and prefer fixing the prompt. The resume_tailorer omitted_items bug was fixed by
+fixing the prompt (showing the element shape), not by adding more retries — self-correction is a
+safety net for transient model slips, not a substitute for a correct prompt.
+
+Avoid: Unbounded "retry until it works" on deterministic failures (infinite cost, never succeeds).
+Adding a second retry layer for transient errors — the Anthropic SDK already retries 429/5xx.
+
 ## [2026-06-10] A JSON-output prompt must show every array's element shape
 
 Pattern: resume_tailorer failed repeatedly (and retry never helped) because the prompt's

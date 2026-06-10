@@ -1,11 +1,6 @@
 from __future__ import annotations
 
-import json
-
-from pydantic import ValidationError
-
 from backend.agents.base import BaseAgent
-from backend.agents.job_parser import AgentError, _parse_json
 from backend.schemas import ColdEmailOutput
 
 
@@ -24,8 +19,4 @@ class ColdEmailAgent(BaseAgent):
             .replace("{contact_name}", contact_name or "")
             .replace("{contact_title}", contact_title or "")
         )
-        raw = await self._call(system, jd)
-        try:
-            return ColdEmailOutput.model_validate(_parse_json(raw))
-        except (json.JSONDecodeError, ValidationError, AgentError) as e:
-            raise AgentError(f"cold_email: {e}") from e
+        return await self._call_structured(system, jd, ColdEmailOutput, label="cold_email")

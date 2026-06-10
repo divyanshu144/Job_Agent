@@ -1,27 +1,12 @@
 from __future__ import annotations
 
-import json
-
-from pydantic import ValidationError
-
-from backend.agents.base import HAIKU, BaseAgent
+from backend.agents.base import HAIKU, AgentError, BaseAgent, _parse_json
 from backend.evals.validators import validate_job_parser
 from backend.schemas import JobParserOutput, PriorOutputs
 
-
-class AgentError(Exception):
-    pass
-
-
-def _parse_json(raw: str) -> dict[str, object]:
-    """Extract and parse the first JSON object from a string."""
-    raw = raw.strip()
-    start = raw.find("{")
-    end = raw.rfind("}") + 1
-    if start == -1 or end == 0:
-        raise AgentError(f"No JSON object found in response: {raw[:100]}")
-    result: dict[str, object] = json.loads(raw[start:end])
-    return result
+# AgentError and _parse_json moved to base.py; re-exported here so existing
+# `from backend.agents.job_parser import AgentError, _parse_json` keeps working.
+__all__ = ["AgentError", "JobParserAgent", "_parse_json"]
 
 
 class JobParserAgent(BaseAgent):
@@ -30,11 +15,6 @@ class JobParserAgent(BaseAgent):
     async def run(self, profile: str, jd: str, prior: PriorOutputs) -> JobParserOutput:
         template = self._load_prompt("job_parser")
         system = self._inject(template, profile, jd, prior)
-        raw = await self._call(system, jd)
-        try:
-            data = _parse_json(raw)
-            output = JobParserOutput.model_validate(data)
-            output.validation_warnings = validate_job_parser(output, prior)
-            return output
-        except (json.JSONDecodeError, ValidationError, AgentError) as e:
-            raise AgentError(f"job_parser: {e}") from e
+        output = await self._call_structured(system, jd, JobParserOutput, label="job_parser")
+        output.validation_warnings = validate_job_parser(output, prior)
+        return output

@@ -99,3 +99,9 @@
   continues; never abort the batch.
 - Validate a live endpoint's response shape before building an orchestrator on an
   external API (caught both the YC and Greenhouse issues pre-ship).
+- BaseAgent._call_structured self-corrects once on invalid_output
+  (JSONDecodeError / ValidationError / parse-AgentError): re-calls with the
+  validation error + prior_raw[:500] fed back; hard cap 2 calls total.
+  Transient errors (rate_limited, timeout) bypass it entirely — SDK owns those.
+  resource_planner excluded (bespoke accounting). AgentError + _parse_json now
+  live in base.py; job_parser.py re-exports them for back-compat.

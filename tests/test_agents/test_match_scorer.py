@@ -38,7 +38,8 @@ async def test_match_scorer_happy_path():
 
 @pytest.mark.parametrize("bad", MALFORMED)
 async def test_match_scorer_malformed(bad):
-    from backend.agents.match_scorer import AgentError, MatchScorerAgent
+    from backend.agents.job_parser import AgentError
+    from backend.agents.match_scorer import MatchScorerAgent
 
     async def _call(self, s, u):
         return bad
