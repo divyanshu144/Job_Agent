@@ -8,6 +8,21 @@ Fix: what the correct approach is
 Avoid: what not to do next time
 -->
 
+## [2026-06-10] A "tailor the resume" prompt must constrain length, or it overflows the page
+
+Pattern: The resume_latex `_SYSTEM` prompt told the model to edit summary/skills/bullets to
+"emphasise relevance" but said nothing about length. The base resume.tex is one page; tailoring a
+real Stripe JD expanded the content to **two pages** (confirmed live: base 1pg → current-prompt
+tailor 2pg). LaTeX has no implicit page cap, so the model just kept adding.
+
+Fix: Add an explicit one-page length constraint to `_SYSTEM` — "no longer than the original; do
+not add bullets/sentences; rewrite or shorten in place; cut least-relevant bullets to fit."
+Validated live in-container: same JD now compiles to 1 page.
+
+Avoid: Assuming an "edit to emphasise X" instruction preserves length — emphasis tends to *add*.
+State the hard format constraint (one page) explicitly when the output has a fixed-size target.
+Note: prompt changes only take effect in Docker after a rebuild (backend/ is COPYed, not mounted).
+
 ## [2026-06-10] invalid_output is often deterministic — self-correction, not blind retry
 
 Pattern: An `invalid_output` failure (bad JSON / schema ValidationError) is usually

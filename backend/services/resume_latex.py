@@ -22,8 +22,14 @@ _SYSTEM = (
     "summary text, the skills list, and the experience bullet points so they "
     "emphasise relevance to the job. PRESERVE everything else exactly as-is: "
     "the preamble, \\documentclass, packages, custom macros, layout, and overall "
-    "document structure. Return ONLY the complete modified .tex source — no "
-    "commentary and no markdown code fences."
+    "document structure. "
+    "LENGTH: the resume MUST remain ONE page. The tailored version must be no "
+    "longer than the original — do NOT add bullets, sections, or sentences, and do "
+    "NOT lengthen the summary. To emphasise relevance, rewrite or shorten existing "
+    "text in place; if space is tight, cut or condense the least-relevant bullets "
+    "so it fits on one page. "
+    "Return ONLY the complete modified .tex source — no commentary and no markdown "
+    "code fences."
 )
 
 
