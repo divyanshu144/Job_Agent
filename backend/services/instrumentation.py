@@ -159,6 +159,7 @@ async def tracked_call(
     db: AsyncSession | None = None,
     run_id: str | None = None,
     analysis_id: str | None = None,
+    user_id: str | None = None,
     **create_kwargs: Any,
 ) -> anthropic.types.Message:
     start = time.monotonic()
@@ -189,6 +190,7 @@ async def tracked_call(
             cache_read_tokens=cache_read_tokens,
             run_id=run_id,
             analysis_id=analysis_id,
+            user_id=user_id,
         )
     return msg
 
@@ -200,6 +202,7 @@ async def log_cache_hit(
     *,
     run_id: str | None = None,
     analysis_id: str | None = None,
+    user_id: str | None = None,
 ) -> None:
     await _write_llm_call(
         db,
@@ -214,6 +217,7 @@ async def log_cache_hit(
         cache_read_tokens=0,
         run_id=run_id,
         analysis_id=analysis_id,
+        user_id=user_id,
     )
 
 
@@ -231,6 +235,7 @@ async def _write_llm_call(
     cache_read_tokens: int,
     run_id: str | None,
     analysis_id: str | None,
+    user_id: str | None = None,
 ) -> None:
     try:
         row = LLMCall(
@@ -245,6 +250,7 @@ async def _write_llm_call(
             cache_read_tokens=cache_read_tokens,
             run_id=run_id,
             analysis_id=analysis_id,
+            user_id=user_id,
             created_at=datetime.now(timezone.utc),
         )
         db.add(row)
@@ -265,6 +271,7 @@ async def log_batch_llm_call(
     output_tokens: int,
     run_id: str | None = None,
     analysis_id: str | None = None,
+    user_id: str | None = None,
 ) -> None:
     """Write an LLMCall row for a completed Anthropic Batch API result.
 
@@ -286,4 +293,5 @@ async def log_batch_llm_call(
         cache_read_tokens=0,
         run_id=run_id,
         analysis_id=analysis_id,
+        user_id=user_id,
     )

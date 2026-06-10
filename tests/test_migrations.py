@@ -33,6 +33,7 @@ _EXPECTED = {
     "feedback",
     "job_results",
     "llm_calls",
+    "user_campaign_settings",
     "alembic_version",
 }
 

@@ -17,11 +17,15 @@ that job_id; see plan unit 5.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.services.orchestrator import run_evaluate_pipeline, run_generate_pipeline
+from backend.services.usage import check_user_caps
+
+logger = logging.getLogger(__name__)
 
 # Spike placeholder. Real driver sources the JD from a discovered target job.
 _SAMPLE_JD = (
@@ -36,13 +40,32 @@ class CampaignSpikeResult:
     score: int
     generated: bool  # True once phase 2 (cover letter + tailored resume) completed
     partial: bool
+    status: str = "completed"  # "completed" | "blocked"
+    reason: str | None = None  # populated when status == "blocked"
 
 
 async def run_campaign_for_user(
     user_id: str, db: AsyncSession, jd: str = _SAMPLE_JD
 ) -> CampaignSpikeResult:
     """Run the full interactive pipeline for one job, headless. Returns the
-    persisted analysis id + score + whether documents were generated."""
+    persisted analysis id + score + whether documents were generated.
+
+    Pre-run cap gate: if the user is over their monthly cost cap (or disabled),
+    return a structured "blocked" result WITHOUT starting any LLM work — no
+    partial spend.
+    """
+    cap = await check_user_caps(db, user_id)
+    if not cap.allowed:
+        logger.warning("campaign blocked for user %s: %s", user_id, cap.reason)
+        return CampaignSpikeResult(
+            analysis_id=None,
+            score=0,
+            generated=False,
+            partial=False,
+            status="blocked",
+            reason=cap.reason,
+        )
+
     analysis_id: str | None = None
     score = 0
     partial = True

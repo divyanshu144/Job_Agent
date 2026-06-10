@@ -7,10 +7,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 import backend.models  # noqa: F401
-from backend.models import Analysis, Profile
+from backend.models import Analysis, LLMCall, Profile, UserCampaignSettings
 from backend.schemas import (
     CoverLetterOutput,
     GapAnalystOutput,
@@ -96,3 +96,54 @@ async def test_run_campaign_for_user_runs_pipeline_headless(session):
     ).scalar_one()
     assert a.user_id == "spike-user"
     assert a.evaluate_only is False
+
+
+async def test_run_campaign_for_user_blocked_over_cap_makes_zero_calls(session):
+    from datetime import datetime, timezone
+
+    user = await make_user(session, id="capped-user", email="capped@example.com")
+    # Over the $1 cap: $2 of prior spend this month.
+    session.add(UserCampaignSettings(user_id=user.id, monthly_cost_cap_usd=1.0))
+    session.add(
+        LLMCall(
+            agent_name="job_parser",
+            model="m",
+            cost_usd=2.0,
+            user_id=user.id,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    await session.commit()
+
+    with (
+        patch("backend.agents.job_parser.JobParserAgent.run", new_callable=AsyncMock) as jp_run,
+        patch("backend.agents.match_scorer.MatchScorerAgent.run", new_callable=AsyncMock) as ms_run,
+        patch(
+            "backend.agents.resume_tailorer.ResumeTailorerAgent.run", new_callable=AsyncMock
+        ) as rt_run,
+    ):
+        from backend.services.campaign_user import run_campaign_for_user
+
+        result = await run_campaign_for_user("capped-user", session)
+
+    # Blocked before any LLM work — zero spend.
+    assert result.status == "blocked"
+    assert result.analysis_id is None
+    assert "cap" in (result.reason or "")
+    jp_run.assert_not_called()
+    ms_run.assert_not_called()
+    rt_run.assert_not_called()
+
+    # No new Analysis, and no new LLMCall beyond the seeded one.
+    analyses = (
+        await session.execute(
+            select(func.count()).select_from(Analysis).where(Analysis.user_id == "capped-user")
+        )
+    ).scalar_one()
+    assert analyses == 0
+    llm = (
+        await session.execute(
+            select(func.count()).select_from(LLMCall).where(LLMCall.user_id == "capped-user")
+        )
+    ).scalar_one()
+    assert llm == 1  # only the seeded prior-spend row; no new calls

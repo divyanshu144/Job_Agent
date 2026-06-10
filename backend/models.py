@@ -89,7 +89,29 @@ class LLMCall(Base):
     run_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("discovery_runs.id"), nullable=True, default=None
     )
+    # Per-user cost attribution (for campaign caps). Nullable: legacy + admin/
+    # discovery calls stay null; campaign/interactive calls carry the user.
+    user_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("users.id"), nullable=True, default=None
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class UserCampaignSettings(Base):
+    """Per-user campaign caps. One row per user (auto-created with defaults on
+    first cap check). monthly_cost_cap_usd gates LLM spend; daily_run_cap gates
+    runs/day (enforced once CampaignRun exists — plan unit 5)."""
+
+    __tablename__ = "user_campaign_settings"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), unique=True, index=True)
+    daily_run_cap: Mapped[int] = mapped_column(Integer, default=5)
+    monthly_cost_cap_usd: Mapped[float] = mapped_column(Float, default=10.0)
+    campaign_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
 
 
 class PipelineEvent(Base):

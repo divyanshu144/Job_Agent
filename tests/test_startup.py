@@ -76,4 +76,4 @@ def test_run_upgrade_stamps_complete_legacy_schema() -> None:
 
     missing = _REQUIRED - tables
     assert not missing, f"legacy boot stamp path missing tables: {missing}"
-    assert revision == "0003_pipeline_retry"
+    assert revision == "0004_user_caps"

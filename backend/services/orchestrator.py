@@ -297,7 +297,7 @@ async def run_evaluate_pipeline(
     errors: dict[str, tuple[str, str]] = {}
     try:
         for agent_name, agent, profile_str in phase1:
-            agent.with_tracking(db, analysis_id=analysis.id)  # type: ignore[attr-defined]
+            agent.with_tracking(db, analysis_id=analysis.id, user_id=user_id)  # type: ignore[attr-defined]
             yield SSEEvent("agent_start", {"agent": agent_name})
             try:
                 async with span(db, kind="span", name=agent_name, analysis_id=analysis.id):
@@ -398,7 +398,7 @@ async def run_steps(
 
     for name in sequential:
         agent = _AGENT_CLASSES[name]()
-        agent.with_tracking(db, analysis_id=analysis.id)
+        agent.with_tracking(db, analysis_id=analysis.id, user_id=analysis.user_id)
         yield SSEEvent("agent_start", {"agent": name})
         try:
             async with span(db, kind="span", name=name, analysis_id=analysis.id):
@@ -418,6 +418,7 @@ async def run_steps(
         for name in parallel:
             yield SSEEvent("agent_start", {"agent": name})
         aid = analysis.id
+        uid = analysis.user_id
         jd = analysis.jd_text
         snapshot = prior
 
@@ -426,7 +427,7 @@ async def run_steps(
             # concurrent coroutines corrupts SQLAlchemy's unit-of-work state.
             async with SessionLocal() as own_db:
                 agent = _AGENT_CLASSES[name]()
-                agent.with_tracking(own_db, analysis_id=aid)
+                agent.with_tracking(own_db, analysis_id=aid, user_id=uid)
                 async with span(own_db, kind="span", name=name, analysis_id=aid):
                     return await agent.run(full, jd, snapshot)
 

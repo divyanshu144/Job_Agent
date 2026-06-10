@@ -47,6 +47,7 @@ class BaseAgent:
         self._db: AsyncSession | None = None
         self._run_id: str | None = None
         self._analysis_id: str | None = None
+        self._user_id: str | None = None
 
     def with_tracking(
         self,
@@ -54,10 +55,12 @@ class BaseAgent:
         *,
         run_id: str | None = None,
         analysis_id: str | None = None,
+        user_id: str | None = None,
     ) -> Self:
         self._db = db
         self._run_id = run_id
         self._analysis_id = analysis_id
+        self._user_id = user_id
         return self
 
     def _load_prompt(self, name: str) -> str:
@@ -79,6 +82,7 @@ class BaseAgent:
             db=self._db,
             run_id=self._run_id,
             analysis_id=self._analysis_id,
+            user_id=self._user_id,
             max_tokens=MAX_TOKENS,
             # No prompt caching: each pipeline call's system prompt is unique per request
             # (profile + JD + prior outputs injected), so cached blocks are never read back —
