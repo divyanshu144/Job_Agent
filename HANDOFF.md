@@ -25,17 +25,20 @@ earlier as `94c28fb`, unrelated.)
 
 ## Next Action
 
-Await direction. Shipped (all pre-queue): unit 4 (`9a3cff1`, headless driver),
-unit 3 (`0366170`, cost attribution + caps), unit 2 (`030dd63`, per-user target
-lists + `/api/targets` CRUD + parametrized `fetch_target_jobs`). Next: unit 1
-(Celery+Redis skeleton + worker/beat services) and unit 5 (`run_user_campaign`
-task — wires targets→discovery→per-job evaluate/generate, and is where
-`daily_run_cap` enforcement lands via a `CampaignRun` record). Frontend (unit 8)
-can follow.
+Await direction. Shipped: unit 4 (`9a3cff1`, headless driver), unit 3 (`0366170`,
+cost attribution + caps), unit 2 (`030dd63`, per-user targets), unit 1 (`b10228f`,
+Redis+Celery infra). Next: **unit 5** — `run_user_campaign` Celery task wiring
+targets → discovery (`fetch_target_jobs(user's rows)`) → per-job evaluate/generate
+(via `run_campaign_for_user`, wrapped in `run_async` + `task_session`), a
+`CampaignRun` record (where `daily_run_cap` enforcement lands), and on-demand
+"run now" route. Then unit 6 (beat → nightly dispatcher) and unit 8 (frontend).
+
+The async-in-Celery pattern is settled (see backend/tasks.py): `run_async` +
+`task_session()` (fresh engine per task). Unit 5 builds directly on it.
 
 ## Why It Stopped
 
-Unit 2 complete; awaiting next-unit direction. Still pre-queue (no Redis/Celery).
+Unit 1 complete; awaiting next-unit direction.
 
 ## In-Flight
 
@@ -50,4 +53,4 @@ NOT yet enforced — deferred to unit 5 (needs a CampaignRun record to count run
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 427 passed, 1 deselected · 81.24% |
+| `make check` | ✓ 432 passed, 1 deselected · 81.44% |
