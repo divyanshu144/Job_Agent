@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models import CampaignRun, UserTargetCompany
+from backend.models import CampaignRun, UserCampaignSettings, UserTargetCompany
 from backend.services.campaign_user import run_campaign_for_user
 from backend.services.targets_client import fetch_target_jobs
 from backend.services.usage import check_user_caps, get_or_create_settings
@@ -83,6 +83,67 @@ async def _finish(
     run.error = error
     await db.commit()
     return run
+
+
+async def enqueue_campaign_run(db: AsyncSession, user_id: str) -> str | None:
+    """Create a CampaignRun(running) and enqueue the worker task for it. Returns
+    the new run id, or None if the user already has a run in progress (the
+    race-free concurrency guard, shared by the route and the nightly dispatcher)."""
+    running = (
+        await db.execute(
+            select(CampaignRun).where(
+                CampaignRun.user_id == user_id,
+                CampaignRun.status == "running",
+            )
+        )
+    ).scalar_one_or_none()
+    if running is not None:
+        return None
+
+    run = CampaignRun(user_id=user_id, status="running")
+    db.add(run)
+    await db.commit()
+    await db.refresh(run)
+
+    from backend.tasks import run_user_campaign
+
+    run_user_campaign.delay(user_id, run.id)
+    return run.id
+
+
+async def _active_campaign_user_ids(db: AsyncSession) -> list[str]:
+    """Users eligible for the nightly campaign: at least one ACTIVE target, and
+    not explicitly disabled (no settings row defaults to enabled). The per-user
+    task still re-checks caps, so this is a cheap pre-filter, not the gate."""
+    disabled = select(UserCampaignSettings.user_id).where(
+        UserCampaignSettings.campaign_enabled.is_(False)
+    )
+    rows = (
+        (
+            await db.execute(
+                select(UserTargetCompany.user_id)
+                .where(
+                    UserTargetCompany.active.is_(True),
+                    UserTargetCompany.user_id.notin_(disabled),
+                )
+                .distinct()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return list(rows)
+
+
+async def dispatch_campaigns(db: AsyncSession) -> dict[str, int]:
+    """Enqueue one campaign run per eligible user. Skips users already running."""
+    user_ids = await _active_campaign_user_ids(db)
+    enqueued = 0
+    for user_id in user_ids:
+        if await enqueue_campaign_run(db, user_id) is not None:
+            enqueued += 1
+    logger.info("nightly dispatch: %d eligible user(s), %d enqueued", len(user_ids), enqueued)
+    return {"users": len(user_ids), "enqueued": enqueued}
 
 
 async def execute_campaign_run(user_id: str, db: AsyncSession, run_id: str) -> CampaignRun:

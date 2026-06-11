@@ -30,6 +30,15 @@ def test_health_tasks_are_registered():
     assert "health.db_probe" in celery_app.tasks
 
 
+def test_nightly_dispatch_is_registered_and_scheduled():
+    import backend.tasks  # noqa: F401
+    from backend.celery_app import celery_app
+
+    assert "campaign.dispatch_nightly" in celery_app.tasks
+    schedule = celery_app.conf.beat_schedule
+    assert any(entry["task"] == "campaign.dispatch_nightly" for entry in schedule.values())
+
+
 def test_celery_config_is_safe_for_long_tasks():
     from backend.celery_app import celery_app
 

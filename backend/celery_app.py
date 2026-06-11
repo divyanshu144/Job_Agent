@@ -11,6 +11,7 @@ backend.tasks. The beat schedule has a single no-op heartbeat to prove beat runs
 from __future__ import annotations
 
 from celery import Celery
+from celery.schedules import crontab
 
 from backend.config import settings
 
@@ -36,7 +37,10 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     beat_schedule={
-        # No-op heartbeat — proves beat runs. NOT wired to campaign work (unit 6).
-        "noop-heartbeat": {"task": "health.ping", "schedule": 3600.0},
+        # Nightly at 02:00 UTC: enqueue one campaign run per eligible user.
+        "nightly-campaigns": {
+            "task": "campaign.dispatch_nightly",
+            "schedule": crontab(hour=2, minute=0),
+        },
     },
 )

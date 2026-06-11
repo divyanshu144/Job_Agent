@@ -89,3 +89,17 @@ async def _run_user_campaign(user_id: str, run_id: str) -> str:
         # The orchestrator's parallel Phase-2 uses the global app engine; dispose
         # it so pooled asyncpg connections don't leak across asyncio.run() loops.
         await app_engine.dispose()
+
+
+@celery_app.task(name="campaign.dispatch_nightly")  # type: ignore[misc]  # celery is untyped
+def dispatch_nightly_campaigns() -> dict[str, int]:
+    """Beat-scheduled: enqueue one campaign run per eligible user. Only queues
+    work (no orchestrator/LLM here), so no app-engine disposal needed."""
+    return run_async(_dispatch_nightly_campaigns())
+
+
+async def _dispatch_nightly_campaigns() -> dict[str, int]:
+    from backend.services.campaign_run import dispatch_campaigns
+
+    async with task_session() as db:
+        return await dispatch_campaigns(db)

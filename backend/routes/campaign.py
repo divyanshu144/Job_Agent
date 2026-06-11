@@ -110,29 +110,13 @@ async def run_now(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    """Enqueue this user's campaign. 409 if one is already running. The
-    CampaignRun row is created here (status=running) so the guard is race-free
-    and we can return its id immediately."""
-    running = (
-        await db.execute(
-            select(CampaignRun).where(
-                CampaignRun.user_id == current_user.id,
-                CampaignRun.status == "running",
-            )
-        )
-    ).scalar_one_or_none()
-    if running is not None:
+    """Enqueue this user's campaign. 409 if one is already running."""
+    from backend.services.campaign_run import enqueue_campaign_run
+
+    run_id = await enqueue_campaign_run(db, current_user.id)
+    if run_id is None:
         raise HTTPException(status_code=409, detail="A campaign run is already in progress")
-
-    run = CampaignRun(user_id=current_user.id, status="running")
-    db.add(run)
-    await db.commit()
-    await db.refresh(run)
-
-    from backend.tasks import run_user_campaign
-
-    run_user_campaign.delay(current_user.id, run.id)
-    return {"run_id": run.id, "status": "queued"}
+    return {"run_id": run_id, "status": "queued"}
 
 
 @router.get("/campaign/runs", response_model=list[CampaignRunResponse])
