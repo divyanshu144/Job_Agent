@@ -25,15 +25,17 @@ earlier as `94c28fb`, unrelated.)
 
 ## Next Action
 
-Await direction. Shipped so far: unit 4 (`9a3cff1`, headless driver) + unit 3
-(`0366170`, cost attribution + caps). Queue work still NOT started. Next logical
-units: unit 2 (`UserTargetCompany` + `/api/targets` CRUD + parametrize
-`fetch_target_jobs`), then unit 1 (Celery+Redis skeleton) and unit 5
-(`run_user_campaign` task — also where `daily_run_cap` enforcement lands).
+Await direction. Shipped (all pre-queue): unit 4 (`9a3cff1`, headless driver),
+unit 3 (`0366170`, cost attribution + caps), unit 2 (`030dd63`, per-user target
+lists + `/api/targets` CRUD + parametrized `fetch_target_jobs`). Next: unit 1
+(Celery+Redis skeleton + worker/beat services) and unit 5 (`run_user_campaign`
+task — wires targets→discovery→per-job evaluate/generate, and is where
+`daily_run_cap` enforcement lands via a `CampaignRun` record). Frontend (unit 8)
+can follow.
 
 ## Why It Stopped
 
-Unit 3 complete; awaiting next-unit direction. Still pre-queue.
+Unit 2 complete; awaiting next-unit direction. Still pre-queue (no Redis/Celery).
 
 ## In-Flight
 
@@ -48,4 +50,4 @@ NOT yet enforced — deferred to unit 5 (needs a CampaignRun record to count run
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 418 passed, 1 deselected · 81.39% |
+| `make check` | ✓ 427 passed, 1 deselected · 81.24% |
