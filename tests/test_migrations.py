@@ -35,6 +35,7 @@ _EXPECTED = {
     "llm_calls",
     "user_campaign_settings",
     "user_target_companies",
+    "campaign_runs",
     "alembic_version",
 }
 

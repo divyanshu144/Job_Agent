@@ -11,8 +11,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
-from backend.models import CampaignJob, User
-from backend.services.auth_service import require_admin
+from backend.models import CampaignJob, CampaignRun, User
+from backend.schemas import CampaignRunResponse
+from backend.services.auth_service import get_current_user, require_admin
 from backend.services.campaign_orchestrator import run_campaign
 
 logger = logging.getLogger(__name__)
@@ -97,3 +98,58 @@ async def campaign_status(
             {"job_id": j.job_id, "error": j.error, "run_at": j.run_at} for j in recent_failed
         ],
     }
+
+
+# ── Regular-tier (in-app) campaign: on-demand run + history. NOT admin. ──────────
+# Materials only (analysis/score/gaps/cover letter/tailored resume) — no contact
+# discovery, cold email, or Gmail. Those stay in the admin campaign above.
+
+
+@router.post("/campaign/run-now", status_code=202)
+async def run_now(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Enqueue this user's campaign. 409 if one is already running. The
+    CampaignRun row is created here (status=running) so the guard is race-free
+    and we can return its id immediately."""
+    running = (
+        await db.execute(
+            select(CampaignRun).where(
+                CampaignRun.user_id == current_user.id,
+                CampaignRun.status == "running",
+            )
+        )
+    ).scalar_one_or_none()
+    if running is not None:
+        raise HTTPException(status_code=409, detail="A campaign run is already in progress")
+
+    run = CampaignRun(user_id=current_user.id, status="running")
+    db.add(run)
+    await db.commit()
+    await db.refresh(run)
+
+    from backend.tasks import run_user_campaign
+
+    run_user_campaign.delay(current_user.id, run.id)
+    return {"run_id": run.id, "status": "queued"}
+
+
+@router.get("/campaign/runs", response_model=list[CampaignRunResponse])
+async def my_campaign_runs(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[CampaignRunResponse]:
+    rows = (
+        (
+            await db.execute(
+                select(CampaignRun)
+                .where(CampaignRun.user_id == current_user.id)
+                .order_by(CampaignRun.started_at.desc())
+                .limit(50)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [CampaignRunResponse.model_validate(r) for r in rows]

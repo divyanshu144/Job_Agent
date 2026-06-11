@@ -273,6 +273,18 @@ class TargetCompanyResponse(BaseModel):
     created_at: datetime
 
 
+class CampaignRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    status: str
+    started_at: datetime
+    finished_at: datetime | None = None
+    jobs_considered: int
+    jobs_drafted: int
+    jobs_failed: int
+    error: str | None = None
+
+
 class FunnelMetrics(BaseModel):
     jobs_found: int
     passed_stage1: int

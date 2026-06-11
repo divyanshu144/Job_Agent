@@ -131,6 +131,26 @@ class UserTargetCompany(Base):
     __table_args__ = (UniqueConstraint("user_id", "ats", "slug", name="uq_user_target"),)
 
 
+class CampaignRun(Base):
+    """Per-run ledger for the regular-tier (in-app) campaign + the daily_run_cap
+    enforcement point. status: running | completed | failed | blocked (cap/
+    disabled — zero LLM spend). jobs_drafted = materials generated (analysis +
+    score + gaps + cover letter + tailored resume). error is user-safe."""
+
+    __tablename__ = "campaign_runs"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    status: Mapped[str] = mapped_column(String, default="running")
+    jobs_considered: Mapped[int] = mapped_column(Integer, default=0)
+    jobs_drafted: Mapped[int] = mapped_column(Integer, default=0)
+    jobs_failed: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+
+
 class PipelineEvent(Base):
     """Structured observability event (span | failure | tool | retry) for one pipeline run.
 

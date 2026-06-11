@@ -65,3 +65,27 @@ def db_probe() -> int:
 async def _db_probe() -> int:
     async with task_session() as db:
         return int((await db.execute(text("SELECT 1"))).scalar_one())
+
+
+@celery_app.task(name="campaign.run_user_campaign")  # type: ignore[misc]  # celery is untyped
+def run_user_campaign(user_id: str, run_id: str) -> str:
+    """Execute a regular-tier campaign run for one user. The CampaignRun row
+    (run_id) is pre-created by the route. Returns the final run status."""
+    return run_async(_run_user_campaign(user_id, run_id))
+
+
+async def _run_user_campaign(user_id: str, run_id: str) -> str:
+    # Lazy imports: keep the orchestrator + backend.database OUT of the module
+    # graph imported by the worker master at task-registration time, so the app
+    # engine is created per-child, not shared across the fork.
+    from backend.database import engine as app_engine
+    from backend.services.campaign_run import execute_campaign_run
+
+    try:
+        async with task_session() as db:
+            run = await execute_campaign_run(user_id, db, run_id)
+            return run.status
+    finally:
+        # The orchestrator's parallel Phase-2 uses the global app engine; dispose
+        # it so pooled asyncpg connections don't leak across asyncio.run() loops.
+        await app_engine.dispose()
