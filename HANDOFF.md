@@ -25,19 +25,18 @@ earlier as `94c28fb`, unrelated.)
 
 ## Next Action
 
-Await direction. Shipped: unit 4 (`9a3cff1`), unit 3 (`0366170`), unit 2
-(`030dd63`), unit 1 (`b10228f`), unit 5 (`5d17a20`, run_user_campaign task +
-ledger + `/api/campaign/run-now` + `/runs`; cost cap AND daily_run_cap enforced,
-zero-spend on block). Remaining: **unit 6** — wire beat to a nightly dispatcher
-that enqueues `run_user_campaign` per active user (create a CampaignRun per user,
-respecting the same guards); replace the no-op heartbeat. Then **unit 8** —
-frontend (targets management page, campaign dashboard reading `/api/campaign/runs`
-+ `/history`, usage indicator).
+The multi-tenant campaign **backend is complete**. Shipped: unit 4 (`9a3cff1`),
+unit 3 (`0366170`), unit 2 (`030dd63`), unit 1 (`b10228f`), unit 5 (`5d17a20`),
+unit 6 (`c038b89`, nightly dispatcher via beat crontab @ 02:00 UTC →
+`dispatch_campaigns` → one run per eligible user). Only **unit 8 (frontend)**
+remains: targets management page (`/api/targets` CRUD), campaign dashboard
+(`/api/campaign/run-now` + `/api/campaign/runs` + existing `/history` /
+`/analysis/{id}` / resume `.docx`), and a usage/cap indicator.
 
 ## Why It Stopped
 
-Unit 5 complete; on-demand campaign works end to end. Nightly scheduler is the
-only backend piece left.
+Unit 6 complete — backend done end to end (on-demand + nightly). Frontend is the
+last unit.
 
 ## In-Flight
 
@@ -52,4 +51,4 @@ NOT yet enforced — deferred to unit 5 (needs a CampaignRun record to count run
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 441 passed, 1 deselected · 81.43% |
+| `make check` | ✓ 446 passed, 1 deselected · 81.61% |
