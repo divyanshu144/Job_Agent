@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     adzuna_app_id: str = ""  # adzuna.co.uk application ID
     adzuna_app_key: str = ""  # adzuna.co.uk application key
     enable_workatastartup_source: bool = False
+    # Celery / Redis (campaign queue). In Docker: redis://redis:6379/0.
+    redis_url: str = "redis://localhost:6379/0"
+    celery_broker_url: str = ""  # falls back to redis_url when empty
+    celery_result_backend: str = ""  # falls back to redis_url when empty
 
 
 settings = Settings()

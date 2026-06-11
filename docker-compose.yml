@@ -15,6 +15,16 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   app:
     build: .
     ports:
@@ -24,14 +34,48 @@ services:
       PROFILE_YAML_PATH: /app/data/candidate_profile.yaml
       CV_PATH: /app/data/cv.pdf
       DATABASE_URL: postgresql+asyncpg://jobfit:jobfit@db:5432/jobfit
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - ./data:/app/data
       # Real assets (gitignored resume.tex, target_companies.json) at runtime —
       # mounted, not COPYed, so PII never enters an image layer.
       - ./assets:/app/assets
+
+  # Campaign queue worker — same image as app, shares its env + assets mount.
+  worker:
+    build: .
+    command: celery -A backend.celery_app:celery_app worker --loglevel=info
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://jobfit:jobfit@db:5432/jobfit
+      REDIS_URL: redis://redis:6379/0
+      PROFILE_YAML_PATH: /app/data/candidate_profile.yaml
+      CV_PATH: /app/data/cv.pdf
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./assets:/app/assets
+
+  # Beat scheduler — runs the registered no-op heartbeat only (no campaign yet).
+  beat:
+    build: .
+    command: celery -A backend.celery_app:celery_app beat --loglevel=info
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://jobfit:jobfit@db:5432/jobfit
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
 
 volumes:
   jobfit_pgdata:
