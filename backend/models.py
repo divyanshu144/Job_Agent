@@ -12,6 +12,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -112,6 +113,22 @@ class UserCampaignSettings(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
+
+
+class UserTargetCompany(Base):
+    """A company on a regular user's per-user target list. Replaces the shared
+    assets/target_companies.json for the multi-tenant campaign. (ats, slug) feed
+    fetch_ats_jobs; unique per (user, ats, slug)."""
+
+    __tablename__ = "user_target_companies"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String)
+    ats: Mapped[str] = mapped_column(String)  # greenhouse | lever | ashby
+    slug: Mapped[str] = mapped_column(String)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    __table_args__ = (UniqueConstraint("user_id", "ats", "slug", name="uq_user_target"),)
 
 
 class PipelineEvent(Base):

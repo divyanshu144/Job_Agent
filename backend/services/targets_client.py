@@ -26,11 +26,16 @@ def _load_targets() -> list[dict[str, Any]]:
     return [entry for entry in data if isinstance(entry, dict)]
 
 
-async def fetch_target_jobs() -> list[RawJob]:
-    """Query the ATS board for each manually-listed target company. Malformed
-    entries and per-company fetch errors are skipped, not fatal."""
+async def fetch_target_jobs(targets: list[dict[str, Any]] | None = None) -> list[RawJob]:
+    """Query the ATS board for each target company. Malformed entries and
+    per-company fetch errors are skipped, not fatal.
+
+    `targets` lets a caller pass an explicit list (e.g. a user's
+    UserTargetCompany rows as {name, ats, slug} dicts). When None, falls back to
+    the shared assets/target_companies.json (admin/default discovery)."""
+    entries = _load_targets() if targets is None else targets
     jobs: list[RawJob] = []
-    for entry in _load_targets():
+    for entry in entries:
         ats = entry.get("ats")
         slug = entry.get("slug")
         if not ats or not slug:

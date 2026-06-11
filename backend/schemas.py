@@ -253,6 +253,26 @@ class AnalysisDetail(BaseModel):
     steps: list[Step] = Field(default_factory=list)
 
 
+class TargetCompanyCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    ats: Literal["greenhouse", "lever", "ashby"]
+    slug: str = Field(..., min_length=1)
+
+
+class TargetCompanyUpdate(BaseModel):
+    active: bool
+
+
+class TargetCompanyResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    name: str
+    ats: str
+    slug: str
+    active: bool
+    created_at: datetime
+
+
 class FunnelMetrics(BaseModel):
     jobs_found: int
     passed_stage1: int
