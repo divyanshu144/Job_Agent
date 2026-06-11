@@ -25,20 +25,19 @@ earlier as `94c28fb`, unrelated.)
 
 ## Next Action
 
-Await direction. Shipped: unit 4 (`9a3cff1`, headless driver), unit 3 (`0366170`,
-cost attribution + caps), unit 2 (`030dd63`, per-user targets), unit 1 (`b10228f`,
-Redis+Celery infra). Next: **unit 5** — `run_user_campaign` Celery task wiring
-targets → discovery (`fetch_target_jobs(user's rows)`) → per-job evaluate/generate
-(via `run_campaign_for_user`, wrapped in `run_async` + `task_session`), a
-`CampaignRun` record (where `daily_run_cap` enforcement lands), and on-demand
-"run now" route. Then unit 6 (beat → nightly dispatcher) and unit 8 (frontend).
-
-The async-in-Celery pattern is settled (see backend/tasks.py): `run_async` +
-`task_session()` (fresh engine per task). Unit 5 builds directly on it.
+Await direction. Shipped: unit 4 (`9a3cff1`), unit 3 (`0366170`), unit 2
+(`030dd63`), unit 1 (`b10228f`), unit 5 (`5d17a20`, run_user_campaign task +
+ledger + `/api/campaign/run-now` + `/runs`; cost cap AND daily_run_cap enforced,
+zero-spend on block). Remaining: **unit 6** — wire beat to a nightly dispatcher
+that enqueues `run_user_campaign` per active user (create a CampaignRun per user,
+respecting the same guards); replace the no-op heartbeat. Then **unit 8** —
+frontend (targets management page, campaign dashboard reading `/api/campaign/runs`
++ `/history`, usage indicator).
 
 ## Why It Stopped
 
-Unit 1 complete; awaiting next-unit direction.
+Unit 5 complete; on-demand campaign works end to end. Nightly scheduler is the
+only backend piece left.
 
 ## In-Flight
 
@@ -53,4 +52,4 @@ NOT yet enforced — deferred to unit 5 (needs a CampaignRun record to count run
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 432 passed, 1 deselected · 81.44% |
+| `make check` | ✓ 441 passed, 1 deselected · 81.43% |
