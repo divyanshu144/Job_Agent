@@ -25,15 +25,15 @@ earlier as `94c28fb`, unrelated.)
 
 ## Next Action
 
-Await direction on the next unit. Spike done; queue work intentionally NOT
-started. Logical next units: unit 2 (`UserTargetCompany` + `/api/targets` CRUD +
-parametrize `fetch_target_jobs`), unit 3 (`LLMCall.user_id` + `UserCampaignSettings`
-caps), then unit 1 (Celery+Redis skeleton) and unit 5 (`run_user_campaign` task).
+Await direction. Shipped so far: unit 4 (`9a3cff1`, headless driver) + unit 3
+(`0366170`, cost attribution + caps). Queue work still NOT started. Next logical
+units: unit 2 (`UserTargetCompany` + `/api/targets` CRUD + parametrize
+`fetch_target_jobs`), then unit 1 (Celery+Redis skeleton) and unit 5
+(`run_user_campaign` task — also where `daily_run_cap` enforcement lands).
 
 ## Why It Stopped
 
-Plan unit 4 complete; reporting the spike finding before any Redis/Celery work,
-as instructed.
+Unit 3 complete; awaiting next-unit direction. Still pre-queue.
 
 ## In-Flight
 
@@ -41,10 +41,11 @@ No uncommitted changes.
 
 ## Open Questions
 
-None (cap model + v1 scope decided).
+None (cap model + v1 scope decided). Note: `daily_run_cap` column exists but is
+NOT yet enforced — deferred to unit 5 (needs a CampaignRun record to count runs).
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 412 passed, 1 deselected · 81.08% |
+| `make check` | ✓ 418 passed, 1 deselected · 81.39% |
