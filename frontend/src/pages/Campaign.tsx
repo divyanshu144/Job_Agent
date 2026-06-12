@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { api, ApiError } from "../api/client";
 import type { CampaignRun, TargetCompany, AnalysisSummary } from "../types";
 
 const STATUS_BADGE: Record<string, string> = {
@@ -108,6 +108,9 @@ export function Campaign() {
           loadAll();
         }
       } catch (err) {
+        // 429 (own rate limit, e.g. several tabs polling) is transient — skip
+        // this tick and keep polling instead of abandoning the run.
+        if (err instanceof ApiError && err.status === 429) return;
         clearInterval(pollRef.current!);
         setActiveRunId(null);
         setError(err instanceof Error ? err.message : "Polling failed");
@@ -130,7 +133,7 @@ export function Campaign() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to start run";
       // 409 is expected when a run is in flight — informational, not an error.
-      if (msg.toLowerCase().includes("already in progress")) {
+      if (err instanceof ApiError && err.status === 409) {
         setNotice(msg);
         loadAll();
       } else {

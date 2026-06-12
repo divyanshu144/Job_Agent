@@ -100,3 +100,19 @@ Branch deleted after a prior integration. Nothing to merge.
 
 Known limitation: in-memory storage = per-process counters (multi-worker /
 Celery not shared). Redis storage_uri is the V2 upgrade if needed.
+
+## Review fixes (2026-06-12) — 10 findings from whole-code review
+- [ ] 1+2. orchestrator: _find_cached helper — user-scoped (user_id or NULL),
+      newest-first limit 1 (kills cross-tenant hit + MultipleResultsFound)
+- [ ] 3. models+0007: partial unique index one running CampaignRun per user;
+      enqueue catches IntegrityError → None
+- [ ] 4. enqueue: stale-running self-heal (>30 min → failed); .delay() failure
+      marks run failed + raises; route 503; dispatcher isolates per-user failures
+- [ ] 5. main.py: CRITICAL log at startup when jwt_secret is the published default
+- [ ] 6+8. client.ts ApiError(status); Campaign.tsx branches on 409 status,
+      poll tolerates 429 (skip tick, keep polling)
+- [ ] 7. models+0007: index llm_calls(user_id, created_at)
+- [ ] 9. usage.get_or_create_settings: IntegrityError → rollback + re-select
+- [ ] 10. execute_campaign_run: cap-stop reason recorded on completed run
+- [ ] tests: cache scoping/dup, enqueue stale+queue-failure, run reason,
+      jwt guard, startup head 0007; make check + npm build green

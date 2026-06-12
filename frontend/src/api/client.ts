@@ -2,6 +2,17 @@ import type { ProfileResponse, ProfileReviewData, ProfileReviewResponse, Analysi
 
 const BASE = "/api";
 
+// Error with the HTTP status attached, so callers can branch on 409/429
+// instead of string-matching backend error copy.
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 function _detailToMessage(detail: unknown, fallback: string): string {
   if (typeof detail === "string" && detail.trim()) return detail;
   if (Array.isArray(detail)) {
@@ -23,11 +34,12 @@ function _detailToMessage(detail: unknown, fallback: string): string {
 async function _errorMessage(r: Response, method: string, path: string): Promise<never> {
   const detail = await r.json().then((j) => j?.detail ?? null).catch(() => null);
   if (r.status === 404 && path === "/profile/review") {
-    throw new Error(
+    throw new ApiError(
       "Profile review API is not available on the running backend. Restart the backend so /api/profile/review is registered.",
+      r.status,
     );
   }
-  throw new Error(_detailToMessage(detail, `${method} ${path} failed: ${r.status}`));
+  throw new ApiError(_detailToMessage(detail, `${method} ${path} failed: ${r.status}`), r.status);
 }
 
 async function get<T>(path: string): Promise<T> {
