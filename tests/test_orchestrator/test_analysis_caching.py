@@ -234,3 +234,60 @@ async def test_partial_cache_not_reused(session):
 
     names = [e.name for e in events]
     assert "agent_start" in names  # ran fresh — partial not reused
+
+
+# ── find_cached_analysis: owner scoping + duplicate tolerance (review fixes) ────
+
+import pytest  # noqa: E402
+
+from backend.services.orchestrator import find_cached_analysis  # noqa: E402
+
+
+@pytest.mark.relaxed_fks
+async def test_cache_lookup_is_owner_scoped(session):
+    """User B (or the NULL/discovery scope) must never hit user A's cached analysis,
+    even with an identical jd_hash (users without a CV share global profile content)."""
+    a = Analysis(
+        jd_text="x",
+        profile_id="p",
+        partial=False,
+        evaluate_only=True,
+        jd_hash="HASH-A",
+        user_id="user-a",
+    )
+    session.add(a)
+    await session.commit()
+
+    assert await find_cached_analysis(session, "HASH-A", "user-b") is None
+    assert await find_cached_analysis(session, "HASH-A", None) is None
+    hit = await find_cached_analysis(session, "HASH-A", "user-a")
+    assert hit is not None and hit.id == a.id
+
+
+@pytest.mark.relaxed_fks
+async def test_cache_lookup_tolerates_duplicate_hashes(session):
+    """Two complete analyses with the same jd_hash (partial→retry coexisting with a
+    fresh run) must return the newest, not raise MultipleResultsFound."""
+    old = Analysis(
+        jd_text="x",
+        profile_id="p",
+        partial=False,
+        evaluate_only=True,
+        jd_hash="HASH-DUP",
+        user_id=None,
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    new = Analysis(
+        jd_text="x",
+        profile_id="p",
+        partial=False,
+        evaluate_only=True,
+        jd_hash="HASH-DUP",
+        user_id=None,
+        created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+    session.add_all([old, new])
+    await session.commit()
+
+    hit = await find_cached_analysis(session, "HASH-DUP", None)  # must not raise
+    assert hit is not None and hit.id == new.id

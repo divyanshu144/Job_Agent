@@ -110,10 +110,16 @@ async def run_now(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    """Enqueue this user's campaign. 409 if one is already running."""
+    """Enqueue this user's campaign. 409 if one is already running; 503 if the
+    queue is down (the run is already marked failed by the service)."""
     from backend.services.campaign_run import enqueue_campaign_run
 
-    run_id = await enqueue_campaign_run(db, current_user.id)
+    try:
+        run_id = await enqueue_campaign_run(db, current_user.id)
+    except Exception:
+        raise HTTPException(
+            status_code=503, detail="The campaign queue is unavailable. Please try again later."
+        )
     if run_id is None:
         raise HTTPException(status_code=409, detail="A campaign run is already in progress")
     return {"run_id": run_id, "status": "queued"}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import AsyncGenerator
@@ -31,9 +32,23 @@ from backend.services.instrumentation import configure_logging
 from backend.services.rate_limit import limiter
 
 
+def _check_jwt_secret() -> None:
+    """Signing tokens with the repo's published default secret means anyone can
+    forge a session for any user id. The log IS the alert (we don't refuse to
+    boot — local dev legitimately runs on the default)."""
+    from backend.config import Settings
+
+    if settings.jwt_secret == Settings.model_fields["jwt_secret"].default:
+        logging.getLogger(__name__).critical(
+            "jwt_secret is the published default — session tokens are forgeable. "
+            "Set JWT_SECRET before exposing this deployment."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_logging()
+    _check_jwt_secret()
     await init_db()
     # Reset any runs left in "running" state due to server crash
     async with SessionLocal() as db:

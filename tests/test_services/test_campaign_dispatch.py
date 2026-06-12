@@ -81,3 +81,51 @@ async def test_enqueue_returns_none_when_already_running(session):
 
     assert run_id is None
     delay.assert_not_called()
+
+
+# ── Review fixes: stale-run self-heal + queue-failure handling ──────────────────
+
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+import pytest  # noqa: E402
+
+
+async def test_enqueue_self_heals_stale_running_row(session):
+    """A 'running' row older than the stale window (dead worker / lost message)
+    must be failed and a new run enqueued — not 409-block the user forever."""
+    u = await make_user(session, email="stale@example.com")
+    stale = CampaignRun(
+        user_id=u.id,
+        status="running",
+        started_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+    session.add(stale)
+    await session.commit()
+
+    with patch("backend.tasks.run_user_campaign.delay") as delay:
+        run_id = await enqueue_campaign_run(session, u.id)
+
+    assert run_id is not None
+    delay.assert_called_once_with(u.id, run_id)
+    await session.refresh(stale)
+    assert stale.status == "failed"
+    assert "interrupted" in (stale.error or "")
+
+
+async def test_enqueue_queue_failure_marks_run_failed_and_raises(session):
+    """If .delay() raises (broker down), the run must not stay 'running'."""
+    u = await make_user(session, email="brokerdown@example.com")
+    await session.commit()
+
+    with patch("backend.tasks.run_user_campaign.delay", side_effect=RuntimeError("broker down")):
+        with pytest.raises(RuntimeError):
+            await enqueue_campaign_run(session, u.id)
+
+    runs = (
+        (await session.execute(select(CampaignRun).where(CampaignRun.user_id == u.id)))
+        .scalars()
+        .all()
+    )
+    assert len(runs) == 1
+    assert runs[0].status == "failed"
+    assert "queue" in (runs[0].error or "")

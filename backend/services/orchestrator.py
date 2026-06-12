@@ -90,6 +90,34 @@ def analysis_cache_key(jd: str, profile: Profile) -> str:
     ).hexdigest()
 
 
+async def find_cached_analysis(
+    db: AsyncSession, jd_hash: str, user_id: str | None
+) -> Analysis | None:
+    """The single cache lookup. Owner-scoped: a user only ever hits their OWN
+    cached analyses (users without an uploaded CV share the global profile
+    content, so jd_hash alone collides across tenants); user_id=None matches
+    only legacy/discovery rows. jd_hash is not unique (a partial analysis
+    retried to completion can coexist with a fresh complete one), so take the
+    newest instead of scalar_one_or_none(), which raises on duplicates."""
+    owner = Analysis.user_id == user_id if user_id is not None else Analysis.user_id.is_(None)
+    return (
+        (
+            await db.execute(
+                select(Analysis)
+                .where(
+                    Analysis.jd_hash == jd_hash,
+                    Analysis.partial == False,  # noqa: E712
+                    owner,
+                )
+                .order_by(Analysis.created_at.desc())
+                .limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+
 @dataclass
 class SSEEvent:
     name: str
@@ -122,16 +150,10 @@ async def _run_phase1(
     job_id is set when called from discovery; None for manual-paste analyses.
     Pass model=HAIKU for bulk discovery to cut costs ~20x vs Sonnet.
     """
-    # Return cached result if this exact JD+profile was already scored
+    # Return cached result if this exact JD+profile was already scored.
+    # Discovery analyses are unowned (user_id NULL) — scope the lookup to those.
     jd_hash = analysis_cache_key(jd, profile)
-    cached = (
-        await db.execute(
-            select(Analysis).where(
-                Analysis.jd_hash == jd_hash,
-                Analysis.partial == False,  # noqa: E712
-            )
-        )
-    ).scalar_one_or_none()
+    cached = await find_cached_analysis(db, jd_hash, user_id=None)
     if cached is not None:
         from backend.services.instrumentation import log_cache_hit
 
@@ -230,15 +252,9 @@ async def run_evaluate_pipeline(
     profile = await get_or_build_profile(db, user_id=user_id)
     jd_hash = analysis_cache_key(jd, profile)
 
-    # Cache check: return immediately if a complete analysis already exists for this JD+profile
-    cached = (
-        await db.execute(
-            select(Analysis).where(
-                Analysis.jd_hash == jd_hash,
-                Analysis.partial == False,  # noqa: E712
-            )
-        )
-    ).scalar_one_or_none()
+    # Cache check: return immediately if THIS USER already has a complete
+    # analysis for this JD+profile (owner-scoped — see find_cached_analysis).
+    cached = await find_cached_analysis(db, jd_hash, user_id)
     if cached is not None:
         from backend.services.instrumentation import log_cache_hit
 

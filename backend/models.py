@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -96,6 +97,8 @@ class LLMCall(Base):
         String, ForeignKey("users.id"), nullable=True, default=None
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # user_spend() sums per user per window on every campaign cap check.
+    __table_args__ = (Index("ix_llm_calls_user_created", "user_id", "created_at"),)
 
 
 class UserCampaignSettings(Base):
@@ -149,6 +152,16 @@ class CampaignRun(Base):
     jobs_drafted: Mapped[int] = mapped_column(Integer, default=0)
     jobs_failed: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    # DB-enforced "one running run per user" — the concurrency guard behind
+    # enqueue_campaign_run (a SELECT-then-INSERT check alone races).
+    __table_args__ = (
+        Index(
+            "uq_campaign_runs_one_running",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'running'"),
+        ),
+    )
 
 
 class PipelineEvent(Base):

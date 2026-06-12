@@ -130,7 +130,7 @@ async def test_cost_cap_hit_mid_run_stops_early(session):
     await session.commit()
 
     jobs = [_job("j1"), _job("j2"), _job("j3")]
-    blocked = SimpleNamespace(status="blocked", generated=False)
+    blocked = SimpleNamespace(status="blocked", generated=False, reason="monthly cost cap reached")
     with (
         patch(
             "backend.services.campaign_run.fetch_target_jobs",
@@ -149,6 +149,7 @@ async def test_cost_cap_hit_mid_run_stops_early(session):
     assert result.status == "completed"
     assert result.jobs_considered == 1
     assert result.jobs_drafted == 1
+    assert "stopped early" in (result.error or "")  # cap-stop is not silent
 
 
 async def test_completed_run_is_persisted(session):

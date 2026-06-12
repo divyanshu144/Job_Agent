@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import LLMCall, UserCampaignSettings
@@ -49,8 +50,18 @@ async def get_or_create_settings(db: AsyncSession, user_id: str) -> UserCampaign
     if row is None:
         row = UserCampaignSettings(user_id=user_id)
         db.add(row)
-        await db.commit()
-        await db.refresh(row)
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Lost a create race (run-now vs nightly dispatch): use the winner's row.
+            await db.rollback()
+            row = (
+                await db.execute(
+                    select(UserCampaignSettings).where(UserCampaignSettings.user_id == user_id)
+                )
+            ).scalar_one()
+        else:
+            await db.refresh(row)
     return row
 
 

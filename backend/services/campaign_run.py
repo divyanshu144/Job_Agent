@@ -11,9 +11,10 @@ separate admin campaign.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import CampaignRun, UserCampaignSettings, UserTargetCompany
@@ -85,29 +86,52 @@ async def _finish(
     return run
 
 
+# A 'running' row older than this cannot still be executing (the Celery hard
+# time limit is 600s); treat it as a zombie from a killed worker or a lost
+# queue message and fail it instead of blocking the user forever.
+_STALE_RUN_MINUTES = 30
+
+
 async def enqueue_campaign_run(db: AsyncSession, user_id: str) -> str | None:
     """Create a CampaignRun(running) and enqueue the worker task for it. Returns
-    the new run id, or None if the user already has a run in progress (the
-    race-free concurrency guard, shared by the route and the nightly dispatcher)."""
-    running = (
-        await db.execute(
-            select(CampaignRun).where(
-                CampaignRun.user_id == user_id,
-                CampaignRun.status == "running",
-            )
+    the new run id, or None if the user already has a run in progress. The
+    concurrency guard is the partial unique index uq_campaign_runs_one_running
+    (DB-enforced — a SELECT-then-INSERT check alone races with the nightly
+    dispatcher). Raises if the queue is unavailable, after marking the run failed.
+    Shared by the run-now route and the nightly dispatcher."""
+    # Self-heal zombie rows first, so a dead run can't 409-block the user forever.
+    await db.execute(
+        update(CampaignRun)
+        .where(
+            CampaignRun.user_id == user_id,
+            CampaignRun.status == "running",
+            CampaignRun.started_at < _utcnow() - timedelta(minutes=_STALE_RUN_MINUTES),
         )
-    ).scalar_one_or_none()
-    if running is not None:
-        return None
+        .values(status="failed", finished_at=_utcnow(), error="run was interrupted")
+    )
+    await db.commit()
 
     run = CampaignRun(user_id=user_id, status="running")
     db.add(run)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:  # a run is already running for this user
+        await db.rollback()
+        return None
     await db.refresh(run)
 
     from backend.tasks import run_user_campaign
 
-    run_user_campaign.delay(user_id, run.id)
+    try:
+        run_user_campaign.delay(user_id, run.id)
+    except Exception:
+        # Broker down: never leave the row 'running' with no worker coming.
+        logger.exception("enqueue failed for user %s (queue unavailable)", user_id)
+        run.status = "failed"
+        run.finished_at = _utcnow()
+        run.error = "could not queue the run; please try again later"
+        await db.commit()
+        raise
     return run.id
 
 
@@ -140,8 +164,11 @@ async def dispatch_campaigns(db: AsyncSession) -> dict[str, int]:
     user_ids = await _active_campaign_user_ids(db)
     enqueued = 0
     for user_id in user_ids:
-        if await enqueue_campaign_run(db, user_id) is not None:
-            enqueued += 1
+        try:
+            if await enqueue_campaign_run(db, user_id) is not None:
+                enqueued += 1
+        except Exception:  # one user's enqueue failure never aborts the dispatch
+            logger.exception("nightly dispatch: enqueue failed for user %s", user_id)
     logger.info("nightly dispatch: %d eligible user(s), %d enqueued", len(user_ids), enqueued)
     return {"users": len(user_ids), "enqueued": enqueued}
 
@@ -165,6 +192,7 @@ async def execute_campaign_run(user_id: str, db: AsyncSession, run_id: str) -> C
 
     # ── Per-job materials generation ──────────────────────────────────────────
     considered = drafted = failed = 0
+    stopped_reason: str | None = None
     try:
         targets = await _active_targets(db, user_id)
         jobs = await fetch_target_jobs(targets)
@@ -178,13 +206,21 @@ async def execute_campaign_run(user_id: str, db: AsyncSession, run_id: str) -> C
                 continue
             if result.status == "blocked":
                 # mid-run cost cap reached — stop spending, finish what we have
+                stopped_reason = result.reason or "monthly cost cap reached"
                 logger.info("campaign run %s: cost cap hit mid-run, stopping", run_id)
                 break
             considered += 1
             if result.generated:
                 drafted += 1
         return await _finish(
-            db, run, "completed", considered=considered, drafted=drafted, failed=failed
+            db,
+            run,
+            "completed",
+            considered=considered,
+            drafted=drafted,
+            failed=failed,
+            # Surface a cap-stop so a green run doesn't hide skipped jobs.
+            error=f"stopped early: {stopped_reason}" if stopped_reason else None,
         )
     except Exception:
         logger.exception("campaign run %s crashed", run_id)

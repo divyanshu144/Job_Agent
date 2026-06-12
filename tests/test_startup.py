@@ -76,4 +76,4 @@ def test_run_upgrade_stamps_complete_legacy_schema() -> None:
 
     missing = _REQUIRED - tables
     assert not missing, f"legacy boot stamp path missing tables: {missing}"
-    assert revision == "0006_campaign_runs"
+    assert revision == "0007_review_fixes"
