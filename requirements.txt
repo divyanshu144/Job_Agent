@@ -27,3 +27,4 @@ celery>=5.3.0
 redis>=5.0.0
 prometheus-fastapi-instrumentator>=7.0.0
 tenacity>=8.2.0
+slowapi>=0.1.9

@@ -18,6 +18,16 @@ _FAKE_USER_ID = "test-user-id"
 _FAKE_USER = User(id=_FAKE_USER_ID, email="test@example.com", hashed_password="x", is_active=True)
 
 
+@pytest.fixture(autouse=True)
+def _no_rate_limit():
+    """The whole suite authenticates as one fake user — at 100/min the suite
+    would rate-limit itself. Dedicated tests in test_rate_limit.py re-enable."""
+    from backend.services.rate_limit import limiter
+
+    limiter.enabled = False
+    yield
+
+
 # ── Real Postgres, once per session (testcontainers; Docker required) ──────────
 @pytest.fixture(scope="session")
 def _pg_container():

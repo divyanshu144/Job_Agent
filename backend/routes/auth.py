@@ -3,7 +3,8 @@ from __future__ import annotations
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from slowapi.util import get_remote_address
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +17,7 @@ from backend.services.auth_service import (
     hash_password,
     verify_password,
 )
+from backend.services.rate_limit import limiter
 
 router = APIRouter(tags=["auth"])
 
@@ -23,7 +25,9 @@ _INVITE_EXPIRE_HOURS = 72
 
 
 @router.post("/auth/register", response_model=UserResponse)
+@limiter.limit("10/minute", key_func=get_remote_address)  # per-IP; failures count
 async def register(
+    request: Request,
     data: UserCreate,
     response: Response,
     db: AsyncSession = Depends(get_db),
@@ -81,7 +85,9 @@ async def register(
 
 
 @router.post("/auth/login", response_model=UserResponse)
+@limiter.limit("10/minute", key_func=get_remote_address)  # per-IP; failures count
 async def login(
+    request: Request,
     data: UserLogin,
     response: Response,
     db: AsyncSession = Depends(get_db),

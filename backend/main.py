@@ -8,6 +8,9 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +28,7 @@ from backend.routes.metrics import router as metrics_router
 from backend.routes.profile import router as profile_router
 from backend.routes.targets import router as targets_router
 from backend.services.instrumentation import configure_logging
+from backend.services.rate_limit import limiter
 
 
 @asynccontextmanager
@@ -43,6 +47,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(title="JobFit Agent", lifespan=lifespan)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+# Added before CORS so CORS stays outermost — 429s still get CORS headers.
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -69,6 +78,7 @@ Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_sch
 
 
 @app.get("/health")
+@limiter.exempt  # type: ignore[misc]
 async def health(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """Readiness probe: verifies the database answers, not just that the process is up."""
     try:

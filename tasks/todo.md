@@ -47,7 +47,7 @@ API process's /metrics (separate process; multiprocess mode out of scope V1).
 Noted: SDK already retries 429/5xx internally (anthropic_max_retries) — tenacity
 is the OUTER layer for when the SDK gives up; worst-case latency multiplies
 (intentional per spec).
-## Task 3 — Unit 8 campaign frontend dashboard (PLAN — awaiting approval)
+## Task 3 — Unit 8 campaign frontend dashboard — DONE (`5a9de23`, build clean, drift 11 classes)
 
 Frontend only. Endpoints used (all exist): POST /campaign/run-now, GET /campaign/runs,
 GET/POST/PATCH/DELETE /targets, GET /history (materials), /results/:id (links).
@@ -74,5 +74,29 @@ GAPS (listed, not invented):
 - CampaignRunResponse has no cost field → run history shows counts only
 - No user-scoped CampaignJob endpoint; regular-tier runs produce Analyses, not
   CampaignJobs → "drafts" section = recent analyses from /history
-## Task 4 — Consistency evals merge from feat/evals-clean
-## Task 5 — Rate limiting (slowapi)
+## Task 4 — Consistency evals — ALREADY ON MAIN (no-op)
+Commit `3c39fe0` (feat/evals-clean's content) is in main history: validators.py,
+consistency_check.py, tests/test_evals (33 pass), make eval-consistency target.
+Branch deleted after a prior integration. Nothing to merge.
+
+## Task 5 — Rate limiting (slowapi) (PLAN — awaiting approval)
+
+- [ ] 1. requirements.txt: slowapi>=0.1.9
+- [ ] 2. backend/services/rate_limit.py: key_func = "user:{jwt sub}" from the
+      access_token cookie when decodable, else "ip:{remote addr}";
+      Limiter(default_limits=["100/minute"], headers_enabled=True)
+- [ ] 3. main.py: app.state.limiter + RateLimitExceeded handler (429 with
+      Retry-After) + SlowAPIMiddleware; /health exempted (@limiter.exempt);
+      /metrics stays under default (scrape rate trivially low)
+- [ ] 4. routes/auth.py: @limiter.limit("10/minute", key_func=remote address)
+      on register + login (per-IP, counts failed attempts); both gain a
+      request: Request param (slowapi requirement)
+- [ ] 5. conftest.py: autouse fixture disables the limiter suite-wide (the whole
+      suite shares one fake user — 100/min would 429 the suite); dedicated
+      rate-limit tests re-enable + limiter.reset()
+- [ ] 6. TDD tests/test_routes/test_rate_limit.py: 11th login from same IP → 429
+      + Retry-After; 101st authenticated request → 429; /health exempt; headers
+- [ ] 7. make check green → commit
+
+Known limitation: in-memory storage = per-process counters (multi-worker /
+Celery not shared). Redis storage_uri is the V2 upgrade if needed.
