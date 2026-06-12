@@ -287,3 +287,17 @@ Decision (deliberately NOT done): do not add a "HANDOFF.md must be committed" *b
 Avoid: Writing remediation text that addresses the symptom step instead of the gating condition. Avoid duplicating a schema between a hook and its template file.
 
 See: `.claude/hooks/stop.sh`, `HANDOFF.template.md`
+
+## 2026-06-12 — rate limiter vs test suite (task 5)
+The whole pytest suite authenticates as ONE fake user; a per-user 100/min limit
+makes the suite rate-limit itself nondeterministically. Pattern: autouse
+conftest fixture sets `limiter.enabled = False`; only test_rate_limit.py
+re-enables + `limiter.reset()` around each test. Generalizes: any global
+throttle/quota middleware needs an explicit test-suite kill-switch.
+
+## 2026-06-12 — slowapi typing gaps
+slowapi 0.1.9: `_rate_limit_exceeded_handler` doesn't match Starlette's
+add_exception_handler signature (`# type: ignore[arg-type]`) and
+`@limiter.exempt` is untyped (`# type: ignore[misc]`) — same pattern as the
+celery decorators. Also: SDK wraps httpx timeouts in anthropic.APITimeoutError,
+so a tenacity predicate matching only httpx.TimeoutException is dead code.

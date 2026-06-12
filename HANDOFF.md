@@ -1,54 +1,52 @@
 # Session Handoff
 
-**Updated:** 2026-06-10
-**Branch:** main — plan delivered; unrelated WIP uncommitted in tree
+**Updated:** 2026-06-12
+**Branch:** main — clean, fully pushed (origin/main = `f56a443`)
 
 ---
 
 ## Current State
 
-**Multi-tenant overnight campaign — APPROVED; plan unit 4 SHIPPED.** Locked
-decisions: separate `UserCampaignSettings` table (not `User` fields); v1 scope
-is on-demand "run now" first, nightly schedule second.
+**FDE-readiness goal (5 tasks) COMPLETE.** All shipped this session, each with
+`make check` green and pushed individually:
 
-Plan unit 4 (headless pipeline spike) committed `9a3cff1`: `run_campaign_for_user(
-user_id, db)` (`backend/services/campaign_user.py`) drives `run_evaluate_pipeline`
-→ `run_generate_pipeline` in a plain async function — no FastAPI request, no SSE.
-**Finding: the orchestrator generators are NOT request/SSE-coupled** (SSE
-formatting lives only in `routes/analyse.py`); they persist user-scoped
-Analysis/JobResult, already surfaced by `/history` + `/analysis/{id}` + resume
-`.docx`. `make check` green (412 passed, 81.08%). The load-bearing assumption for
-the whole feature is proven.
+| Task | Commit | What |
+|---|---|---|
+| 0 Housekeeping | `e99e37d` | docs/architecture-review committed + everything pushed |
+| 1 Health + metrics | `cea8f44` | /health DB ping (200/503, exc class name only), /metrics via prometheus-fastapi-instrumentator, `llm_calls_total{agent,model}` in tracked_call |
+| 2 Agent retry | `68f7201` | tenacity in BaseAgent._call: 3 attempts, exp+jitter, 529/timeout-only predicate, reraise=True; CRITICAL log at 5 consecutive failures (once per streak) |
+| 3 Campaign UI (unit 8) | `5a9de23` | /campaign page: run-now (409→banner), 3s polling, run history, targets CRUD, materials via /history; drift checker now 11 classes |
+| 4 Consistency evals | n/a | Already on main (`3c39fe0`); feat/evals-clean was integrated previously and deleted. No-op. |
+| 5 Rate limiting | `f56a443` | slowapi: 10/min per-IP register/login, 100/min per-user (JWT sub key, IP fallback), 429+Retry-After, /health exempt |
 
-(Prior-session WIP "Work at a Startup source + job_shortlist" was committed
-earlier as `94c28fb`, unrelated.)
+The multi-tenant campaign feature (backend units 1–6 + frontend unit 8) is now
+complete end to end.
 
 ## Next Action
 
-The multi-tenant campaign **backend is complete**. Shipped: unit 4 (`9a3cff1`),
-unit 3 (`0366170`), unit 2 (`030dd63`), unit 1 (`b10228f`), unit 5 (`5d17a20`),
-unit 6 (`c038b89`, nightly dispatcher via beat crontab @ 02:00 UTC →
-`dispatch_campaigns` → one run per eligible user). Only **unit 8 (frontend)**
-remains: targets management page (`/api/targets` CRUD), campaign dashboard
-(`/api/campaign/run-now` + `/api/campaign/runs` + existing `/history` /
-`/analysis/{id}` / resume `.docx`), and a usage/cap indicator.
+Nothing in flight. Candidate follow-ups (not committed to):
+- `GET/PATCH /api/campaign/settings` route pair → unlocks the settings section
+  omitted from /campaign (enabled toggle + caps display)
+- Per-run cost on CampaignRunResponse (join LLMCall by run window/user)
+- Redis storage_uri for the rate limiter when going multi-worker
+- Prometheus multiprocess mode if worker LLM metrics matter
 
 ## Why It Stopped
 
-Unit 6 complete — backend done end to end (on-demand + nightly). Frontend is the
-last unit.
+Goal complete — all 5 tasks green and pushed.
 
 ## In-Flight
 
-No uncommitted changes.
+None. Working tree clean.
 
 ## Open Questions
 
-None (cap model + v1 scope decided). Note: `daily_run_cap` column exists but is
-NOT yet enforced — deferred to unit 5 (needs a CampaignRun record to count runs).
+None.
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make check` | ✓ 446 passed, 1 deselected · 81.61% |
+| `make check` | ✓ 466 passed, 1 deselected (integration eval) · 82.08% |
+| frontend `npm run build` | ✓ clean (tsc + vite) |
+| schema drift | ✓ 11 classes |

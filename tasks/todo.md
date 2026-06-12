@@ -79,7 +79,7 @@ Commit `3c39fe0` (feat/evals-clean's content) is in main history: validators.py,
 consistency_check.py, tests/test_evals (33 pass), make eval-consistency target.
 Branch deleted after a prior integration. Nothing to merge.
 
-## Task 5 — Rate limiting (slowapi) (PLAN — awaiting approval)
+## Task 5 — Rate limiting (slowapi) — DONE (`f56a443`, 466 passed, 82.08%)
 
 - [ ] 1. requirements.txt: slowapi>=0.1.9
 - [ ] 2. backend/services/rate_limit.py: key_func = "user:{jwt sub}" from the
