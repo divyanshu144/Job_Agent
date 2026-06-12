@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import CampaignRun, UserCampaignSettings, UserTargetCompany
 from backend.services.campaign_user import run_campaign_for_user
+from backend.services.profile_builder import get_owned_profile
 from backend.services.targets_client import fetch_target_jobs
 from backend.services.usage import check_user_caps, get_or_create_settings
 
@@ -179,6 +180,12 @@ async def execute_campaign_run(user_id: str, db: AsyncSession, run_id: str) -> C
     run = (await db.execute(select(CampaignRun).where(CampaignRun.id == run_id))).scalar_one()
 
     # ── Gates: block before any LLM work ──────────────────────────────────────
+    # Hard tenant boundary: no owned profile => no campaign (a regular user must
+    # never have materials generated from the shared admin profile files).
+    if await get_owned_profile(db, user_id) is None:
+        reason = "complete your profile first — upload your CV to enable campaigns"
+        logger.warning("campaign run %s blocked: %s", run_id, reason)
+        return await _finish(db, run, "blocked", error=reason)
     settings_row = await get_or_create_settings(db, user_id)
     cap = await check_user_caps(db, user_id)  # campaign_enabled + monthly cost cap
     if not cap.allowed:

@@ -32,6 +32,7 @@ from backend.services.instrumentation import new_trace_id, span
 from backend.services.job_result import upsert_job_result
 from backend.services.pipeline_errors import to_user_error
 from backend.services.profile_builder import (
+    ProfileNotConfiguredError,
     build_compact_profile,
     get_or_build_profile,
     profile_content_hash,
@@ -249,7 +250,14 @@ async def run_evaluate_pipeline(
     Returns cached result immediately if same JD+profile was already analysed.
     """
     new_trace_id()
-    profile = await get_or_build_profile(db, user_id=user_id)
+    try:
+        profile = await get_or_build_profile(db, user_id=user_id)
+    except ProfileNotConfiguredError as e:
+        # Hard tenant boundary: never run agents against the shared profile.
+        yield SSEEvent(
+            "pipeline_error", {"agent": "system", "error": str(e), "code": "profile_missing"}
+        )
+        return
     jd_hash = analysis_cache_key(jd, profile)
 
     # Cache check: return immediately if THIS USER already has a complete
@@ -521,9 +529,15 @@ async def run_generate_pipeline(
     output_agents = await _output_agents(db, analysis_id)
     missing = [s for s in PHASE2 if s not in output_agents]
     if not missing:
+        # code lets callers (campaign ledger) treat this as "materials exist",
+        # not a failure — never match on the message text.
         yield SSEEvent(
             "pipeline_error",
-            {"agent": "system", "error": "Documents already generated for this analysis"},
+            {
+                "agent": "system",
+                "error": "Documents already generated for this analysis",
+                "code": "already_generated",
+            },
         )
         return
 

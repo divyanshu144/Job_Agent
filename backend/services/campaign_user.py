@@ -81,6 +81,10 @@ async def run_campaign_for_user(
             if ev.name == "pipeline_done":
                 generated = not ev.data.get("evaluate_only", True)
                 partial = ev.data.get("partial", partial)
+            elif ev.name == "pipeline_error" and ev.data.get("code") == "already_generated":
+                # Repeat run for an already-drafted job: the materials exist, so
+                # the ledger counts it as generated — not 0 drafted every night.
+                generated = True
 
     return CampaignSpikeResult(
         analysis_id=analysis_id, score=score, generated=generated, partial=partial

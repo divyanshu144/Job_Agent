@@ -13,7 +13,7 @@ from sqlalchemy import select
 import backend.models  # noqa: F401
 from backend.models import CampaignRun, LLMCall, UserCampaignSettings, UserTargetCompany
 from backend.services.campaign_run import execute_campaign_run
-from tests.factories import make_user
+from tests.factories import make_profile, make_user
 
 
 def _job(text="Backend engineer role " * 10):
@@ -33,6 +33,7 @@ async def _new_run(session, user_id):
 
 async def test_blocked_by_daily_run_cap_makes_zero_calls(session):
     user = await make_user(session, email="daily@example.com")
+    await make_profile(session, user_id=user.id)
     session.add(UserCampaignSettings(user_id=user.id, daily_run_cap=1))
     # one prior completed run today -> at cap
     session.add(
@@ -57,6 +58,7 @@ async def test_blocked_by_daily_run_cap_makes_zero_calls(session):
 
 async def test_blocked_by_cost_cap_makes_zero_calls(session):
     user = await make_user(session, email="cost@example.com")
+    await make_profile(session, user_id=user.id)
     session.add(UserCampaignSettings(user_id=user.id, monthly_cost_cap_usd=1.0))
     session.add(
         LLMCall(
@@ -86,6 +88,7 @@ async def test_blocked_by_cost_cap_makes_zero_calls(session):
 
 async def test_per_job_failure_isolation_and_ledger(session):
     user = await make_user(session, email="iso@example.com")
+    await make_profile(session, user_id=user.id)
     # two active targets + one inactive (inactive must NOT be passed to fetch)
     session.add(UserTargetCompany(user_id=user.id, name="A", ats="lever", slug="a"))
     session.add(UserTargetCompany(user_id=user.id, name="B", ats="ashby", slug="b"))
@@ -125,6 +128,7 @@ async def test_per_job_failure_isolation_and_ledger(session):
 
 async def test_cost_cap_hit_mid_run_stops_early(session):
     user = await make_user(session, email="mid@example.com")
+    await make_profile(session, user_id=user.id)
     session.add(UserTargetCompany(user_id=user.id, name="A", ats="lever", slug="a"))
     run = await _new_run(session, user.id)
     await session.commit()
@@ -154,6 +158,7 @@ async def test_cost_cap_hit_mid_run_stops_early(session):
 
 async def test_completed_run_is_persisted(session):
     user = await make_user(session, email="persist@example.com")
+    await make_profile(session, user_id=user.id)
     run = await _new_run(session, user.id)
     await session.commit()
 

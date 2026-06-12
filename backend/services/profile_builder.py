@@ -10,11 +10,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
-from backend.models import Profile
+from backend.models import Profile, User
 from backend.schemas import ProfileReviewData
 from backend.services.cv_parser import extract_text_from_file
 
 logger = logging.getLogger(__name__)
+
+
+class ProfileNotConfiguredError(Exception):
+    """A non-admin user has no owned Profile row. Regular users must NEVER fall
+    back to the shared profile_yaml_path/cv_path files (hard tenant boundary —
+    those serve the admin's single-candidate flow only)."""
 
 
 def profile_content_hash(merged_profile: str) -> str:
@@ -248,17 +254,40 @@ async def build_profile_from_text(
     return profile
 
 
-async def get_or_build_profile(db: AsyncSession, user_id: str | None = None) -> Profile:
-    q = select(Profile).order_by(Profile.last_refreshed_at.desc()).limit(1)
-    if user_id:
-        q = (
+async def get_owned_profile(db: AsyncSession, user_id: str) -> Profile | None:
+    """The user's own newest Profile row, or None. Never reads shared files."""
+    return (
+        await db.execute(
             select(Profile)
             .where(Profile.user_id == user_id)
             .order_by(Profile.last_refreshed_at.desc())
             .limit(1)
         )
-    result = await db.execute(q)
-    profile = result.scalar_one_or_none()
+    ).scalar_one_or_none()
+
+
+async def get_or_build_profile(db: AsyncSession, user_id: str | None = None) -> Profile:
+    """Resolve the profile for a pipeline run.
+
+    user_id set: the user's OWN row, or — for the admin only — a fallback build
+    from the shared yaml/cv files. A regular user with no row raises
+    ProfileNotConfiguredError instead (zero LLM work happens downstream).
+    user_id None: legacy/discovery scope, newest row with shared-file fallback.
+    """
+    if user_id:
+        owned = await get_owned_profile(db, user_id)
+        if owned is not None:
+            return owned
+        user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+        if user is None or not user.is_admin:
+            raise ProfileNotConfiguredError(
+                "Complete your profile first — upload your CV before running analyses."
+            )
+        return await build_profile(db, user_id=user_id)  # admin-only shared fallback
+
+    profile = (
+        await db.execute(select(Profile).order_by(Profile.last_refreshed_at.desc()).limit(1))
+    ).scalar_one_or_none()
     if profile is None:
-        profile = await build_profile(db, user_id=user_id)
+        profile = await build_profile(db)
     return profile
