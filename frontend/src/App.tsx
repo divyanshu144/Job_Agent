@@ -10,6 +10,7 @@ import { Costs } from "./pages/Costs";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 import { AdminInvites } from "./pages/AdminInvites";
+import { Campaign } from "./pages/Campaign";
 
 const link = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-2 text-sm font-medium rounded-md ${isActive ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:text-slate-900"}`;
@@ -30,6 +31,7 @@ function Nav() {
       <span className="font-bold text-slate-900 mr-4">JobFit</span>
       <NavLink to="/" end className={link}>Profile</NavLink>
       <NavLink to="/analyse" className={link}>Analyse</NavLink>
+      <NavLink to="/campaign" className={link}>Campaign</NavLink>
       {user.is_admin && <NavLink to="/discover" className={link}>Discover</NavLink>}
       {user.is_admin && <NavLink to="/saved" className={link}>Saved</NavLink>}
       {user.is_admin && <NavLink to="/costs" className={link}>Costs</NavLink>}
@@ -63,6 +65,7 @@ export default function App() {
               <Route path="/" element={<ProtectedRoute><ProfileSetup /></ProtectedRoute>} />
               <Route path="/analyse" element={<ProtectedRoute><AnalyseJob /></ProtectedRoute>} />
               <Route path="/results/:id" element={<ProtectedRoute><Results /></ProtectedRoute>} />
+              <Route path="/campaign" element={<ProtectedRoute><Campaign /></ProtectedRoute>} />
               <Route path="/discover" element={<ProtectedRoute><Discover /></ProtectedRoute>} />
               <Route path="/saved" element={<ProtectedRoute><Saved /></ProtectedRoute>} />
               <Route path="/costs" element={<ProtectedRoute><Costs /></ProtectedRoute>} />

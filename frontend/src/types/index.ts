@@ -240,3 +240,25 @@ export interface Feedback {
   trace_id: string | null;
   created_at: string;
 }
+
+// Regular-tier campaign — mirrors backend CampaignRunResponse 1:1.
+export interface CampaignRun {
+  id: string;
+  status: string; // running | completed | failed | blocked
+  started_at: string;
+  finished_at?: string | null;
+  jobs_considered: number;
+  jobs_drafted: number;
+  jobs_failed: number;
+  error?: string | null;
+}
+
+// Mirrors backend TargetCompanyResponse 1:1.
+export interface TargetCompany {
+  id: string;
+  name: string;
+  ats: string; // greenhouse | lever | ashby
+  slug: string;
+  active: boolean;
+  created_at: string;
+}

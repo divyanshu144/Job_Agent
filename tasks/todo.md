@@ -25,7 +25,7 @@
 Known limitation (accepted, documented): Celery worker LLM calls won't appear in the
 API process's /metrics (separate process; multiprocess mode out of scope V1).
 
-## Task 2 — Tenacity retry + breaker signal in BaseAgent._call() (PLAN — awaiting approval)
+## Task 2 — Tenacity retry + breaker signal — DONE (`68f7201`, 459 passed, 81.87%)
 
 - [ ] 1. requirements.txt: add `tenacity>=8.2.0`
 - [ ] 2. `backend/agents/base.py` `_call()`: wrap `tracked_call` in `AsyncRetrying(
@@ -47,6 +47,32 @@ API process's /metrics (separate process; multiprocess mode out of scope V1).
 Noted: SDK already retries 429/5xx internally (anthropic_max_retries) — tenacity
 is the OUTER layer for when the SDK gives up; worst-case latency multiplies
 (intentional per spec).
-## Task 3 — Unit 8 campaign frontend dashboard (plan after task 2)
+## Task 3 — Unit 8 campaign frontend dashboard (PLAN — awaiting approval)
+
+Frontend only. Endpoints used (all exist): POST /campaign/run-now, GET /campaign/runs,
+GET/POST/PATCH/DELETE /targets, GET /history (materials), /results/:id (links).
+
+- [ ] 1. types/index.ts: `CampaignRun` (mirrors CampaignRunResponse),
+      `TargetCompany` (mirrors TargetCompanyResponse)
+- [ ] 2. api/client.ts: runCampaignNow, getCampaignRuns, getTargets, addTarget,
+      updateTarget, deleteTarget (get/post/put helpers + patch/delete additions
+      following existing style)
+- [ ] 3. pages/Campaign.tsx: run-now button (409 → friendly inline banner),
+      active-run polling (Discover pollRef pattern: 3s interval, max attempts,
+      clear on terminal status, timed-out banner + manual refresh), run history
+      (newest first: status badge, timestamps, considered/drafted/failed, error),
+      targets management (list + add form name/ats-select/slug + active toggle +
+      delete), recent materials via listHistory → /results/:id links
+- [ ] 4. App.tsx: /campaign route + NavLink (all authenticated users, NOT admin-gated)
+- [ ] 5. scripts/check_schema_drift.py: add (CampaignRunResponse, CampaignRun) +
+      (TargetCompanyResponse, TargetCompany) pairs
+- [ ] 6. Verify: make check green + frontend tsc/vite build clean → commit
+
+GAPS (listed, not invented):
+- No GET/PATCH /campaign/settings route → settings section omitted (enabled
+  toggle + caps not displayable without inventing a backend route)
+- CampaignRunResponse has no cost field → run history shows counts only
+- No user-scoped CampaignJob endpoint; regular-tier runs produce Analyses, not
+  CampaignJobs → "drafts" section = recent analyses from /history
 ## Task 4 — Consistency evals merge from feat/evals-clean
 ## Task 5 — Rate limiting (slowapi)

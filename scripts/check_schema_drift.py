@@ -17,6 +17,8 @@ PAIRS = [
     ("GapItem", "GapItem"),
     ("ResourceItem", "ResourceItem"),
     ("BulletItem", "BulletItem"),
+    ("CampaignRunResponse", "CampaignRun"),
+    ("TargetCompanyResponse", "TargetCompany"),
 ]
 
 

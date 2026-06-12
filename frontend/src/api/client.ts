@@ -1,4 +1,4 @@
-import type { ProfileResponse, ProfileReviewData, ProfileReviewResponse, AnalysisDetail, AgentName, SSECallbacks, RetryRequest, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback, AnalysisSummary, InviteResponse } from "../types";
+import type { ProfileResponse, ProfileReviewData, ProfileReviewResponse, AnalysisDetail, AgentName, SSECallbacks, RetryRequest, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback, AnalysisSummary, InviteResponse, CampaignRun, TargetCompany } from "../types";
 
 const BASE = "/api";
 
@@ -56,6 +56,22 @@ async function put<T>(path: string, body: unknown): Promise<T> {
   });
   if (!r.ok) return _errorMessage(r, "PUT", path);
   return r.json() as Promise<T>;
+}
+
+async function patch<T>(path: string, body: unknown): Promise<T> {
+  const r = await fetch(`${BASE}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    credentials: "include",
+  });
+  if (!r.ok) return _errorMessage(r, "PATCH", path);
+  return r.json() as Promise<T>;
+}
+
+async function del(path: string): Promise<void> {
+  const r = await fetch(`${BASE}${path}`, { method: "DELETE", credentials: "include" });
+  if (!r.ok) return _errorMessage(r, "DELETE", path);
 }
 
 export const api = {
@@ -171,6 +187,14 @@ export const api = {
     post<ColdEmailDraft>(`/contacts/${contactId}/draft`, {}),
   sendEmail: (contactId: string) =>
     post<{ sent: boolean }>(`/contacts/${contactId}/send`, {}),
+  runCampaignNow: () => post<{ run_id: string; status: string }>("/campaign/run-now", {}),
+  getCampaignRuns: () => get<CampaignRun[]>("/campaign/runs"),
+  getTargets: () => get<TargetCompany[]>("/targets"),
+  addTarget: (target: { name: string; ats: string; slug: string }) =>
+    post<TargetCompany>("/targets", target),
+  updateTarget: (targetId: string, active: boolean) =>
+    patch<TargetCompany>(`/targets/${targetId}`, { active }),
+  deleteTarget: (targetId: string) => del(`/targets/${targetId}`),
 };
 
 function _streamSSE(url: string, init: RequestInit, callbacks: SSECallbacks): () => void {
