@@ -105,3 +105,21 @@
   Transient errors (rate_limited, timeout) bypass it entirely — SDK owns those.
   resource_planner excluded (bespoke accounting). AgentError + _parse_json now
   live in base.py; job_parser.py re-exports them for back-compat.
+
+### Known Gotcha: Phase-1 cache must be owner-scoped (2026-06-12)
+- **Problem:** jd_hash = sha256(jd :: profile_content_hash). Users who never
+  uploaded a CV get profiles built from the SHARED global yaml/cv files, so
+  their content hashes are identical — same JD => same cache key across users.
+- **Root cause:** single-candidate-era cache lookup had no user_id filter, and
+  jd_hash is indexed but NOT unique (partial→retry can coexist with a fresh
+  complete row => scalar_one_or_none raises MultipleResultsFound).
+- **Solution:** `find_cached_analysis(db, jd_hash, user_id)` in orchestrator.py
+  is the ONLY cache lookup: owner-scoped (user_id, or NULL for discovery),
+  newest-first limit(1). Never query the cache directly.
+
+### Architecture Decision: CampaignRun concurrency is DB-enforced (2026-06-12)
+- Partial unique index `uq_campaign_runs_one_running` (user_id WHERE
+  status='running', migration 0007). enqueue_campaign_run catches
+  IntegrityError => None. SELECT-then-INSERT checks are NOT acceptable here
+  (races the nightly dispatcher). Zombie 'running' rows self-heal in enqueue
+  after 30 min (> the 600s Celery hard time limit).

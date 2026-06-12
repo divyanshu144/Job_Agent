@@ -1,7 +1,7 @@
 # Session Handoff
 
-**Updated:** 2026-06-12
-**Branch:** main — clean, fully pushed (origin/main = `f56a443`)
+**Updated:** 2026-06-12 (post-review)
+**Branch:** main — clean, fully pushed (origin/main = `3a148dd`)
 
 ---
 
@@ -21,6 +21,14 @@
 
 The multi-tenant campaign feature (backend units 1–6 + frontend unit 8) is now
 complete end to end.
+
+**Whole-code review (10 findings) FIXED** — `4a56584` (backend) + `3a148dd`
+(frontend): owner-scoped Phase-1 cache via find_cached_analysis (cross-tenant
+hit + MultipleResultsFound), DB-enforced one-running-campaign-run (partial
+unique index, migration 0007), zombie-run self-heal + queue-failure handling
+(503), jwt-default CRITICAL startup signal, llm_calls(user_id,created_at)
+index, settings create-race fix, cap-stop reason on completed runs, ApiError
+status codes (409 branch, 429-tolerant polling). 472 passed, 82.04%.
 
 ## Next Action
 
