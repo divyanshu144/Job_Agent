@@ -4,12 +4,15 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import update
+from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
+from sqlalchemy import text, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
-from backend.database import SessionLocal, init_db
+from backend.database import SessionLocal, get_db, init_db
 from backend.models import DiscoveryRun
 from backend.routes.analyse import router as analyse_router
 from backend.routes.auth import router as auth_router
@@ -61,6 +64,19 @@ app.include_router(campaign_router, prefix=settings.api_prefix)
 app.include_router(targets_router, prefix=settings.api_prefix)
 
 
+# Prometheus: per-route latency histograms + status-labelled request counters.
+Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+
+
 @app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+async def health(db: AsyncSession = Depends(get_db)) -> JSONResponse:
+    """Readiness probe: verifies the database answers, not just that the process is up."""
+    try:
+        await db.execute(text("SELECT 1"))
+    except Exception as exc:
+        # Class name only — str(exc) can leak connection strings/hosts.
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "db": "error", "detail": type(exc).__name__},
+        )
+    return JSONResponse(content={"status": "ok", "db": "ok"})

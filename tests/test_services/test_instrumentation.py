@@ -168,3 +168,24 @@ async def test_tracked_call_handles_none_cache_usage(db_session):
     row = (await db_session.execute(select(LLMCall))).scalar_one()
     assert row.cache_creation_tokens == 0
     assert row.cache_read_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_tracked_call_increments_llm_calls_counter(mock_client):
+    from prometheus_client import REGISTRY
+
+    labels = {"agent": "counter_agent", "model": "counter-model"}
+    before = REGISTRY.get_sample_value("llm_calls_total", labels) or 0.0
+    client, _ = mock_client
+    await tracked_call(client, "counter_agent", "counter-model", system="s", messages=[])
+    assert REGISTRY.get_sample_value("llm_calls_total", labels) == before + 1
+
+
+@pytest.mark.asyncio
+async def test_cache_hit_does_not_increment_llm_calls_counter(db_session):
+    from prometheus_client import REGISTRY
+
+    labels = {"agent": "cache_agent", "model": "cache-model"}
+    before = REGISTRY.get_sample_value("llm_calls_total", labels) or 0.0
+    await log_cache_hit(db_session, "cache_agent", "cache-model")
+    assert (REGISTRY.get_sample_value("llm_calls_total", labels) or 0.0) == before

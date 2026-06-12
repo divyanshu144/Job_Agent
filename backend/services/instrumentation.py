@@ -10,6 +10,7 @@ from typing import Any, AsyncGenerator, cast
 from uuid import uuid4
 
 import anthropic
+from prometheus_client import Counter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
@@ -20,6 +21,15 @@ from backend.services.cost_calculator import calculate_cost
 # new_trace_id(); read by the logging filter and log_event() so every log line
 # and pipeline_events row carries the same id.
 trace_id_var: ContextVar[str | None] = ContextVar("trace_id", default=None)
+
+
+# Real Anthropic API calls only — cache hits and batch results do not increment
+# (neither is a live API call from this process).
+LLM_CALLS = Counter(
+    "llm_calls_total",
+    "Anthropic API calls made by this process",
+    ["agent", "model"],
+)
 
 
 def new_trace_id() -> str:
@@ -165,6 +175,7 @@ async def tracked_call(
     start = time.monotonic()
     msg = cast(anthropic.types.Message, await client.messages.create(model=model, **create_kwargs))
     latency_ms = int((time.monotonic() - start) * 1000)
+    LLM_CALLS.labels(agent=agent_name, model=model).inc()
 
     cache_creation_tokens = int(getattr(msg.usage, "cache_creation_input_tokens", None) or 0)
     cache_read_tokens = int(getattr(msg.usage, "cache_read_input_tokens", None) or 0)
