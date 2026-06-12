@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Self, TypeVar
+from typing import TYPE_CHECKING, Self, TypeVar, cast
 
 import anthropic
+import httpx
 from pydantic import BaseModel, ValidationError
+from tenacity import (
+    AsyncRetrying,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential_jitter,
+)
 
 from backend.config import settings
 from backend.schemas import PriorOutputs
@@ -13,12 +21,46 @@ from backend.schemas import PriorOutputs
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+logger = logging.getLogger(__name__)
+
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 HAIKU = "claude-haiku-4-5-20251001"
 SONNET = "claude-sonnet-4-6"
 MAX_TOKENS = 4096
 
 T = TypeVar("T", bound=BaseModel)
+
+# Outer retry layer for when the SDK's own retries give up: 529 (overloaded)
+# and timeouts only. Everything else fails fast on the first attempt.
+_RETRY_ATTEMPTS = 3
+_RETRY_WAIT = wait_exponential_jitter(initial=1, max=4)
+
+# Circuit-breaker signal (V1: the CRITICAL log IS the alert, no open/close state).
+_BREAKER_THRESHOLD = 5
+_consecutive_failures = 0
+
+
+def _is_transient(exc: BaseException) -> bool:
+    if isinstance(exc, anthropic.APIStatusError) and exc.status_code == 529:
+        return True
+    # The SDK wraps httpx timeouts in APITimeoutError; match both forms.
+    return isinstance(exc, (httpx.TimeoutException, anthropic.APITimeoutError))
+
+
+def _record_failure(agent_name: str) -> None:
+    global _consecutive_failures
+    _consecutive_failures += 1
+    if _consecutive_failures == _BREAKER_THRESHOLD:  # exactly once per streak
+        logger.critical(
+            "Circuit breaker signal: %d consecutive agent call failures (latest agent: %s)",
+            _BREAKER_THRESHOLD,
+            agent_name,
+        )
+
+
+def _record_success() -> None:
+    global _consecutive_failures
+    _consecutive_failures = 0
 
 
 class AgentError(Exception):
@@ -75,21 +117,35 @@ class BaseAgent:
     async def _call(self, system: str, user: str) -> str:
         from backend.services.instrumentation import tracked_call
 
-        msg = await tracked_call(
-            self._client,
-            type(self).__name__.lower(),
-            self.model,
-            db=self._db,
-            run_id=self._run_id,
-            analysis_id=self._analysis_id,
-            user_id=self._user_id,
-            max_tokens=MAX_TOKENS,
-            # No prompt caching: each pipeline call's system prompt is unique per request
-            # (profile + JD + prior outputs injected), so cached blocks are never read back —
-            # only the 1.25x write premium was incurred. See tasks/observability-audit.md.
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
+        async def _once() -> anthropic.types.Message:
+            return await tracked_call(
+                self._client,
+                type(self).__name__.lower(),
+                self.model,
+                db=self._db,
+                run_id=self._run_id,
+                analysis_id=self._analysis_id,
+                user_id=self._user_id,
+                max_tokens=MAX_TOKENS,
+                # No prompt caching: each pipeline call's system prompt is unique per request
+                # (profile + JD + prior outputs injected), so cached blocks are never read back —
+                # only the 1.25x write premium was incurred. See tasks/observability-audit.md.
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+
+        retryer = AsyncRetrying(
+            retry=retry_if_exception(_is_transient),
+            stop=stop_after_attempt(_RETRY_ATTEMPTS),
+            wait=_RETRY_WAIT,
+            reraise=True,  # original exception type, not RetryError — the error
+        )  # boundary (to_user_error) maps on concrete SDK types
+        try:
+            msg = cast(anthropic.types.Message, await retryer(_once))
+        except Exception:
+            _record_failure(type(self).__name__.lower())
+            raise
+        _record_success()
         return msg.content[0].text  # type: ignore[union-attr]
 
     async def _log_retry(self, label: str) -> None:
