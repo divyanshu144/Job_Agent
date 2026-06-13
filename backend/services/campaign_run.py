@@ -170,6 +170,9 @@ async def dispatch_campaigns(db: AsyncSession) -> dict[str, int]:
                 enqueued += 1
         except Exception:  # one user's enqueue failure never aborts the dispatch
             logger.exception("nightly dispatch: enqueue failed for user %s", user_id)
+            # Clear any aborted transaction so it can't poison the next user's
+            # enqueue (PendingRollbackError on the shared session).
+            await db.rollback()
     logger.info("nightly dispatch: %d eligible user(s), %d enqueued", len(user_ids), enqueued)
     return {"users": len(user_ids), "enqueued": enqueued}
 
@@ -178,6 +181,11 @@ async def execute_campaign_run(user_id: str, db: AsyncSession, run_id: str) -> C
     """Execute a pre-created CampaignRun (status=running). Gates first (zero spend
     on block), then per-job materials generation with failure isolation."""
     run = (await db.execute(select(CampaignRun).where(CampaignRun.id == run_id))).scalar_one()
+    if run.status != "running":
+        # A stale-healed or already-finished run whose queue message arrives
+        # late: executing would duplicate spend and overwrite the ledger row.
+        logger.warning("campaign run %s ignored: status is %r, not running", run_id, run.status)
+        return run
 
     # ── Gates: block before any LLM work ──────────────────────────────────────
     # Hard tenant boundary: no owned profile => no campaign (a regular user must

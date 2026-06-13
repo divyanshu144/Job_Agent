@@ -62,31 +62,49 @@ def _run_upgrade(url: str) -> None:
     asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
     try:
         # Safe only for current-model create_all DBs; table presence is not a drift audit.
-        if asyncio.run(_has_complete_unstamped_schema(url)):
-            command.stamp(cfg, "head")
+        stamp_to = asyncio.run(_unstamped_schema_revision(url))
+        if stamp_to is not None:
+            command.stamp(cfg, stamp_to)
         command.upgrade(cfg, "head")
     finally:
         asyncio.set_event_loop_policy(previous_policy)
 
 
-async def _has_complete_unstamped_schema(url: str) -> bool:
-    """Detect local databases created before Alembic managed startup.
+async def _unstamped_schema_revision(url: str) -> str | None:
+    """Detect local databases created before Alembic managed startup, and pick
+    the revision their schema actually matches.
 
     Older development databases were initialized with SQLAlchemy `create_all`,
     so they can contain the full schema without an `alembic_version` row. In
-    that exact case, stamp the database before upgrading instead of replaying
-    the initial migration and failing on already-existing tables.
+    that case, stamp before upgrading instead of replaying the initial
+    migration — but never blindly to head: a create_all DB from the 0006-era
+    models lacks the 0007 indexes (including the uq_campaign_runs_one_running
+    concurrency guard), so stamping head would silently skip them forever.
+    Returns the revision to stamp, or None when no stamp is needed.
     """
     probe_engine = create_async_engine(url, echo=False, connect_args=_connect_args)
     try:
         async with probe_engine.connect() as conn:
-            tables = await conn.run_sync(
-                lambda sync_conn: set(inspect(sync_conn).get_table_names())
-            )
+
+            def _read(sync_conn: Any) -> tuple[set[str], set[str]]:
+                insp = inspect(sync_conn)
+                tables = set(insp.get_table_names())
+                run_indexes = (
+                    {ix["name"] for ix in insp.get_indexes("campaign_runs")}
+                    if "campaign_runs" in tables
+                    else set()
+                )
+                return tables, run_indexes
+
+            tables, run_indexes = await conn.run_sync(_read)
     finally:
         await probe_engine.dispose()
 
-    return "alembic_version" not in tables and _INITIAL_SCHEMA_TABLES.issubset(tables)
+    if "alembic_version" in tables or not _INITIAL_SCHEMA_TABLES.issubset(tables):
+        return None
+    if "campaign_runs" in tables and "uq_campaign_runs_one_running" not in run_indexes:
+        return "0006_campaign_runs"  # 0007 must actually run
+    return "head"
 
 
 async def init_db() -> None:

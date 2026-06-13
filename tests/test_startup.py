@@ -77,3 +77,47 @@ def test_run_upgrade_stamps_complete_legacy_schema() -> None:
     missing = _REQUIRED - tables
     assert not missing, f"legacy boot stamp path missing tables: {missing}"
     assert revision == "0007_review_fixes"
+
+
+def test_run_upgrade_applies_0007_to_index_less_legacy_schema() -> None:
+    """#4: a create_all DB from the 0006-era models (full schema, no
+    uq_campaign_runs_one_running) must NOT be stamped to head — 0007 must
+    actually run so the concurrency guard exists."""
+    with PostgresContainer("postgres:16", driver="asyncpg") as pg:
+        url = pg.get_connection_url()
+
+        async def _create_0006_era_schema() -> None:
+            engine = create_async_engine(url)
+            try:
+                async with engine.begin() as conn:
+                    await conn.run_sync(Base.metadata.create_all)
+                    # Simulate 0006-era models: the 0007 indexes don't exist yet.
+                    await conn.exec_driver_sql("DROP INDEX uq_campaign_runs_one_running")
+                    await conn.exec_driver_sql("DROP INDEX ix_llm_calls_user_created")
+            finally:
+                await engine.dispose()
+
+        asyncio.run(_create_0006_era_schema())
+
+        _run_upgrade(url)
+
+        async def _index_names_and_revision() -> tuple[set[str], str | None]:
+            engine = create_async_engine(url)
+            try:
+                async with engine.connect() as conn:
+                    indexes = set(
+                        await conn.run_sync(
+                            lambda c: {ix["name"] for ix in inspect(c).get_indexes("campaign_runs")}
+                        )
+                    )
+                    revision = (
+                        await conn.exec_driver_sql("select version_num from alembic_version")
+                    ).scalar_one_or_none()
+                    return indexes, revision
+            finally:
+                await engine.dispose()
+
+        indexes, revision = asyncio.run(_index_names_and_revision())
+
+    assert "uq_campaign_runs_one_running" in indexes  # 0007 actually applied
+    assert revision == "0007_review_fixes"

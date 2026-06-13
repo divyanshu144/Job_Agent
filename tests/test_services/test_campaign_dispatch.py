@@ -129,3 +129,28 @@ async def test_enqueue_queue_failure_marks_run_failed_and_raises(session):
     assert len(runs) == 1
     assert runs[0].status == "failed"
     assert "queue" in (runs[0].error or "")
+
+
+async def test_dispatch_rolls_back_and_continues_after_one_user_fails(session):
+    """#3: one user's enqueue failure must roll the session back so the next
+    user's enqueue isn't poisoned by an aborted transaction."""
+    a = await make_user(session, email="boom@example.com")
+    b = await make_user(session, email="fine@example.com")
+    _target(session, a.id, "boom")
+    _target(session, b.id, "fine")
+    await session.commit()
+
+    from unittest.mock import AsyncMock
+
+    rollback_spy = AsyncMock(wraps=session.rollback)
+    with (
+        patch(
+            "backend.services.campaign_run.enqueue_campaign_run",
+            new=AsyncMock(side_effect=[RuntimeError("db blew up mid-enqueue"), "run-b"]),
+        ),
+        patch.object(session, "rollback", rollback_spy),
+    ):
+        result = await dispatch_campaigns(session)
+
+    assert result == {"users": 2, "enqueued": 1}  # user B still enqueued
+    rollback_spy.assert_awaited()  # the poisoned txn was cleared

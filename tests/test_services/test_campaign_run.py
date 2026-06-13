@@ -177,3 +177,27 @@ async def test_completed_run_is_persisted(session):
     ).scalar_one()
     assert persisted.status == "completed"
     assert persisted.finished_at is not None
+
+
+async def test_non_running_run_is_not_executed(session):
+    """#2: a stale-healed (failed) run whose queue message arrives late must not
+    execute — no duplicate spend, no failed->completed ledger overwrite."""
+    user = await make_user(session, email="late@example.com")
+    await make_profile(session, user_id=user.id)
+    run = await _new_run(session, user.id)
+    run.status = "failed"
+    run.error = "run was interrupted"
+    await session.commit()
+
+    with (
+        patch("backend.services.campaign_run.fetch_target_jobs", new_callable=AsyncMock) as fetch,
+        patch(
+            "backend.services.campaign_run.run_campaign_for_user", new_callable=AsyncMock
+        ) as driver,
+    ):
+        result = await execute_campaign_run(user.id, session, run.id)
+
+    assert result.status == "failed"  # ledger untouched
+    assert result.error == "run was interrupted"
+    fetch.assert_not_awaited()
+    driver.assert_not_awaited()
