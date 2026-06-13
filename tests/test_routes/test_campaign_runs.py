@@ -53,3 +53,53 @@ async def test_runs_history_is_user_scoped(app_client, db_session):
 async def test_run_now_requires_auth(unauthenticated_client):
     assert (await unauthenticated_client.post("/api/campaign/run-now")).status_code == 401
     assert (await unauthenticated_client.get("/api/campaign/runs")).status_code == 401
+
+
+async def test_runs_history_heals_stale_running_row(app_client, db_session):
+    """#8: a zombie 'running' row older than the stale window must show as
+    'failed' on the read/poll path, not 'running' forever."""
+    from datetime import datetime, timedelta, timezone
+
+    db_session.add(
+        CampaignRun(
+            user_id="test-user-id",
+            status="running",
+            started_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        )
+    )
+    await db_session.commit()
+
+    resp = await app_client.get("/api/campaign/runs")
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert len(rows) == 1 and rows[0]["status"] == "failed"
+
+
+async def test_runs_history_leaves_fresh_running_row(app_client, db_session):
+    """A fresh 'running' row (within the window) must NOT be healed."""
+    db_session.add(CampaignRun(user_id="test-user-id", status="running"))
+    await db_session.commit()
+
+    rows = (await app_client.get("/api/campaign/runs")).json()
+    assert len(rows) == 1 and rows[0]["status"] == "running"
+
+
+async def test_run_now_503_only_for_queue_unavailable(app_client, db_session):
+    """#9: a queue outage maps to 503; any other error propagates (not 503)."""
+    import pytest
+
+    from backend.services.campaign_run import QueueUnavailableError
+
+    with patch(
+        "backend.services.campaign_run.enqueue_campaign_run",
+        side_effect=QueueUnavailableError("broker down"),
+    ):
+        resp = await app_client.post("/api/campaign/run-now")
+    assert resp.status_code == 503
+
+    with patch(
+        "backend.services.campaign_run.enqueue_campaign_run",
+        side_effect=RuntimeError("a DB error, not a queue outage"),
+    ):
+        with pytest.raises(RuntimeError):
+            await app_client.post("/api/campaign/run-now")

@@ -93,14 +93,15 @@ async def _finish(
 _STALE_RUN_MINUTES = 30
 
 
-async def enqueue_campaign_run(db: AsyncSession, user_id: str) -> str | None:
-    """Create a CampaignRun(running) and enqueue the worker task for it. Returns
-    the new run id, or None if the user already has a run in progress. The
-    concurrency guard is the partial unique index uq_campaign_runs_one_running
-    (DB-enforced — a SELECT-then-INSERT check alone races with the nightly
-    dispatcher). Raises if the queue is unavailable, after marking the run failed.
-    Shared by the run-now route and the nightly dispatcher."""
-    # Self-heal zombie rows first, so a dead run can't 409-block the user forever.
+class QueueUnavailableError(Exception):
+    """The broker could not accept the task (the run is already marked failed).
+    Lets the route map a queue outage to 503 without swallowing unrelated errors."""
+
+
+async def _heal_stale_runs(db: AsyncSession, user_id: str) -> None:
+    """Fail any of this user's 'running' rows older than the stale window. Runs
+    on BOTH the enqueue path (so a dead run can't 409-block forever) and the
+    read/poll path (so a zombie doesn't show as 'running' indefinitely)."""
     await db.execute(
         update(CampaignRun)
         .where(
@@ -111,6 +112,16 @@ async def enqueue_campaign_run(db: AsyncSession, user_id: str) -> str | None:
         .values(status="failed", finished_at=_utcnow(), error="run was interrupted")
     )
     await db.commit()
+
+
+async def enqueue_campaign_run(db: AsyncSession, user_id: str) -> str | None:
+    """Create a CampaignRun(running) and enqueue the worker task for it. Returns
+    the new run id, or None if the user already has a run in progress. The
+    concurrency guard is the partial unique index uq_campaign_runs_one_running
+    (DB-enforced — a SELECT-then-INSERT check alone races with the nightly
+    dispatcher). Raises QueueUnavailableError if the broker is down, after
+    marking the run failed. Shared by the run-now route and the nightly dispatcher."""
+    await _heal_stale_runs(db, user_id)
 
     run = CampaignRun(user_id=user_id, status="running")
     db.add(run)
@@ -125,14 +136,14 @@ async def enqueue_campaign_run(db: AsyncSession, user_id: str) -> str | None:
 
     try:
         run_user_campaign.delay(user_id, run.id)
-    except Exception:
+    except Exception as exc:
         # Broker down: never leave the row 'running' with no worker coming.
         logger.exception("enqueue failed for user %s (queue unavailable)", user_id)
         run.status = "failed"
         run.finished_at = _utcnow()
         run.error = "could not queue the run; please try again later"
         await db.commit()
-        raise
+        raise QueueUnavailableError("could not queue the campaign run") from exc
     return run.id
 
 

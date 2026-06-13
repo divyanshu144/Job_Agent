@@ -117,8 +117,12 @@ async def test_enqueue_queue_failure_marks_run_failed_and_raises(session):
     u = await make_user(session, email="brokerdown@example.com")
     await session.commit()
 
+    from backend.services.campaign_run import QueueUnavailableError
+
     with patch("backend.tasks.run_user_campaign.delay", side_effect=RuntimeError("broker down")):
-        with pytest.raises(RuntimeError):
+        # The broker failure surfaces as QueueUnavailableError (#9), so the
+        # run-now route can map it to 503 without swallowing unrelated errors.
+        with pytest.raises(QueueUnavailableError):
             await enqueue_campaign_run(session, u.id)
 
     runs = (

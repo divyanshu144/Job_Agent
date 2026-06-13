@@ -111,12 +111,13 @@ async def run_now(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """Enqueue this user's campaign. 409 if one is already running; 503 if the
-    queue is down (the run is already marked failed by the service)."""
-    from backend.services.campaign_run import enqueue_campaign_run
+    queue is down (the run is already marked failed by the service). Any other
+    failure propagates as a 500 rather than being mislabeled a queue outage."""
+    from backend.services.campaign_run import QueueUnavailableError, enqueue_campaign_run
 
     try:
         run_id = await enqueue_campaign_run(db, current_user.id)
-    except Exception:
+    except QueueUnavailableError:
         raise HTTPException(
             status_code=503, detail="The campaign queue is unavailable. Please try again later."
         )
@@ -130,6 +131,11 @@ async def my_campaign_runs(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[CampaignRunResponse]:
+    from backend.services.campaign_run import _heal_stale_runs
+
+    # Reflect zombie runs (dead worker / lost message) as failed here too, so the
+    # dashboard poll doesn't show a run as 'running' forever until the next enqueue.
+    await _heal_stale_runs(db, current_user.id)
     rows = (
         (
             await db.execute(

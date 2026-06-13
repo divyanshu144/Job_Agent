@@ -52,14 +52,20 @@ async def get_or_create_settings(db: AsyncSession, user_id: str) -> UserCampaign
         db.add(row)
         try:
             await db.commit()
-        except IntegrityError:
-            # Lost a create race (run-now vs nightly dispatch): use the winner's row.
+        except IntegrityError as exc:
+            # A lost create race (run-now vs nightly dispatch) leaves the winner's
+            # row to re-select. But the same IntegrityError can mean an FK
+            # violation (e.g. the user was deleted) — then there is no row, and
+            # re-raising the ORIGINAL error surfaces the true cause instead of a
+            # misleading NoResultFound.
             await db.rollback()
             row = (
                 await db.execute(
                     select(UserCampaignSettings).where(UserCampaignSettings.user_id == user_id)
                 )
-            ).scalar_one()
+            ).scalar_one_or_none()
+            if row is None:
+                raise exc
         else:
             await db.refresh(row)
     return row

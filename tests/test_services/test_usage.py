@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from sqlalchemy import select
 
 import backend.models  # noqa: F401
@@ -93,3 +94,13 @@ async def test_check_user_caps_disabled_blocks(session):
     cap = await check_user_caps(session, u.id)
     assert cap.allowed is False
     assert "disabled" in (cap.reason or "")
+
+
+async def test_get_or_create_settings_reraises_fk_violation(session):
+    """#7: a NON-race IntegrityError (FK violation — user does not exist) must
+    surface as the original error, not be masked as NoResultFound by the
+    re-select assuming a lost dup-key race."""
+    from sqlalchemy.exc import IntegrityError
+
+    with pytest.raises(IntegrityError):
+        await get_or_create_settings(session, "ghost-user-does-not-exist")
