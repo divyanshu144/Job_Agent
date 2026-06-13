@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  check:
+    # Mirrors `make check` (fmt-check + lint + test). The suite spins a real
+    # Postgres via testcontainers, so Docker must be available — ubuntu-latest
+    # provides it. LLM calls are mocked and integration tests are deselected by
+    # default (pyproject `-m 'not integration'`), so no ANTHROPIC_API_KEY is needed.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11" # matches the Dockerfile (python:3.11-slim)
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Ruff format check
+        run: ruff format --check backend/ tests/
+
+      - name: Ruff lint
+        run: ruff check backend/ tests/
+
+      - name: Mypy
+        run: mypy backend/
+
+      - name: Schema drift (backend Pydantic vs frontend TS)
+        run: python scripts/check_schema_drift.py
+
+      - name: Pytest with coverage
+        # cov + cov-fail-under=70 + `-m 'not integration'` come from pyproject addopts.
+        run: pytest tests/ -v
