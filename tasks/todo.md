@@ -125,14 +125,14 @@ Celery not shared). Redis storage_uri is the V2 upgrade if needed.
 - [ ] LATER cleanup pass (per user): #5, #7, #8, #9, #10 — untouched
 
 ## Cleanup pass (2026-06-13) — findings #5 #7 #8 #9 #10
-- [ ] #7 usage.get_or_create_settings: scalar_one_or_none after rollback; re-raise
+- [x] #7 usage.get_or_create_settings: scalar_one_or_none after rollback; re-raise
       the ORIGINAL IntegrityError when still no row (FK violation != dup race)
-- [ ] #8 extract _heal_stale_runs(db, user_id); call from enqueue AND my_campaign_runs
+- [x] #8 extract _heal_stale_runs(db, user_id); call from enqueue AND my_campaign_runs
       so a zombie 'running' row doesn't show forever on the read/poll path
-- [ ] #9 QueueUnavailableError raised by enqueue on .delay() failure; run-now
+- [x] #9 QueueUnavailableError raised by enqueue on .delay() failure; run-now
       catches ONLY that -> 503; other exceptions propagate (500), not mislabeled
-- [ ] #5 Campaign.tsx poll: 429 tick must NOT burn the attempts budget (decrement
+- [x] #5 Campaign.tsx poll: 429 tick must NOT burn the attempts budget (decrement
       before the skip-return) so a rate-limited-but-healthy run isn't timed out
-- [ ] #10 one frontend error convention: shared errorMessage() helper; replace the
+- [x] #10 one frontend error convention: shared errorMessage() helper; replace the
       unsafe (err as Error).message casts (undefined on non-Error throw)
-- [ ] TDD red->green for #7/#8/#9; make check + npm build green
+- [x] TDD red->green for #7/#8/#9; make check + npm build green

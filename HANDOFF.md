@@ -1,7 +1,7 @@
 # Session Handoff
 
 **Updated:** 2026-06-13
-**Branch:** main — clean, fully pushed (origin/main = `a4f733b`)
+**Branch:** main — clean, fully pushed (origin/main = `87117f2`)
 
 ---
 
@@ -41,10 +41,13 @@ non-running runs; dispatch rolls back after a per-user failure; the
 create_all stamp heuristic stamps to the matching revision (0006 when the
 0007 indexes are missing) instead of blindly to head. 482 passed, 82.11%.
 
-Deferred cleanup pass (user-ordered, NOT started): findings #5 (429 burns
-poll attempts budget), #7 (usage IntegrityError NoResultFound mask), #8
-(zombie 'running' visible in run history until next enqueue), #9 (run-now
-503 mislabels non-queue errors), #10 (ApiError convention half-migrated).
+Cleanup pass DONE — `3cdfe4d` (backend #7/#8/#9): get_or_create_settings
+re-raises the original IntegrityError on FK violation; _heal_stale_runs
+shared by enqueue + GET /campaign/runs (zombies show failed on the poll
+path); QueueUnavailableError so run-now 503s ONLY on a broker outage.
+`87117f2` (frontend #5/#10): 429 poll ticks don't burn the timeout budget;
+shared errorMessage() helper replaces unsafe (err as Error).message casts.
+486 passed, 82.25%. All review findings (both rounds) now closed.
 
 ## Next Action
 
