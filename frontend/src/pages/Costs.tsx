@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { api, errorMessage } from "../api/client";
 import type { CostSummary, RunCost } from "../types";
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -24,7 +24,7 @@ export function Costs() {
   useEffect(() => {
     Promise.all([api.getCostSummary(), api.getCostRuns()])
       .then(([s, r]) => { setSummary(s); setRuns(r); })
-      .catch((e) => setError((e as Error).message));
+      .catch((e) => setError(errorMessage(e, "Failed to load costs")));
   }, []);
 
   const agentTotals = runs.flatMap((r) => r.agents).reduce<Record<string, { calls: number; cost_usd: number; total_latency: number }>>((acc, a) => {

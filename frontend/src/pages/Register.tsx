@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { errorMessage } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 
 export function Register() {
@@ -22,7 +23,7 @@ export function Register() {
       await register(email, password, inviteToken.trim() || undefined);
       navigate("/");
     } catch (err) {
-      setError((err as Error).message);
+      setError(errorMessage(err, "Registration failed"));
     } finally {
       setLoading(false);
     }

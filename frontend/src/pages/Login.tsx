@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { errorMessage } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 
 export function Login() {
@@ -18,7 +19,7 @@ export function Login() {
       await login(email, password);
       navigate("/");
     } catch (err) {
-      setError((err as Error).message);
+      setError(errorMessage(err, "Login failed"));
     } finally {
       setLoading(false);
     }

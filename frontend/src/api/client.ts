@@ -13,6 +13,15 @@ export class ApiError extends Error {
   }
 }
 
+// The one way to turn a caught value into display text. Safe for non-Error
+// throws (a bare `(err as Error).message` is `undefined` then). Pair with
+// `err instanceof ApiError && err.status === ...` when you need to branch.
+export function errorMessage(err: unknown, fallback = "Something went wrong"): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string" && err.trim()) return err;
+  return fallback;
+}
+
 function _detailToMessage(detail: unknown, fallback: string): string {
   if (typeof detail === "string" && detail.trim()) return detail;
   if (Array.isArray(detail)) {

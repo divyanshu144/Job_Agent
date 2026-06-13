@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { api, errorMessage } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import type {
   ProfileResponse,
@@ -34,10 +34,6 @@ const emptyLink = (): ProfileReviewLink => ({
   label: "",
   url: "",
 });
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 function parseReviewData(raw: string | undefined): ProfileReviewData {
   if (!raw) return emptyReviewData();

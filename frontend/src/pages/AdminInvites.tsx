@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../api/client";
+import { api, errorMessage } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import type { InviteResponse } from "../types";
 
@@ -22,7 +22,7 @@ export function AdminInvites() {
       const result = await api.createInvite(email);
       setInvite(result);
     } catch (err) {
-      setError((err as Error).message);
+      setError(errorMessage(err, "Failed to create invite"));
     } finally {
       setLoading(false);
     }

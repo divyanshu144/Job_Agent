@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { api, ApiError } from "../api/client";
+import { api, ApiError, errorMessage } from "../api/client";
 import type { CampaignRun, TargetCompany, AnalysisSummary } from "../types";
 
 const STATUS_BADGE: Record<string, string> = {
@@ -109,11 +109,15 @@ export function Campaign() {
         }
       } catch (err) {
         // 429 (own rate limit, e.g. several tabs polling) is transient — skip
-        // this tick and keep polling instead of abandoning the run.
-        if (err instanceof ApiError && err.status === 429) return;
+        // this tick WITHOUT charging the attempts budget, so a rate-limited but
+        // healthy run isn't falsely timed out.
+        if (err instanceof ApiError && err.status === 429) {
+          attemptsRef.current -= 1;
+          return;
+        }
         clearInterval(pollRef.current!);
         setActiveRunId(null);
-        setError(err instanceof Error ? err.message : "Polling failed");
+        setError(errorMessage(err));
       }
     }, 3000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
@@ -131,7 +135,7 @@ export function Campaign() {
       const latest = await api.getCampaignRuns().catch(() => null);
       if (latest) setRuns(latest);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to start run";
+      const msg = errorMessage(err, "Failed to start run");
       // 409 is expected when a run is in flight — informational, not an error.
       if (err instanceof ApiError && err.status === 409) {
         setNotice(msg);
@@ -153,7 +157,7 @@ export function Campaign() {
       setName("");
       setSlug("");
     } catch (err) {
-      setTargetError(err instanceof Error ? err.message : "Failed to add target");
+      setTargetError(errorMessage(err, "Failed to add target"));
     }
   }
 
@@ -162,7 +166,7 @@ export function Campaign() {
       const updated = await api.updateTarget(t.id, !t.active);
       setTargets((prev) => prev.map((x) => (x.id === t.id ? updated : x)));
     } catch (err) {
-      setTargetError(err instanceof Error ? err.message : "Failed to update target");
+      setTargetError(errorMessage(err, "Failed to update target"));
     }
   }
 
@@ -171,7 +175,7 @@ export function Campaign() {
       await api.deleteTarget(id);
       setTargets((prev) => prev.filter((x) => x.id !== id));
     } catch (err) {
-      setTargetError(err instanceof Error ? err.message : "Failed to delete target");
+      setTargetError(errorMessage(err, "Failed to delete target"));
     }
   }
 
