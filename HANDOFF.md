@@ -1,7 +1,7 @@
 # Session Handoff
 
-**Updated:** 2026-06-12 (post-review)
-**Branch:** main — clean, fully pushed (origin/main = `3a148dd`)
+**Updated:** 2026-06-13
+**Branch:** main — clean, fully pushed (origin/main = `a4f733b`)
 
 ---
 
@@ -29,6 +29,22 @@ unique index, migration 0007), zombie-run self-heal + queue-failure handling
 (503), jwt-default CRITICAL startup signal, llm_calls(user_id,created_at)
 index, settings create-race fix, cap-stop reason on completed runs, ApiError
 status codes (409 branch, 429-tolerant polling). 472 passed, 82.04%.
+
+**Second review round (Fable 5) — top 5 findings FIXED, TDD:**
+`3fa0eb9` (batch 1): hard tenant boundary — regular users are refused
+("complete your profile first", zero LLM spend) instead of ever falling back
+to the shared profile_yaml_path/cv_path (admin-only); GET /profile mints the
+per-user starter row; refresh rebuilds regular users from OWN data only;
+repeat campaign runs count existing materials as drafted (already_generated
+event code). `a4f733b` (batch 2): late queue messages can't re-execute
+non-running runs; dispatch rolls back after a per-user failure; the
+create_all stamp heuristic stamps to the matching revision (0006 when the
+0007 indexes are missing) instead of blindly to head. 482 passed, 82.11%.
+
+Deferred cleanup pass (user-ordered, NOT started): findings #5 (429 burns
+poll attempts budget), #7 (usage IntegrityError NoResultFound mask), #8
+(zombie 'running' visible in run history until next enqueue), #9 (run-now
+503 mislabels non-queue errors), #10 (ApiError convention half-migrated).
 
 ## Next Action
 

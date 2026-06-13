@@ -116,3 +116,10 @@ Celery not shared). Redis storage_uri is the V2 upgrade if needed.
 - [ ] 10. execute_campaign_run: cap-stop reason recorded on completed run
 - [ ] tests: cache scoping/dup, enqueue stale+queue-failure, run reason,
       jwt guard, startup head 0007; make check + npm build green
+
+## Second review round fixes (2026-06-13)
+- [x] BATCH 1 (`3fa0eb9`): #1 tenant boundary (refuse, zero-spend, admin-only
+      fallback, starter profile on GET, own-data refresh) + #6 already_generated
+- [x] BATCH 2 (`a4f733b`): #2 non-running run no-op, #3 dispatch rollback,
+      #4 stamp-to-matching-revision (0006 when 0007 indexes missing)
+- [ ] LATER cleanup pass (per user): #5, #7, #8, #9, #10 — untouched
