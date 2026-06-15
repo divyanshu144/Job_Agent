@@ -174,7 +174,7 @@ scripts/docker_smoke.sh
 
 More details: `docs/docker.md`.
 
-## Production-Style Docker Notes
+## Docker Notes
 
 `docker-compose.prod.yml` is a production-style override for local validation, not a complete production deployment. It:
 
