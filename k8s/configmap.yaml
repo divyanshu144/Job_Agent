@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobfit-config
+  namespace: jobfit
+data:
+  APP_ENV: "development"
+  API_PREFIX: "/api"
+  CORS_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080"
+  DB_SSL: "false"
+  REDIS_URL: "redis://redis:6379/0"
+  CELERY_BROKER_URL: "redis://redis:6379/0"
+  CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+  CV_PATH: "/app/data/cv.pdf"
+  PROFILE_YAML_PATH: "/app/data/candidate_profile.yaml"
+  ENABLE_WORKATASTARTUP_SOURCE: "false"
+  LOG_LEVEL: "INFO"
+  ANTHROPIC_MAX_RETRIES: "3"
+  JWT_EXPIRE_MINUTES: "10080"
+  COOKIE_SECURE: "false"

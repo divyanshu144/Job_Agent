@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beat
+  namespace: jobfit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: beat
+  template:
+    metadata:
+      labels:
+        app: beat
+    spec:
+      containers:
+        - name: beat
+          image: jobfit-beat:local
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: jobfit-config
+            - secretRef:
+                name: jobfit-secrets
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: jobfit-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jobfit-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: jobfit-secrets
+                  key: POSTGRES_DB
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false

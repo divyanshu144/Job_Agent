@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: jobfit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+        - name: worker
+          image: jobfit-worker:local
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: jobfit-config
+            - secretRef:
+                name: jobfit-secrets
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: jobfit-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jobfit-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: jobfit-secrets
+                  key: POSTGRES_DB
+            - name: DATABASE_URL
+              value: postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - celery -A backend.celery_app:celery_app inspect ping --timeout=10 >/dev/null
+            initialDelaySeconds: 90
+            periodSeconds: 60
+            timeoutSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
