@@ -8,6 +8,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.config import settings
 from backend.database import get_db
 from backend.models import InviteToken, User
 from backend.schemas import InviteCreate, InviteResponse, UserCreate, UserLogin, UserResponse
@@ -79,6 +80,7 @@ async def register(
         token,
         httponly=True,
         samesite="lax",
+        secure=settings.cookie_secure,
         max_age=60 * 60 * 24 * 7,
     )
     return UserResponse.model_validate(user)
@@ -106,6 +108,7 @@ async def login(
         token,
         httponly=True,
         samesite="lax",
+        secure=settings.cookie_secure,
         max_age=60 * 60 * 24 * 7,
     )
     return UserResponse.model_validate(user)
@@ -113,7 +116,7 @@ async def login(
 
 @router.post("/auth/logout")
 async def logout(response: Response) -> dict[str, bool]:
-    response.delete_cookie("access_token")
+    response.delete_cookie("access_token", secure=settings.cookie_secure, samesite="lax")
     return {"ok": True}
 
 

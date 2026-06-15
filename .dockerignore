@@ -30,8 +30,14 @@ data/*.db
 data/*.pdf
 data/candidate_profile.yaml
 
-# Tests + docs aren't needed in the runtime image
+# Tests + docs aren't needed in the runtime image. Keep backend/prompts/*.md:
+# those Markdown files are runtime LLM prompts loaded by BaseAgent.
 tests/
 docs/
 tasks/
 *.md
+!backend/prompts/*.md
+
+# Do not bake a local real resume into the image. The Dockerfile copies the
+# tracked example and creates a non-PII fallback assets/resume.tex instead.
+assets/resume.tex

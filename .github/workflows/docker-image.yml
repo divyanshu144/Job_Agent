@@ -7,12 +7,26 @@ on:
     branches: [ "main" ]
 
 jobs:
-
-  build:
-
+  docker:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+      - uses: actions/checkout@v4
+
+      - name: Validate Compose config
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config
+
+      - name: Build API target
+        run: docker build --target api --tag jobfit-api:ci .
+
+      - name: Build worker target
+        run: docker build --target worker --tag jobfit-worker:ci .
+
+      - name: Build beat target
+        run: docker build --target beat --tag jobfit-beat:ci .
+
+      - name: Build frontend image
+        run: docker build --tag jobfit-frontend:ci ./frontend
+
+      - name: Docker smoke test
+        run: scripts/docker_smoke.sh

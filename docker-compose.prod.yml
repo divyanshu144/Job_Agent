@@ -1,0 +1,48 @@
+# Production-style override for `docker-compose.yml`.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml config
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This file intentionally avoids local bind mounts and keeps db/redis/api off
+# host ports. Frontend remains the external entry point and proxies /api/* to api.
+services:
+  db:
+    ports: !reset []
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-jobfit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jobfit}
+      POSTGRES_DB: ${POSTGRES_DB:-jobfit}
+
+  redis:
+    ports: !reset []
+
+  api:
+    env_file: !reset []
+    ports: !reset []
+    environment:
+      APP_ENV: production
+      COOKIE_SECURE: "true"
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://example.com}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-jobfit}:${POSTGRES_PASSWORD:-jobfit}@db:5432/${POSTGRES_DB:-jobfit}
+      REDIS_URL: redis://redis:6379/0
+    volumes: !reset []
+
+  worker:
+    env_file: !reset []
+    environment:
+      APP_ENV: production
+      COOKIE_SECURE: "true"
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://example.com}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-jobfit}:${POSTGRES_PASSWORD:-jobfit}@db:5432/${POSTGRES_DB:-jobfit}
+      REDIS_URL: redis://redis:6379/0
+    volumes: !reset []
+
+  beat:
+    env_file: !reset []
+    environment:
+      APP_ENV: production
+      COOKIE_SECURE: "true"
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://example.com}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-jobfit}:${POSTGRES_PASSWORD:-jobfit}@db:5432/${POSTGRES_DB:-jobfit}
+      REDIS_URL: redis://redis:6379/0

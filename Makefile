@@ -21,4 +21,4 @@ eval-consistency:
 	pytest tests/test_evals/test_consistency.py -v -m integration
 
 docker-up:
-	docker-compose up --build
+	docker compose up --build

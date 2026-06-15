@@ -38,7 +38,12 @@ def _check_jwt_secret() -> None:
     boot — local dev legitimately runs on the default)."""
     from backend.config import Settings
 
-    if settings.jwt_secret == Settings.model_fields["jwt_secret"].default:
+    default_secret = Settings.model_fields["jwt_secret"].default
+    if settings.jwt_secret == default_secret:
+        if settings.is_production:
+            raise RuntimeError(
+                "JWT_SECRET must be set to a non-default value when APP_ENV=production"
+            )
         logging.getLogger(__name__).critical(
             "jwt_secret is the published default — session tokens are forgeable. "
             "Set JWT_SECRET before exposing this deployment."
@@ -70,7 +75,7 @@ app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

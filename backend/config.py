@@ -11,18 +11,21 @@ class Settings(BaseSettings):
     )
 
     anthropic_api_key: str = ""
+    app_env: str = "development"
     # Postgres via the asyncpg driver. Local default matches docker-compose.
     database_url: str = "postgresql+asyncpg://jobfit:jobfit@localhost:5432/jobfit"
     # Managed Postgres (Neon/Supabase) needs TLS. Off locally; set DB_SSL=true in
     # those envs and the engine passes connect_args={"ssl": True} to asyncpg.
     db_ssl: bool = False
     api_prefix: str = "/api"
+    cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:8080"
     log_level: str = "INFO"
     anthropic_max_retries: int = 3  # explicit SDK retry budget on LLM calls
     cv_path: str = "data/cv.pdf"
     profile_yaml_path: str = "data/candidate_profile.yaml"
     jwt_secret: str = "change-me-in-production-use-long-random-string"
     jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
+    cookie_secure: bool = False
     hunter_api_key: str = ""
     # Gmail OAuth (server-side draft creation; NOT the Claude.ai Gmail MCP).
     gmail_client_id: str = ""
@@ -36,6 +39,14 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = ""  # falls back to redis_url when empty
     celery_result_backend: str = ""  # falls back to redis_url when empty
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.lower() in {"prod", "production"}
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 settings = Settings()
