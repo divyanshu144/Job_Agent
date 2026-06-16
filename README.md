@@ -17,17 +17,6 @@ Users create a profile from CV/profile data, paste a job description, and receiv
 
 The app also includes job discovery, saved jobs, contact discovery, cold-email drafting, admin invite/cost views, and regular-user campaign runs backed by Redis/Celery.
 
-## Why This Is Not A Simple ChatGPT Wrapper
-
-- The AI flow is a persisted multi-step workflow: `Analysis` rows track runs and `JobResult` rows store one result per agent.
-- Agents return structured Pydantic outputs, with one JSON/schema self-correction retry in `backend/agents/base.py`.
-- The pipeline is split into evaluate and generate phases in `backend/services/orchestrator.py`.
-- The UI receives server-sent events while agents complete.
-- LLM calls are recorded in `LLMCall` for cost, latency, model, cache, run, analysis, and user attribution.
-- `PipelineEvent` records spans, failures, retries, and tool events.
-- Redis/Celery power campaign/background execution through `backend/celery_app.py` and `backend/tasks.py`.
-- Docker and local Kubernetes deployments run the full stack: API, frontend, Postgres, Redis, worker, and beat.
-
 ## Core Features
 
 - **Profile setup**: upload CV, edit profile data, and build a compact profile for agent prompts.
@@ -185,7 +174,7 @@ scripts/docker_smoke.sh
 
 More details: `docs/docker.md`.
 
-## Production-Style Docker Notes
+## Docker Notes
 
 `docker-compose.prod.yml` is a production-style override for local validation, not a complete production deployment. It:
 
@@ -323,25 +312,3 @@ CI workflows:
 - Docker production-style config avoids automatically reading a developer `.env`.
 - Kubernetes manifests include `k8s/secret.example.yaml` with placeholders only.
 
-## Current Limitations
-
-- This is validated for local/demo Docker and local Kubernetes, not a complete cloud production deployment.
-- No Helm, Terraform, EKS/GKE/AKS, managed Postgres, or managed Redis is included.
-- In-cluster local Kubernetes Postgres has a PVC but no backup/restore strategy.
-- Redis in local Kubernetes is a simple non-persistent Deployment.
-- Real `assets/resume.tex` is intentionally not mounted into Kubernetes yet; the image uses the safe fallback generated from `assets/resume.example.tex`.
-- External integrations depend on optional API credentials and may degrade gracefully when unset.
-- Evaluation coverage exists but is not a full production-grade LLM eval suite.
-
-## Roadmap
-
-- Add a controlled Kubernetes strategy for admin resume templates without committing PII.
-- Add OpenAPI TypeScript client generation.
-- Add Playwright smoke tests for critical UI flows.
-- Expand LLM eval datasets and regression checks.
-- Add stronger global/user LLM cost caps and alerting.
-- Add production deployment docs for a chosen cloud target only when implemented.
-
-## Interview / Recruiter Summary
-
-JobFit Agent demonstrates a full-stack AI product architecture: a FastAPI/Postgres backend, React frontend, structured multi-agent Anthropic pipeline, SSE streaming, persistent workflow state, cost/trace ledgers, Redis/Celery background work, Docker image hardening, and a local Kubernetes deployment. The strongest engineering parts are the two-phase AI workflow, Pydantic-enforced LLM contracts with retries, cost observability, and practical deployment separation between API, worker, beat, database, queue, and frontend.
