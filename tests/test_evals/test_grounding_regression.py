@@ -27,8 +27,7 @@ def test_resume_tailorer_omits_unsupported_fixture_claims():
         output,
         PriorOutputs(),
         source_text=(
-            "## CV Text\nSynthetic Candidate. Skills: Python. "
-            "Experience: Built Python APIs."
+            "## CV Text\nSynthetic Candidate. Skills: Python. Experience: Built Python APIs."
         ),
     )
 

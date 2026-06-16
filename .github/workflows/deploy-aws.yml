@@ -134,7 +134,7 @@ jobs:
             --cluster "$ECS_CLUSTER" \
             --launch-type FARGATE \
             --task-definition "$TASK_DEFINITION" \
-            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUPS],assignPublicIp=DISABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUPS],assignPublicIp=ENABLED}" \
             --overrides '{"containerOverrides":[{"name":"api","command":["alembic","upgrade","head"]}]}' \
             --query 'tasks[0].taskArn' \
             --output text)

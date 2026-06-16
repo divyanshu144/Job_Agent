@@ -44,9 +44,7 @@ class EvalRunResult:
     failed_cases: int
     cases: list[EvalCaseResult]
     prompt_versions: list[dict[str, str]] = field(default_factory=list)
-    generated_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    generated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def model_dump(self) -> dict[str, Any]:
         return {
@@ -79,9 +77,7 @@ def run_deterministic_eval(
         total_cases=len(results),
         failed_cases=sum(1 for case in results if not case.passed),
         cases=results,
-        prompt_versions=[
-            prompt_version.model_dump() for prompt_version in eval_prompt_versions()
-        ],
+        prompt_versions=[prompt_version.model_dump() for prompt_version in eval_prompt_versions()],
     )
     if report_path is not None:
         write_json_report(run, report_path)

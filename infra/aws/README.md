@@ -156,6 +156,8 @@ The production frontend image uses `frontend/nginx.prod.conf`, which serves stat
 
 AWS task definitions set `RUN_MIGRATIONS_ON_STARTUP=false` for the API service. The main deploy workflow runs Alembic as a one-off ECS task before updating the API service, then verifies that each ECS service is attached to the expected task family and CloudWatch log stream.
 
+The staging migration task uses `assignPublicIp=ENABLED`, matching the staging ECS services. If you move ECS tasks to private subnets without public IPs, add NAT or VPC endpoints for SSM Parameter Store, ECR, and CloudWatch Logs before switching migrations to `assignPublicIp=DISABLED`.
+
 For manual recovery or out-of-band schema changes, use the provided GitHub workflow:
 
 ```bash
@@ -169,11 +171,11 @@ aws ecs run-task \
   --cluster jobfit-cluster \
   --launch-type FARGATE \
   --task-definition jobfit-api \
-  --network-configuration 'awsvpcConfiguration={subnets=[subnet-REPLACE_ME],securityGroups=[sg-REPLACE_ME],assignPublicIp=DISABLED}' \
+  --network-configuration 'awsvpcConfiguration={subnets=[subnet-REPLACE_ME],securityGroups=[sg-REPLACE_ME],assignPublicIp=ENABLED}' \
   --overrides '{"containerOverrides":[{"name":"api","command":["alembic","upgrade","head"]}]}'
 ```
 
-Replace subnet and security group IDs with private ECS subnet/security group values that can reach RDS.
+Replace subnet and security group IDs with ECS subnet/security group values that can reach RDS and AWS service endpoints.
 
 ## Task Definition Templates
 
