@@ -104,9 +104,13 @@ def _llm_provider_status() -> str:
 
 
 @app.get("/health")
-@limiter.exempt  # type: ignore[misc]
+@limiter.exempt  # type: ignore
 async def health(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """Readiness probe: verifies the database answers, not just that the process is up."""
+    return await _health_response(db)
+
+
+async def _health_response(db: AsyncSession) -> JSONResponse:
     provider = _llm_provider_status()
     try:
         await db.execute(text("SELECT 1"))
@@ -125,7 +129,7 @@ async def health(db: AsyncSession = Depends(get_db)) -> JSONResponse:
 
 
 @app.get(f"{settings.api_prefix}/health", include_in_schema=False)
-@limiter.exempt  # type: ignore[misc]
+@limiter.exempt  # type: ignore
 async def api_prefixed_health(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """ALB/public health alias for deployments that route /api/* to the API."""
-    return await health(db)
+    return await _health_response(db)

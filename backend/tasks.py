@@ -49,13 +49,13 @@ async def task_session() -> AsyncGenerator[AsyncSession, None]:
         await engine.dispose()
 
 
-@celery_app.task(name="health.ping")  # type: ignore[misc]  # celery is untyped (ignore_missing_imports)
+@celery_app.task(name="health.ping")  # type: ignore  # celery is untyped
 def ping() -> str:
     """Trivial task — proves the worker executes queued work end to end."""
     return "pong"
 
 
-@celery_app.task(name="health.db_probe")  # type: ignore[misc]  # celery is untyped
+@celery_app.task(name="health.db_probe")  # type: ignore  # celery is untyped
 def db_probe() -> int:
     """End-to-end proof of the async-in-task pattern: fresh engine + session,
     `SELECT 1`, via asyncio.run. Returns 1."""
@@ -67,7 +67,7 @@ async def _db_probe() -> int:
         return int((await db.execute(text("SELECT 1"))).scalar_one())
 
 
-@celery_app.task(name="campaign.run_user_campaign")  # type: ignore[misc]  # celery is untyped
+@celery_app.task(name="campaign.run_user_campaign")  # type: ignore  # celery is untyped
 def run_user_campaign(user_id: str, run_id: str) -> str:
     """Execute a regular-tier campaign run for one user. The CampaignRun row
     (run_id) is pre-created by the route. Returns the final run status."""
@@ -91,7 +91,7 @@ async def _run_user_campaign(user_id: str, run_id: str) -> str:
         await app_engine.dispose()
 
 
-@celery_app.task(name="campaign.dispatch_nightly")  # type: ignore[misc]  # celery is untyped
+@celery_app.task(name="campaign.dispatch_nightly")  # type: ignore  # celery is untyped
 def dispatch_nightly_campaigns() -> dict[str, int]:
     """Beat-scheduled: enqueue one campaign run per eligible user. Only queues
     work (no orchestrator/LLM here), so no app-engine disposal needed."""
