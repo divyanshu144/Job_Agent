@@ -171,6 +171,71 @@ async def test_tracked_call_handles_none_cache_usage(db_session):
 
 
 @pytest.mark.asyncio
+async def test_tracked_call_records_prompt_version_metadata(db_session):
+    from unittest.mock import AsyncMock, MagicMock
+
+    from sqlalchemy import select
+
+    from backend.models import LLMCall
+    from backend.services.instrumentation import tracked_call
+
+    mock_usage = MagicMock()
+    mock_usage.input_tokens = 50
+    mock_usage.output_tokens = 10
+    mock_usage.cache_creation_input_tokens = 0
+    mock_usage.cache_read_input_tokens = 0
+
+    mock_msg = MagicMock()
+    mock_msg.usage = mock_usage
+
+    mock_client = MagicMock()
+    mock_client.messages.create = AsyncMock(return_value=mock_msg)
+
+    await tracked_call(
+        mock_client,
+        "job_parser",
+        "claude-haiku-4-5-20251001",
+        db=db_session,
+        prompt_name="job_parser",
+        prompt_hash="b" * 64,
+        prompt_version="sha256:" + "b" * 12,
+        max_tokens=256,
+        system="sys",
+        messages=[{"role": "user", "content": "hi"}],
+    )
+    await db_session.commit()
+
+    row = (await db_session.execute(select(LLMCall))).scalar_one()
+    assert row.prompt_name == "job_parser"
+    assert row.prompt_hash == "b" * 64
+    assert row.prompt_version == "sha256:" + "b" * 12
+
+
+@pytest.mark.asyncio
+async def test_log_batch_llm_call_records_prompt_version_metadata(db_session):
+    from sqlalchemy import select
+
+    from backend.models import LLMCall
+    from backend.services.instrumentation import log_batch_llm_call
+
+    await log_batch_llm_call(
+        db_session,
+        "stage2_haiku_batch",
+        "claude-haiku-4-5-20251001",
+        input_tokens=100,
+        output_tokens=20,
+        prompt_name="discovery_stage2",
+        prompt_hash="c" * 64,
+        prompt_version="sha256:" + "c" * 12,
+    )
+
+    row = (await db_session.execute(select(LLMCall))).scalar_one()
+    assert row.prompt_name == "discovery_stage2"
+    assert row.prompt_hash == "c" * 64
+    assert row.prompt_version == "sha256:" + "c" * 12
+
+
+@pytest.mark.asyncio
 async def test_tracked_call_increments_llm_calls_counter(mock_client):
     from prometheus_client import REGISTRY
 

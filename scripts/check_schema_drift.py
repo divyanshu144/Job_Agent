@@ -24,7 +24,11 @@ PAIRS = [
 
 def py_fields(name: str) -> set:
     m = re.search(rf"class {name}\(BaseModel\):(.*?)(?=\nclass |\Z)", PY, re.DOTALL)
-    return set(re.findall(r"^\s{4}(\w+)\s*:", m.group(1), re.MULTILINE)) - {"model_config"} if m else set()
+    if not m:
+        return set()
+    return set(re.findall(r"^\s{4}(\w+)\s*:", m.group(1), re.MULTILINE)) - {
+        "model_config"
+    }
 
 
 def ts_fields(name: str) -> set:

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { FileUp, RefreshCw, ShieldCheck, Sparkles, UserRound } from "lucide-react";
 import { api, errorMessage } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import type {
@@ -81,12 +82,12 @@ function ListEditor({
     <div className="space-y-2">
       <label className="text-sm font-medium text-slate-700">{label}</label>
       {items.map((value, index) => (
-        <div key={index} className="flex gap-2">
+        <div key={index} className="flex flex-col gap-2 sm:flex-row">
           <input
             value={value}
             onChange={(e) => update(index, e.target.value)}
             placeholder={placeholder}
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
           />
           <button
             type="button"
@@ -100,7 +101,7 @@ function ListEditor({
       <button
         type="button"
         onClick={() => onChange([...items, ""])}
-        className="text-sm font-medium text-blue-600 hover:text-blue-700"
+        className="text-sm font-medium text-indigo-700 hover:text-indigo-900"
       >
         Add {label.toLowerCase()}
       </button>
@@ -127,28 +128,33 @@ function ResumeUpload({
   };
 
   return (
-    <div className="rounded-xl border-2 border-dashed border-slate-300 bg-white p-5 text-center space-y-3">
-      <div>
-        <p className="text-sm font-medium text-slate-800">Upload resume</p>
-        <p className="text-xs text-slate-500">PDF or DOCX</p>
+    <div className="rounded-2xl border border-dashed border-indigo-200 bg-white p-6 text-center shadow-sm shadow-indigo-100/40">
+      <div className="mx-auto flex size-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 shadow-sm">
+        <FileUp className="size-5" />
       </div>
-      <label
-        className={`inline-flex cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-          uploading || disabled
-            ? "bg-slate-200 text-slate-400"
-            : "bg-slate-900 text-white hover:bg-slate-700"
-        }`}
-      >
-        {uploading ? "Uploading..." : "Choose File"}
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          className="hidden"
-          onChange={handleChange}
-          disabled={uploading || disabled}
-        />
-      </label>
+      <div className="mt-3">
+        <p className="text-sm font-semibold text-slate-950">Upload resume</p>
+        <p className="mt-1 text-xs text-slate-500">PDF or DOCX</p>
+      </div>
+      <div className="mt-4">
+        <label
+          className={`inline-flex cursor-pointer rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+            uploading || disabled
+              ? "bg-slate-200 text-slate-400"
+              : "bg-indigo-950 text-white hover:bg-indigo-900"
+          }`}
+        >
+          {uploading ? "Uploading..." : "Choose File"}
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            className="hidden"
+            onChange={handleChange}
+            disabled={uploading || disabled}
+          />
+        </label>
+      </div>
     </div>
   );
 }
@@ -206,61 +212,113 @@ function AdminProfileTools() {
   const busy = loading || uploading;
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Candidate Profile</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Admin profile tools remain available here.
-          </p>
-        </div>
-        <button
-          onClick={refresh}
-          disabled={busy}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? "Refreshing..." : "Refresh Profile"}
-        </button>
-      </div>
+    <div className="space-y-6">
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
+        <div className="grid gap-0 lg:grid-cols-[1fr_360px]">
+          <div className="space-y-6 p-6 md:p-8">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
+                  <ShieldCheck className="size-3.5" />
+                  Profile readiness
+                </div>
+                <h1 className="text-2xl font-bold text-slate-950 md:text-3xl">Candidate Profile</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                  Maintain the shared candidate profile and resume source used by admin workflows.
+                </p>
+              </div>
+              <button
+                onClick={refresh}
+                disabled={busy}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-950 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-900 disabled:opacity-50"
+              >
+                <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
+                {loading ? "Refreshing..." : "Refresh profile"}
+              </button>
+            </div>
 
-      <ResumeUpload uploading={uploading} disabled={loading} onUpload={upload} />
-      {uploadSuccess && <p className="text-sm font-medium text-green-600">Resume uploaded.</p>}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-xs font-medium text-emerald-700">Profile status</p>
+                <p className="mt-2 text-sm font-semibold text-emerald-950">{profile ? "Loaded" : "Waiting"}</p>
+              </div>
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                <p className="text-xs font-medium text-indigo-700">Resume text</p>
+                <p className="mt-2 text-sm font-semibold text-indigo-950">{profile?.cv_text ? "Available" : "Missing"}</p>
+              </div>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <p className="text-xs font-medium text-amber-700">Last refresh</p>
+                <p className="mt-2 truncate text-sm font-semibold text-amber-950">
+                  {profile ? new Date(profile.last_refreshed_at).toLocaleDateString() : "Not yet"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <aside className="border-t border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-emerald-50 p-6 text-slate-950 lg:border-l lg:border-t-0 md:p-8">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-indigo-950 text-white shadow-sm">
+                <UserRound className="size-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-950">Resume source</p>
+                <p className="text-xs text-slate-500">Used for matching and generation</p>
+              </div>
+            </div>
+            <div className="mt-6 rounded-2xl border border-indigo-100 bg-white/70 p-4 shadow-inner shadow-indigo-100/40">
+              <ResumeUpload uploading={uploading} disabled={loading} onUpload={upload} />
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      {uploadSuccess && (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+          Resume uploaded.
+        </p>
+      )}
+      {error && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+      )}
 
       {profile && (
-        <>
+        <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
           {profile.warnings.length > 0 && (
-            <div className="space-y-1">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 lg:col-span-2">
               {profile.warnings.map((warning, index) => (
-                <p key={index} className="text-xs italic text-slate-500">
+                <p key={index} className="text-xs font-medium text-amber-800">
                   {warning}
                 </p>
               ))}
             </div>
           )}
 
-          <section>
-            <h2 className="mb-2 text-xs font-semibold uppercase text-slate-500">YAML Profile</h2>
-            <pre className="max-h-64 overflow-auto rounded border bg-slate-50 p-3 text-xs">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-3 flex items-center gap-2">
+              <Sparkles className="size-4 text-indigo-600" />
+              <h2 className="text-sm font-semibold text-slate-800">YAML Profile</h2>
+            </div>
+            <pre className="max-h-72 overflow-auto rounded-xl border border-slate-200 bg-[#111827] p-4 text-xs leading-5 text-slate-100">
               {profile.yaml_data}
             </pre>
-          </section>
+          </div>
 
           {profile.cv_text && (
-            <section>
-              <h2 className="mb-2 text-xs font-semibold uppercase text-slate-500">
-                CV Text Preview
-              </h2>
-              <p className="whitespace-pre-wrap text-sm text-slate-600">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <FileUp className="size-4 text-emerald-600" />
+                <h2 className="text-sm font-semibold text-slate-800">CV Text Preview</h2>
+              </div>
+              <p className="max-h-72 overflow-auto whitespace-pre-wrap rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 text-sm leading-6 text-slate-700">
                 {profile.cv_text.slice(0, 500)}...
               </p>
-            </section>
+            </div>
           )}
 
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 lg:col-span-2">
             Last refreshed: {new Date(profile.last_refreshed_at).toLocaleString()}
           </p>
-        </>
+        </section>
       )}
     </div>
   );
@@ -387,7 +445,7 @@ export function ProfileSetup() {
   const busy = loading || saving || uploading;
 
   return (
-    <div className="mx-auto max-w-6xl p-6 space-y-6">
+    <div className="mx-auto max-w-6xl p-0 sm:p-6 space-y-6">
       <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-start">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Profile Review</h1>
@@ -397,7 +455,7 @@ export function ProfileSetup() {
         </div>
         <Link
           to="/analyse"
-          className="shrink-0 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+          className="w-full shrink-0 rounded-lg bg-emerald-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-emerald-700 md:w-auto"
         >
           Continue to job analysis
         </Link>
@@ -422,7 +480,7 @@ export function ProfileSetup() {
           </p>
           {resumePreview.trim() && (
             <details className="mt-4">
-              <summary className="cursor-pointer text-xs font-medium text-blue-600">
+              <summary className="cursor-pointer text-xs font-medium text-indigo-700">
                 View extracted resume text
               </summary>
               <p className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
@@ -456,7 +514,7 @@ export function ProfileSetup() {
             <input
               value={form.target_role}
               onChange={(e) => setField("target_role", e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
               placeholder="Senior Backend Engineer"
             />
           </div>
@@ -469,12 +527,12 @@ export function ProfileSetup() {
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white p-5 space-y-4 lg:col-span-7">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
             <h2 className="text-lg font-semibold text-slate-900">Projects</h2>
             <button
               type="button"
               onClick={() => setField("projects", [...form.projects, emptyProject()])}
-              className="text-sm font-medium text-blue-600 hover:text-blue-700"
+              className="text-sm font-medium text-indigo-700 hover:text-indigo-900"
             >
               Add project
             </button>
@@ -516,12 +574,12 @@ export function ProfileSetup() {
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white p-5 space-y-4 lg:col-span-5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
             <h2 className="text-lg font-semibold text-slate-900">Links</h2>
             <button
               type="button"
               onClick={() => setField("links", [...form.links, emptyLink()])}
-              className="text-sm font-medium text-blue-600 hover:text-blue-700"
+              className="text-sm font-medium text-indigo-700 hover:text-indigo-900"
             >
               Add link
             </button>
@@ -565,7 +623,7 @@ export function ProfileSetup() {
             <input
               value={form.work_preferences.remote ?? ""}
               onChange={(e) => setPreferences("remote", e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
               placeholder="Remote, hybrid, onsite"
             />
           </div>
@@ -587,7 +645,7 @@ export function ProfileSetup() {
           <button
             type="submit"
             disabled={busy}
-            className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-lg bg-indigo-950 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-900 disabled:opacity-50"
           >
             {saving ? "Saving..." : "Save profile"}
           </button>

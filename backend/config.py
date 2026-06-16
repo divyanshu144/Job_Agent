@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     # Managed Postgres (Neon/Supabase) needs TLS. Off locally; set DB_SSL=true in
     # those envs and the engine passes connect_args={"ssl": True} to asyncpg.
     db_ssl: bool = False
+    run_migrations_on_startup: bool = True
     api_prefix: str = "/api"
     cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:8080"
     log_level: str = "INFO"

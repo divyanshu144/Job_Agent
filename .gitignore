@@ -58,6 +58,7 @@ yarn-error.log*
 # Logs
 logs/
 *.log
+reports/evals/
 
 # Data directory — review contents, ignore if personal
 data/*.json
@@ -78,3 +79,9 @@ Thumbs.db
 .DS_Store
 # Real résumé — operator-provided, never commit PII (use assets/resume.example.tex as the template)
 assets/resume.tex
+
+# AWS local bootstrap outputs and local secret scripts
+infra/aws/.aws-bootstrap.env
+infra/aws/scripts/local/
+infra/aws/scripts/secrets/
+infra/aws/scripts/06_put_ssm_parameters.sh

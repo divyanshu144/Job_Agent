@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -9,21 +8,16 @@ from typing import TYPE_CHECKING
 from anthropic.types.beta import BetaTextBlock
 
 from backend.agents.base import HAIKU
-from backend.services.discovery import Stage2Result
+from backend.services.stage2 import (
+    Stage2Result,
+    build_stage2_system_prompt,
+    parse_stage2_result,
+)
 
 if TYPE_CHECKING:
     import anthropic
 
 logger = logging.getLogger(__name__)
-
-_STAGE2_SYSTEM_TEMPLATE = (
-    "You are evaluating job postings for a candidate.\n\n"
-    "Candidate summary:\n{compact_profile}\n\n"
-    "Evaluate if the job posting is relevant to this candidate. "
-    'Respond with ONLY valid JSON: {{"relevant": true/false, "reason": "one sentence", '
-    '"title": "job title or empty string", "company": "company name or empty string", '
-    '"location": "city/remote or null"}}'
-)
 
 _POLL_INTERVAL_SECONDS = 60
 
@@ -38,7 +32,7 @@ async def submit_stage2_batch(
     Returns the Anthropic batch id (e.g. "msgbatch_01...").
     cache_control is intentionally omitted — Batch API does not support prompt caching.
     """
-    system = _STAGE2_SYSTEM_TEMPLATE.format(compact_profile=compact_profile[:1000])
+    system = build_stage2_system_prompt(compact_profile)
     requests = [
         {
             "custom_id": job_id,
@@ -120,17 +114,7 @@ async def iter_batch_results(
                 yield job_id, None, 0, 0
                 continue
             raw = block.text.strip()
-            start, end = raw.find("{"), raw.rfind("}") + 1
-            if start == -1 or end == 0:
-                raise ValueError(f"No JSON object in response: {raw!r}")
-            data = json.loads(raw[start:end])
-            s2 = Stage2Result(
-                relevant=bool(data.get("relevant", False)),
-                reason=data.get("reason", ""),
-                title=data.get("title", ""),
-                company=data.get("company", ""),
-                location=data.get("location"),
-            )
+            s2 = parse_stage2_result(raw)
             usage = item.result.message.usage
             yield job_id, s2, usage.input_tokens, usage.output_tokens
         except Exception as exc:

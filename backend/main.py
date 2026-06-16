@@ -54,7 +54,8 @@ def _check_jwt_secret() -> None:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_logging()
     _check_jwt_secret()
-    await init_db()
+    if settings.run_migrations_on_startup:
+        await init_db()
     # Reset any runs left in "running" state due to server crash
     async with SessionLocal() as db:
         await db.execute(
@@ -97,16 +98,34 @@ app.include_router(targets_router, prefix=settings.api_prefix)
 Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
 
+def _llm_provider_status() -> str:
+    """Return non-sensitive LLM provider readiness metadata for health checks."""
+    return "anthropic" if settings.anthropic_api_key.strip() else "not_configured"
+
+
 @app.get("/health")
 @limiter.exempt  # type: ignore[misc]
 async def health(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """Readiness probe: verifies the database answers, not just that the process is up."""
+    provider = _llm_provider_status()
     try:
         await db.execute(text("SELECT 1"))
     except Exception as exc:
         # Class name only — str(exc) can leak connection strings/hosts.
         return JSONResponse(
             status_code=503,
-            content={"status": "degraded", "db": "error", "detail": type(exc).__name__},
+            content={
+                "status": "degraded",
+                "db": "error",
+                "provider": provider,
+                "detail": type(exc).__name__,
+            },
         )
-    return JSONResponse(content={"status": "ok", "db": "ok"})
+    return JSONResponse(content={"status": "ok", "db": "ok", "provider": provider})
+
+
+@app.get(f"{settings.api_prefix}/health", include_in_schema=False)
+@limiter.exempt  # type: ignore[misc]
+async def api_prefixed_health(db: AsyncSession = Depends(get_db)) -> JSONResponse:
+    """ALB/public health alias for deployments that route /api/* to the API."""
+    return await health(db)

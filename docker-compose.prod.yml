@@ -5,7 +5,9 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # This file intentionally avoids local bind mounts and keeps db/redis/api off
-# host ports. Frontend remains the external entry point and proxies /api/* to api.
+# host ports. Frontend remains the external entry point in local production-style
+# Compose. AWS ECS uses ALB /api/* path routing and the frontend production
+# image's nginx.prod.conf does not proxy to a Docker Compose hostname.
 services:
   db:
     ports: !reset []

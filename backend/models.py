@@ -51,6 +51,18 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    token: Mapped[str] = mapped_column(String, unique=True, index=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class InviteToken(Base):
     __tablename__ = "invite_tokens"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
@@ -85,6 +97,9 @@ class LLMCall(Base):
     cache_hit: Mapped[bool] = mapped_column(Boolean, default=False)
     cache_creation_tokens: Mapped[int] = mapped_column(Integer, default=0)
     cache_read_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    prompt_name: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    prompt_hash: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    prompt_version: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
     analysis_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("analyses.id"), nullable=True, default=None
     )

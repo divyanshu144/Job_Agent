@@ -60,3 +60,29 @@ async def test_llm_call_has_cache_token_columns(session):
     result = await session.get(LLMCall, row.id)
     assert result.cache_creation_tokens == 800
     assert result.cache_read_tokens == 0
+
+
+async def test_llm_call_accepts_prompt_version_metadata(session):
+    from datetime import datetime, timezone
+
+    from backend.models import LLMCall
+
+    row = LLMCall(
+        agent_name="job_parser",
+        model="claude-haiku-4-5-20251001",
+        input_tokens=100,
+        output_tokens=20,
+        cost_usd=0.0001,
+        latency_ms=500,
+        prompt_name="job_parser",
+        prompt_hash="a" * 64,
+        prompt_version="sha256:" + "a" * 12,
+        created_at=datetime.now(timezone.utc),
+    )
+    session.add(row)
+    await session.commit()
+
+    result = await session.get(LLMCall, row.id)
+    assert result.prompt_name == "job_parser"
+    assert result.prompt_hash == "a" * 64
+    assert result.prompt_version == "sha256:" + "a" * 12

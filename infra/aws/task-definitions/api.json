@@ -1,0 +1,67 @@
+{
+  "family": "jobfit-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::896476315730:role/jobfit-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::896476315730:role/jobfit-ecs-task-role",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "896476315730.dkr.ecr.eu-west-2.amazonaws.com/jobfit-api:latest",
+      "essential": true,
+      "command": ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"],
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "APP_ENV", "value": "production" },
+        { "name": "API_PREFIX", "value": "/api" },
+        { "name": "DB_SSL", "value": "false" },
+        { "name": "RUN_MIGRATIONS_ON_STARTUP", "value": "false" },
+        { "name": "CORS_ORIGINS", "value": "http://jobfit-alb-1389212411.eu-west-2.elb.amazonaws.com" },
+        { "name": "COOKIE_SECURE", "value": "true" },
+        { "name": "LOG_LEVEL", "value": "INFO" },
+        { "name": "ANTHROPIC_MAX_RETRIES", "value": "3" },
+        { "name": "CV_PATH", "value": "/app/data/cv.pdf" },
+        { "name": "PROFILE_YAML_PATH", "value": "/app/data/candidate_profile.yaml" },
+        { "name": "ENABLE_WORKATASTARTUP_SOURCE", "value": "false" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/database-url" },
+        { "name": "REDIS_URL", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/redis-url" },
+        { "name": "CELERY_BROKER_URL", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/celery-broker-url" },
+        { "name": "CELERY_RESULT_BACKEND", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/celery-result-backend" },
+        { "name": "JWT_SECRET", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/jwt-secret" },
+        { "name": "ANTHROPIC_API_KEY", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/anthropic-api-key" }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()\""
+        ],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 5,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/jobfit-api",
+          "awslogs-region": "eu-west-2",
+          "awslogs-stream-prefix": "api"
+        }
+      }
+    }
+  ]
+}

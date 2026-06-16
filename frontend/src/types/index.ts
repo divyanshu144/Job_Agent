@@ -173,6 +173,12 @@ export interface InviteResponse {
   expires_at: string;
 }
 
+export interface PasswordResetRequestResponse {
+  ok: boolean;
+  message: string;
+  reset_url?: string | null;
+}
+
 export interface AgentCost {
   agent_name: string;
   calls: number;

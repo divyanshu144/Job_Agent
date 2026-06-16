@@ -33,7 +33,44 @@ async def degraded_client():
 async def test_health_ok_when_db_reachable(unauthenticated_client):
     resp = await unauthenticated_client.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok", "db": "ok"}
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["db"] == "ok"
+    assert resp.json()["provider"] in {"anthropic", "not_configured"}
+
+
+async def test_api_prefixed_health_alias_ok_when_db_reachable(unauthenticated_client):
+    resp = await unauthenticated_client.get("/api/health")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["db"] == "ok"
+    assert resp.json()["provider"] in {"anthropic", "not_configured"}
+
+
+async def test_health_reports_not_configured_when_anthropic_key_missing(
+    unauthenticated_client, monkeypatch
+):
+    from backend import main
+
+    monkeypatch.setattr(main.settings, "anthropic_api_key", "")
+
+    resp = await unauthenticated_client.get("/health")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok", "db": "ok", "provider": "not_configured"}
+
+
+async def test_health_reports_anthropic_when_key_configured(unauthenticated_client, monkeypatch):
+    from backend import main
+
+    monkeypatch.setattr(main.settings, "anthropic_api_key", "sk-ant-test-secret")
+
+    resp = await unauthenticated_client.get("/health")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok", "db": "ok", "provider": "anthropic"}
+    assert "sk-ant" not in str(body)
+    assert "secret" not in str(body)
 
 
 async def test_health_503_when_db_down(degraded_client):
@@ -42,6 +79,7 @@ async def test_health_503_when_db_down(degraded_client):
     body = resp.json()
     assert body["status"] == "degraded"
     assert body["db"] == "error"
+    assert body["provider"] in {"not_configured", "anthropic"}
     # Exception class name only — raw str(exc) can leak connection strings.
     assert body["detail"] == "OperationalError"
     assert "connection refused" not in str(body)

@@ -1,4 +1,4 @@
-import type { ProfileResponse, ProfileReviewData, ProfileReviewResponse, AnalysisDetail, AgentName, SSECallbacks, RetryRequest, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback, AnalysisSummary, InviteResponse, CampaignRun, TargetCompany } from "../types";
+import type { ProfileResponse, ProfileReviewData, ProfileReviewResponse, AnalysisDetail, AgentName, SSECallbacks, RetryRequest, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback, AnalysisSummary, InviteResponse, PasswordResetRequestResponse, CampaignRun, TargetCompany } from "../types";
 
 const BASE = "/api";
 
@@ -195,6 +195,10 @@ export const api = {
   },
   createInvite: (email?: string) =>
     post<InviteResponse>("/auth/invite", { email: email?.trim() || null }),
+  requestPasswordReset: (email: string) =>
+    post<PasswordResetRequestResponse>("/auth/password-reset/request", { email }),
+  confirmPasswordReset: (token: string, password: string) =>
+    post<{ ok: boolean }>("/auth/password-reset/confirm", { token, password }),
   logout: async (): Promise<void> => {
     await fetch(`${BASE}/auth/logout`, { method: "POST", credentials: "include" });
   },

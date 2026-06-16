@@ -11,7 +11,7 @@ export function AdminInvites() {
   const [loading, setLoading] = useState(false);
 
   if (!user?.is_admin) {
-    return <p className="p-6 text-red-600">Admin only.</p>;
+    return <p className="p-4 sm:p-6 text-red-600">Admin only.</p>;
   }
 
   async function createInvite(e: React.FormEvent) {
@@ -32,7 +32,7 @@ export function AdminInvites() {
   const inviteUrl = invite ? `${origin}${invite.invite_url}` : "";
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-6">
+    <div className="max-w-2xl mx-auto p-0 sm:p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Invite Users</h1>
         <p className="text-sm text-slate-500 mt-1">
@@ -47,14 +47,14 @@ export function AdminInvites() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
             placeholder="Optional"
           />
         </div>
         <button
           type="submit"
           disabled={loading}
-          className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="w-full px-4 py-2 rounded-lg bg-indigo-950 text-white text-sm font-medium hover:bg-indigo-900 disabled:opacity-50 sm:w-auto"
         >
           {loading ? "Creating..." : "Create invite"}
         </button>

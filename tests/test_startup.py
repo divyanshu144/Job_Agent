@@ -76,7 +76,7 @@ def test_run_upgrade_stamps_complete_legacy_schema() -> None:
 
     missing = _REQUIRED - tables
     assert not missing, f"legacy boot stamp path missing tables: {missing}"
-    assert revision == "0007_review_fixes"
+    assert revision == "0008_llm_call_prompt_versions"
 
 
 def test_run_upgrade_applies_0007_to_index_less_legacy_schema() -> None:
@@ -120,4 +120,4 @@ def test_run_upgrade_applies_0007_to_index_less_legacy_schema() -> None:
         indexes, revision = asyncio.run(_index_names_and_revision())
 
     assert "uq_campaign_runs_one_running" in indexes  # 0007 actually applied
-    assert revision == "0007_review_fixes"
+    assert revision == "0008_llm_call_prompt_versions"

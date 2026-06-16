@@ -23,12 +23,15 @@ from pathlib import Path
 # Allow import of backend modules from repo root
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import json
+
+from datetime import datetime, timezone
 
 from sqlalchemy import select, update
 
+from backend.agents.base import HAIKU, SONNET
 from backend.database import SessionLocal, init_db
 from backend.models import DiscoveryRun, LLMCall
+from backend.services.cost_calculator import COST_PER_MILLION
 from backend.services.discovery import (
     _DISCOVERY_CONCURRENCY,
     _load_search_profiles,
@@ -36,9 +39,6 @@ from backend.services.discovery import (
 )
 from backend.services.hn_client import fetch_hn_jobs
 from backend.services.profile_builder import build_compact_profile, get_or_build_profile
-from backend.services.cost_calculator import COST_PER_MILLION
-from backend.agents.base import HAIKU, SONNET
-from datetime import datetime, timezone
 
 JOB_CAP = 25  # Keep spend < $0.10
 
@@ -92,7 +92,10 @@ async def main() -> None:
                     db, run_id, raw, profiles, profile, compact, source_tag="hn"
                 )
 
-    print(f"Processing {len(raw_jobs)} jobs through pipeline (Stage 1 → Stage 2 Haiku → Phase 1 Haiku)...")
+    print(
+        f"Processing {len(raw_jobs)} jobs through pipeline "
+        "(Stage 1 → Stage 2 Haiku → Phase 1 Haiku)..."
+    )
     results = await asyncio.gather(*[_bounded(raw) for raw in raw_jobs], return_exceptions=True)
     errors = [r for r in results if isinstance(r, BaseException)]
     if errors:
@@ -137,7 +140,9 @@ async def main() -> None:
 
         sonnet_input_rate = COST_PER_MILLION[SONNET]["input"]
         sonnet_output_rate = COST_PER_MILLION[SONNET]["output"]
-        counterfactual = (haiku_input * sonnet_input_rate + haiku_output * sonnet_output_rate) / 1_000_000
+        counterfactual = (
+            haiku_input * sonnet_input_rate + haiku_output * sonnet_output_rate
+        ) / 1_000_000
         savings = counterfactual - haiku_cost
         ratio = counterfactual / haiku_cost if haiku_cost > 0 else 1.0
 
@@ -166,10 +171,17 @@ async def main() -> None:
     print()
 
     print("=== First 5 llm_calls rows ===")
-    print(f"{'agent_name':<25} {'model':<30} {'input_tok':>9} {'out_tok':>7} {'cost_usd':>10} {'cached':>6}")
+    print(
+        f"{'agent_name':<25} {'model':<30} {'input_tok':>9} "
+        f"{'out_tok':>7} {'cost_usd':>10} {'cached':>6}"
+    )
     print("-" * 90)
     for c in first5:
-        model_short = c.model.replace("claude-", "").replace("-4-5-20251001", "-haiku").replace("sonnet-4-6", "sonnet")
+        model_short = (
+            c.model.replace("claude-", "")
+            .replace("-4-5-20251001", "-haiku")
+            .replace("sonnet-4-6", "sonnet")
+        )
         print(
             f"{c.agent_name:<25} {model_short:<30} {c.input_tokens:>9} {c.output_tokens:>7} "
             f"${c.cost_usd:>9.6f} {'YES' if c.cache_hit else 'no':>6}"
@@ -184,7 +196,10 @@ async def main() -> None:
     elif haiku_cost == 0:
         print("⚠ No Haiku calls recorded — all jobs may have been deduped or Stage 1 filtered all.")
     else:
-        print(f"⚠ tiering_ratio {ratio:.2f}× is below expected {expected_ratio:.2f}× — investigate token counts.")
+        print(
+            f"⚠ tiering_ratio {ratio:.2f}× is below expected "
+            f"{expected_ratio:.2f}× — investigate token counts."
+        )
 
     print(f"\nRun ID: {run_id}")
     print("Done. Check /costs in the frontend for the emerald panel.")

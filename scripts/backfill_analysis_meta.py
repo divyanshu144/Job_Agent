@@ -26,7 +26,9 @@ from backend.database import SessionLocal
 from backend.models import Analysis, JobResult, User
 
 
-async def _meta_for(db: AsyncSession, analysis_id: str) -> tuple[str | None, str | None, int | None]:
+async def _meta_for(
+    db: AsyncSession, analysis_id: str
+) -> tuple[str | None, str | None, int | None]:
     rows = (
         (await db.execute(select(JobResult).where(JobResult.analysis_id == analysis_id)))
         .scalars()

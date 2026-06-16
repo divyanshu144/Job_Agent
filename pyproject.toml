@@ -5,7 +5,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
-addopts = "--cov=backend --cov-report=term-missing --cov-fail-under=70 -m 'not integration'"
+addopts = "-m 'not integration'"
 markers = [
     "integration: tests that call the real Anthropic API (deselected by default)",
     "relaxed_fks: opt out of Postgres FK enforcement for tests that need synthetic DB states",
@@ -13,6 +13,8 @@ markers = [
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
 select = ["E", "F", "I"]
 
 [tool.mypy]

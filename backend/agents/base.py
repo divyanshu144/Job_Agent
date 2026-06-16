@@ -15,6 +15,7 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
+from backend.agents.prompt_versions import PromptVersion, build_prompt_version
 from backend.config import settings
 from backend.schemas import PriorOutputs
 
@@ -90,6 +91,7 @@ class BaseAgent:
         self._run_id: str | None = None
         self._analysis_id: str | None = None
         self._user_id: str | None = None
+        self._prompt_version: PromptVersion | None = None
 
     def with_tracking(
         self,
@@ -106,7 +108,16 @@ class BaseAgent:
         return self
 
     def _load_prompt(self, name: str) -> str:
-        return (PROMPTS_DIR / f"{name}.md").read_text()
+        path = PROMPTS_DIR / f"{name}.md"
+        prompt_text = path.read_text()
+        self._prompt_version = build_prompt_version(
+            agent_name=name,
+            model=self.model,
+            prompt_name=name,
+            prompt_path=path,
+            prompt_text=prompt_text,
+        )
+        return prompt_text
 
     def _inject(self, template: str, profile: str, jd: str, prior: PriorOutputs) -> str:
         result = template.replace("{profile}", profile).replace("{jd}", jd)
@@ -126,6 +137,15 @@ class BaseAgent:
                 run_id=self._run_id,
                 analysis_id=self._analysis_id,
                 user_id=self._user_id,
+                prompt_name=self._prompt_version.prompt_name
+                if self._prompt_version is not None
+                else None,
+                prompt_hash=self._prompt_version.prompt_hash
+                if self._prompt_version is not None
+                else None,
+                prompt_version=self._prompt_version.prompt_version
+                if self._prompt_version is not None
+                else None,
                 max_tokens=MAX_TOKENS,
                 # No prompt caching: each pipeline call's system prompt is unique per request
                 # (profile + JD + prior outputs injected), so cached blocks are never read back —

@@ -40,7 +40,7 @@ export function Costs() {
   const totalCost = summary?.total_cost_usd ?? 0;
 
   return (
-    <div className="max-w-4xl mx-auto px-6 space-y-8">
+    <div className="mx-auto max-w-4xl space-y-8 px-0 sm:px-6">
       <h1 className="text-xl font-bold text-slate-900">LLM Cost Dashboard</h1>
 
       {error && (
@@ -49,7 +49,7 @@ export function Costs() {
 
       {summary && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
             <StatCard label="Total Spent" value={`$${fmt(summary.total_cost_usd)}`} />
             <StatCard label="LLM Calls" value={summary.total_calls.toLocaleString()} />
             <StatCard label="Analysis Cache Rate" value={`${(summary.cache_hit_rate * 100).toFixed(1)}%`} />
@@ -59,7 +59,7 @@ export function Costs() {
           {summary.tiering_ratio > 1.0 && (
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 space-y-3">
               <h2 className="text-sm font-semibold text-emerald-800">Model Tiering Savings</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
                 <div>
                   <p className="text-xs text-emerald-700 mb-1">Haiku Actual Cost</p>
                   <p className="text-xl font-bold text-emerald-900">${fmt(summary.haiku_cost_usd)}</p>
@@ -84,7 +84,7 @@ export function Costs() {
           {summary.prompt_cache_read_tokens > 0 && (
             <div className="bg-sky-50 border border-sky-200 rounded-xl p-5 space-y-3">
               <h2 className="text-sm font-semibold text-sky-800">Prompt Cache Savings</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
                 <div>
                   <p className="text-xs text-sky-700 mb-1">Cache Reads</p>
                   <p className="text-xl font-bold text-sky-900">
@@ -127,11 +127,12 @@ export function Costs() {
       )}
 
       {runs.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="px-5 py-3 border-b border-slate-100">
             <h2 className="text-sm font-semibold text-slate-700">Runs</h2>
           </div>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs text-slate-500">
                 <th className="px-5 py-2">Date</th>
@@ -190,15 +191,17 @@ export function Costs() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
       {Object.keys(agentTotals).length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="px-5 py-3 border-b border-slate-100">
             <h2 className="text-sm font-semibold text-slate-700">Agent Totals (all runs)</h2>
           </div>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[680px] text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-left text-xs text-slate-500">
                 <th className="px-5 py-2">Agent</th>
@@ -226,6 +229,7 @@ export function Costs() {
                 ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

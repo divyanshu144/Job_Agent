@@ -311,19 +311,19 @@ export function Discover() {
   if (loading) return <p className="p-6 text-slate-500">Loading…</p>;
 
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
+    <div className="mx-auto max-w-3xl space-y-6 p-0 sm:p-6">
+      <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Discover</h1>
           <p className="text-sm text-slate-500 mt-1">
             Job boards · scored for your profiles
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
           <button
             onClick={triggerFetch}
             disabled={fetching}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="rounded-lg bg-indigo-950 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-900 disabled:opacity-50"
           >
             {fetching ? "Fetching…" : "Fetch All Jobs"}
           </button>
@@ -331,7 +331,7 @@ export function Discover() {
             onClick={triggerBatch}
             disabled={fetching}
             title="Uses Anthropic Batch API — results arrive asynchronously, funnel will update as batches complete"
-            className="px-4 py-2 border border-blue-600 text-blue-700 text-sm font-semibold rounded-lg hover:bg-blue-50 disabled:opacity-50 transition-colors"
+            className="rounded-lg border border-indigo-300 px-4 py-2 text-sm font-semibold text-indigo-800 transition-colors hover:bg-indigo-50 disabled:opacity-50"
           >
             Batch mode (50% cheaper)
           </button>
@@ -366,23 +366,23 @@ export function Discover() {
 
       {feed.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-slate-500">
               <strong className="text-slate-700">{total}</strong> matched job{total !== 1 ? "s" : ""}
             </p>
-            <div className="flex gap-2 items-center">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <input
                 type="text"
                 value={locationFilter}
                 onChange={(e) => handleLocationFilter(e.target.value)}
                 placeholder="Filter by location…"
-                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-200 w-44"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 sm:w-44"
               />
               {allProfiles.length > 1 && (
                 <select
                   value={profileFilter}
                   onChange={(e) => handleProfileFilter(e.target.value)}
-                  className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
                 >
                   <option value="">All profiles</option>
                   {allProfiles.map((p) => (

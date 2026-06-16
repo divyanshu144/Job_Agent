@@ -1,0 +1,241 @@
+name: Deploy AWS ECS
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-west-2
+  ECS_CLUSTER: jobfit-cluster
+  API_ECR_REPOSITORY: jobfit-api
+  WORKER_ECR_REPOSITORY: jobfit-worker
+  BEAT_ECR_REPOSITORY: jobfit-beat
+  FRONTEND_ECR_REPOSITORY: jobfit-frontend
+  API_SERVICE: jobfit-api-service
+  WORKER_SERVICE: jobfit-worker-service
+  BEAT_SERVICE: jobfit-beat-service
+  FRONTEND_SERVICE: jobfit-frontend-service
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push API image
+        id: build-api
+        env:
+          IMAGE_URI: ${{ steps.ecr.outputs.registry }}/${{ env.API_ECR_REPOSITORY }}:${{ github.sha }}
+        run: |
+          docker build --target api -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+          echo "image=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push worker image
+        id: build-worker
+        env:
+          IMAGE_URI: ${{ steps.ecr.outputs.registry }}/${{ env.WORKER_ECR_REPOSITORY }}:${{ github.sha }}
+        run: |
+          docker build --target worker -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+          echo "image=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push beat image
+        id: build-beat
+        env:
+          IMAGE_URI: ${{ steps.ecr.outputs.registry }}/${{ env.BEAT_ECR_REPOSITORY }}:${{ github.sha }}
+        run: |
+          docker build --target beat -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+          echo "image=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push frontend image
+        id: build-frontend
+        env:
+          IMAGE_URI: ${{ steps.ecr.outputs.registry }}/${{ env.FRONTEND_ECR_REPOSITORY }}:${{ github.sha }}
+        run: |
+          docker build -t "$IMAGE_URI" ./frontend
+          docker push "$IMAGE_URI"
+          echo "image=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Render API task definition
+        id: render-api
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: infra/aws/task-definitions/api.json
+          container-name: api
+          image: ${{ steps.build-api.outputs.image }}
+
+      - name: Render worker task definition
+        id: render-worker
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: infra/aws/task-definitions/worker.json
+          container-name: worker
+          image: ${{ steps.build-worker.outputs.image }}
+
+      - name: Render beat task definition
+        id: render-beat
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: infra/aws/task-definitions/beat.json
+          container-name: beat
+          image: ${{ steps.build-beat.outputs.image }}
+
+      - name: Render frontend task definition
+        id: render-frontend
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: infra/aws/task-definitions/frontend.json
+          container-name: frontend
+          image: ${{ steps.build-frontend.outputs.image }}
+
+      - name: Validate migration network configuration
+        run: |
+          test -n "${{ vars.AWS_ECS_SUBNETS }}" || (echo "Set GitHub variable AWS_ECS_SUBNETS to comma-separated private subnet IDs" && exit 1)
+          test -n "${{ vars.AWS_ECS_SECURITY_GROUPS }}" || (echo "Set GitHub variable AWS_ECS_SECURITY_GROUPS to comma-separated ECS task security group IDs" && exit 1)
+
+      - name: Register API task definition for migrations
+        id: register-api
+        env:
+          TASK_DEFINITION: ${{ steps.render-api.outputs.task-definition }}
+        run: |
+          TASK_DEFINITION_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "file://$TASK_DEFINITION" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          echo "task_definition_arn=$TASK_DEFINITION_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Run Alembic migrations
+        id: migrate
+        env:
+          TASK_DEFINITION: ${{ steps.register-api.outputs.task_definition_arn }}
+          SUBNETS: ${{ vars.AWS_ECS_SUBNETS }}
+          SECURITY_GROUPS: ${{ vars.AWS_ECS_SECURITY_GROUPS }}
+        run: |
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --launch-type FARGATE \
+            --task-definition "$TASK_DEFINITION" \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUPS],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"api","command":["alembic","upgrade","head"]}]}' \
+            --query 'tasks[0].taskArn' \
+            --output text)
+          test "$TASK_ARN" != "None" || (echo "Failed to start migration task" && exit 1)
+          echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for migrations
+        run: aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "${{ steps.migrate.outputs.task_arn }}"
+
+      - name: Check migration result
+        run: |
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "${{ steps.migrate.outputs.task_arn }}" \
+            --query 'tasks[0].containers[?name==`api`].exitCode | [0]' \
+            --output text)
+          if [ "$EXIT_CODE" != "0" ]; then
+            aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "${{ steps.migrate.outputs.task_arn }}"
+            exit 1
+          fi
+
+      - name: Deploy API service
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$API_SERVICE" \
+            --task-definition "${{ steps.register-api.outputs.task_definition_arn }}" >/dev/null
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$API_SERVICE"
+
+      - name: Deploy worker service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-worker.outputs.task-definition }}
+          service: ${{ env.WORKER_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Deploy beat service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-beat.outputs.task-definition }}
+          service: ${{ env.BEAT_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Deploy frontend service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-frontend.outputs.task-definition }}
+          service: ${{ env.FRONTEND_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: Verify ECS service wiring
+        run: |
+          check_service() {
+            service="$1"
+            expected_family="$2"
+            expected_container="$3"
+            expected_log_group="$4"
+            expected_log_prefix="$5"
+
+            task_def_arn=$(aws ecs describe-services \
+              --cluster "$ECS_CLUSTER" \
+              --services "$service" \
+              --query 'services[0].taskDefinition' \
+              --output text)
+            family=$(aws ecs describe-task-definition \
+              --task-definition "$task_def_arn" \
+              --query 'taskDefinition.family' \
+              --output text)
+            container=$(aws ecs describe-task-definition \
+              --task-definition "$task_def_arn" \
+              --query 'taskDefinition.containerDefinitions[0].name' \
+              --output text)
+            log_group=$(aws ecs describe-task-definition \
+              --task-definition "$task_def_arn" \
+              --query 'taskDefinition.containerDefinitions[0].logConfiguration.options."awslogs-group"' \
+              --output text)
+            log_prefix=$(aws ecs describe-task-definition \
+              --task-definition "$task_def_arn" \
+              --query 'taskDefinition.containerDefinitions[0].logConfiguration.options."awslogs-stream-prefix"' \
+              --output text)
+
+            if [ "$family" != "$expected_family" ] || [ "$container" != "$expected_container" ] || [ "$log_group" != "$expected_log_group" ] || [ "$log_prefix" != "$expected_log_prefix" ]; then
+              echo "$service is miswired: taskDefinition=$task_def_arn family=$family container=$container log_group=$log_group log_prefix=$log_prefix"
+              exit 1
+            fi
+          }
+
+          check_service "$API_SERVICE" jobfit-api api /ecs/jobfit-api api
+          check_service "$WORKER_SERVICE" jobfit-worker worker /ecs/jobfit-worker worker
+          check_service "$BEAT_SERVICE" jobfit-beat beat /ecs/jobfit-beat beat
+          check_service "$FRONTEND_SERVICE" jobfit-frontend frontend /ecs/jobfit-frontend frontend
+
+      - name: Smoke test deployed app
+        env:
+          AWS_APP_HEALTH_URL: ${{ vars.AWS_APP_HEALTH_URL || secrets.AWS_APP_HEALTH_URL }}
+        run: |
+          if [ -z "$AWS_APP_HEALTH_URL" ]; then
+            echo "AWS_APP_HEALTH_URL is not set; skipping deployed smoke test."
+            exit 0
+          fi
+          scripts/smoke_aws.sh "$AWS_APP_HEALTH_URL"

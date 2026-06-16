@@ -1,0 +1,420 @@
+[
+  {
+    "case_id": "ai_software_engineer_startup",
+    "job_description": "NovaWorks is hiring a Senior AI Software Engineer to build production LLM features for a recruiting intelligence platform. The role requires Python, FastAPI, TypeScript, React, PostgreSQL, Docker, and experience evaluating LLM outputs. Experience with Kubernetes and prompt evaluation is helpful.",
+    "candidate_profile_text": "Synthetic candidate: full-stack AI engineer with Python, FastAPI, React, TypeScript, PostgreSQL, Docker, pytest, and LLM product experience. Built structured AI workflows, validation layers, and cost tracking for model calls.",
+    "resume_text": "## CV Text\nSynthetic Candidate. Experience: Built FastAPI services, React dashboards, PostgreSQL persistence, Docker deployments, pytest suites, and LLM workflow validation. Skills: Python, FastAPI, React, TypeScript, PostgreSQL, Docker, pytest.",
+    "expected": {
+      "title_keywords": ["AI", "Software", "Engineer"],
+      "company": "NovaWorks",
+      "seniority": "Senior",
+      "required_skills": ["Python", "FastAPI", "TypeScript", "React", "PostgreSQL", "Docker"],
+      "score_min": 78,
+      "score_max": 92,
+      "relevant_skills": ["Python", "FastAPI", "React", "LLM"],
+      "missing_skills": ["Kubernetes"],
+      "forbidden_unsupported_claims": ["managed a team of 20", "PhD", "Kubernetes production cluster owner"],
+      "completeness": {
+        "cover_letter_min_words": 75,
+        "resume_min_skills": 4,
+        "resume_min_bullets": 2
+      }
+    },
+    "mocked_outputs": {
+      "job_parser": {
+        "required_skills": ["Python", "FastAPI", "TypeScript", "React", "PostgreSQL", "Docker"],
+        "nice_to_have": ["Kubernetes", "prompt evaluation"],
+        "years_experience": null,
+        "role_type": "AI Software Engineer",
+        "seniority": "Senior",
+        "company": "NovaWorks"
+      },
+      "match_scorer": {
+        "score": 86,
+        "matched_skills": ["Python", "FastAPI", "React", "TypeScript", "PostgreSQL", "Docker", "LLM workflows"],
+        "missing_skills": ["Kubernetes"],
+        "partial_matches": ["prompt evaluation"]
+      },
+      "gap_analyst": {
+        "critical_gaps": [
+          {
+            "skill": "Kubernetes",
+            "impact": "medium",
+            "rationale": "The job prefers Kubernetes experience for deployment ownership."
+          }
+        ],
+        "nice_to_have_gaps": []
+      },
+      "cover_letter": {
+        "subject": "Senior AI Software Engineer application",
+        "body": "I am interested in the Senior AI Software Engineer role at NovaWorks because it matches my experience building production AI application workflows. My recent work used Python and FastAPI for backend services, React and TypeScript for user-facing tooling, PostgreSQL for durable workflow state, and Docker for repeatable deployment. I have also built structured LLM validation, cost tracking, and regression tests for model outputs, which maps directly to the product quality needs in this role. I would bring a practical full-stack approach to shipping reliable AI features.",
+        "tone_notes": "direct, technical, evidence-based"
+      },
+      "resume_tailorer": {
+        "headline": "Full-Stack AI Engineer",
+        "summary": "Engineer focused on reliable AI product workflows, typed backend services, and frontend tools.",
+        "skills": ["Python", "FastAPI", "React", "TypeScript", "PostgreSQL", "Docker"],
+        "experience": [
+          {
+            "company": null,
+            "role": "AI Software Engineer",
+            "dates": null,
+            "bullets": [
+              "Built FastAPI services that persisted AI workflow state in PostgreSQL.",
+              "Created React and TypeScript dashboards for reviewing structured LLM outputs."
+            ]
+          }
+        ],
+        "projects": [],
+        "education": [],
+        "tailored_bullets": [
+          {
+            "original": "Built LLM workflow validation.",
+            "rewritten": "Implemented structured LLM validation and regression checks for AI application workflows using Python and pytest.",
+            "rationale": "Highlights reliability work relevant to the role."
+          }
+        ],
+        "omitted_items": []
+      }
+    }
+  },
+  {
+    "case_id": "applied_ai_engineer_healthtech",
+    "job_description": "CareLoop is looking for a Mid Applied AI Engineer to prototype and deploy AI features for clinical operations. Required skills include Python, LangChain, evaluation design, SQL, and API development. Nice to have: React, HIPAA-adjacent product experience, and document processing.",
+    "candidate_profile_text": "Synthetic candidate: applied AI engineer with Python, SQL, FastAPI, document processing, prompt testing, and React experience. Has not worked in healthcare compliance or HIPAA systems.",
+    "resume_text": "## CV Text\nSynthetic Candidate. Skills: Python, SQL, FastAPI, React, document processing, prompt testing. Projects: Built document extraction workflow and API services. No healthcare compliance ownership.",
+    "expected": {
+      "title_keywords": ["Applied", "AI", "Engineer"],
+      "company": "CareLoop",
+      "seniority": "Mid",
+      "required_skills": ["Python", "LangChain", "evaluation design", "SQL", "API development"],
+      "score_min": 65,
+      "score_max": 82,
+      "relevant_skills": ["Python", "SQL", "document processing"],
+      "missing_skills": ["LangChain", "HIPAA"],
+      "forbidden_unsupported_claims": ["HIPAA compliance lead", "clinical ML model owner", "medical degree"],
+      "completeness": {
+        "cover_letter_min_words": 70,
+        "resume_min_skills": 3,
+        "resume_min_bullets": 2
+      }
+    },
+    "mocked_outputs": {
+      "job_parser": {
+        "required_skills": ["Python", "LangChain", "evaluation design", "SQL", "API development"],
+        "nice_to_have": ["React", "HIPAA", "document processing"],
+        "years_experience": null,
+        "role_type": "Applied AI Engineer",
+        "seniority": "Mid",
+        "company": "CareLoop"
+      },
+      "match_scorer": {
+        "score": 74,
+        "matched_skills": ["Python", "SQL", "API development", "React", "document processing"],
+        "missing_skills": ["LangChain", "HIPAA"],
+        "partial_matches": ["evaluation design"]
+      },
+      "gap_analyst": {
+        "critical_gaps": [
+          {
+            "skill": "LangChain",
+            "impact": "medium",
+            "rationale": "The posting explicitly asks for LangChain experience."
+          }
+        ],
+        "nice_to_have_gaps": [
+          {
+            "skill": "HIPAA",
+            "impact": "low",
+            "rationale": "Healthcare context is listed as nice to have."
+          }
+        ]
+      },
+      "cover_letter": {
+        "subject": "Applied AI Engineer application",
+        "body": "I am applying for the Applied AI Engineer role at CareLoop because the work combines practical AI prototyping with API delivery and document processing. My background includes Python, SQL, FastAPI services, prompt testing, and document extraction workflows. I have also built React interfaces for reviewing AI outputs, which would help clinical operations teams inspect results clearly. I would be transparent about ramping up on LangChain and healthcare-specific compliance while contributing immediately to evaluation design and API implementation.",
+        "tone_notes": "transparent, practical"
+      },
+      "resume_tailorer": {
+        "headline": "Applied AI Engineer",
+        "summary": "Engineer building document-processing AI workflows and backend APIs.",
+        "skills": ["Python", "SQL", "FastAPI", "React", "document processing"],
+        "experience": [
+          {
+            "company": null,
+            "role": "Applied AI Engineer",
+            "dates": null,
+            "bullets": [
+              "Built Python API services for document-processing workflows.",
+              "Created prompt testing checks for extracted document outputs."
+            ]
+          }
+        ],
+        "projects": [],
+        "education": [],
+        "tailored_bullets": [
+          {
+            "original": "Built document extraction workflow.",
+            "rewritten": "Built Python document-processing workflows with SQL-backed review data and API endpoints.",
+            "rationale": "Connects documented work to the job requirements."
+          }
+        ],
+        "omitted_items": []
+      }
+    }
+  },
+  {
+    "case_id": "backend_engineer_platform",
+    "job_description": "OrbitCloud needs a Senior Backend Engineer for its platform team. The role requires Python, PostgreSQL, Redis, distributed systems, observability, Docker, and CI/CD. Kubernetes and on-call experience are preferred.",
+    "candidate_profile_text": "Synthetic candidate: backend engineer with Python, FastAPI, PostgreSQL, Redis, Docker, GitHub Actions, observability basics, and pytest. No formal on-call rotation experience.",
+    "resume_text": "## CV Text\nSynthetic Candidate. Skills: Python, FastAPI, PostgreSQL, Redis, Docker, GitHub Actions, pytest, observability. Experience: Built APIs and background worker systems.",
+    "expected": {
+      "title_keywords": ["Backend", "Engineer"],
+      "company": "OrbitCloud",
+      "seniority": "Senior",
+      "required_skills": ["Python", "PostgreSQL", "Redis", "distributed systems", "observability", "Docker", "CI/CD"],
+      "score_min": 76,
+      "score_max": 90,
+      "relevant_skills": ["Python", "PostgreSQL", "Redis", "Docker"],
+      "missing_skills": ["Kubernetes", "on-call"],
+      "forbidden_unsupported_claims": ["led on-call incidents", "Kubernetes administrator", "managed SRE team"],
+      "completeness": {
+        "cover_letter_min_words": 70,
+        "resume_min_skills": 4,
+        "resume_min_bullets": 2
+      }
+    },
+    "mocked_outputs": {
+      "job_parser": {
+        "required_skills": ["Python", "PostgreSQL", "Redis", "distributed systems", "observability", "Docker", "CI/CD"],
+        "nice_to_have": ["Kubernetes", "on-call"],
+        "years_experience": null,
+        "role_type": "Backend Engineer",
+        "seniority": "Senior",
+        "company": "OrbitCloud"
+      },
+      "match_scorer": {
+        "score": 84,
+        "matched_skills": ["Python", "PostgreSQL", "Redis", "Docker", "CI/CD", "observability"],
+        "missing_skills": ["Kubernetes", "on-call"],
+        "partial_matches": ["distributed systems"]
+      },
+      "gap_analyst": {
+        "critical_gaps": [
+          {
+            "skill": "Kubernetes",
+            "impact": "medium",
+            "rationale": "The platform team prefers Kubernetes exposure."
+          }
+        ],
+        "nice_to_have_gaps": [
+          {
+            "skill": "on-call",
+            "impact": "low",
+            "rationale": "On-call is preferred but not listed as mandatory."
+          }
+        ]
+      },
+      "cover_letter": {
+        "subject": "Senior Backend Engineer application",
+        "body": "I am interested in the Senior Backend Engineer role at OrbitCloud because it aligns with my backend platform experience. I have built Python and FastAPI services backed by PostgreSQL and Redis, used Docker for reproducible local environments, and worked with GitHub Actions for CI/CD. My work also includes background processing and basic observability around service behavior. I would be productive quickly on API and data-layer work while continuing to build deeper Kubernetes and formal on-call experience.",
+        "tone_notes": "clear and pragmatic"
+      },
+      "resume_tailorer": {
+        "headline": "Backend Engineer",
+        "summary": "Backend engineer experienced with Python services, persistence, queues, and deployment workflows.",
+        "skills": ["Python", "FastAPI", "PostgreSQL", "Redis", "Docker", "GitHub Actions"],
+        "experience": [
+          {
+            "company": null,
+            "role": "Backend Engineer",
+            "dates": null,
+            "bullets": [
+              "Built Python APIs backed by PostgreSQL and Redis.",
+              "Implemented Docker-based development workflows and GitHub Actions checks."
+            ]
+          }
+        ],
+        "projects": [],
+        "education": [],
+        "tailored_bullets": [
+          {
+            "original": "Built APIs and worker systems.",
+            "rewritten": "Built FastAPI services and background worker systems using PostgreSQL, Redis, Docker, and pytest.",
+            "rationale": "Maps platform experience to the posting."
+          }
+        ],
+        "omitted_items": []
+      }
+    }
+  },
+  {
+    "case_id": "data_ml_engineer_analytics",
+    "job_description": "MetricForge is hiring a Data/ML Engineer to build batch pipelines and model evaluation jobs. Required skills include Python, SQL, pandas, Airflow, data quality checks, and ML evaluation. Nice to have: dbt, Spark, and cloud data warehouse experience.",
+    "candidate_profile_text": "Synthetic candidate: software engineer with Python, SQL, pandas, pytest, model evaluation experiments, and data validation scripts. No Airflow, Spark, dbt, or warehouse administration experience.",
+    "resume_text": "## CV Text\nSynthetic Candidate. Skills: Python, SQL, pandas, pytest, data validation, model evaluation. Projects: Built batch scripts and quality checks for tabular datasets.",
+    "expected": {
+      "title_keywords": ["Data", "ML", "Engineer"],
+      "company": "MetricForge",
+      "seniority": null,
+      "required_skills": ["Python", "SQL", "pandas", "Airflow", "data quality checks", "ML evaluation"],
+      "score_min": 58,
+      "score_max": 76,
+      "relevant_skills": ["Python", "SQL", "pandas", "ML evaluation"],
+      "missing_skills": ["Airflow", "dbt", "Spark"],
+      "forbidden_unsupported_claims": ["Airflow DAG owner", "Spark cluster", "dbt production project"],
+      "completeness": {
+        "cover_letter_min_words": 65,
+        "resume_min_skills": 3,
+        "resume_min_bullets": 2
+      }
+    },
+    "mocked_outputs": {
+      "job_parser": {
+        "required_skills": ["Python", "SQL", "pandas", "Airflow", "data quality checks", "ML evaluation"],
+        "nice_to_have": ["dbt", "Spark", "cloud data warehouse"],
+        "years_experience": null,
+        "role_type": "Data ML Engineer",
+        "seniority": "Mid",
+        "company": "MetricForge"
+      },
+      "match_scorer": {
+        "score": 67,
+        "matched_skills": ["Python", "SQL", "pandas", "data quality checks", "ML evaluation"],
+        "missing_skills": ["Airflow", "dbt", "Spark"],
+        "partial_matches": ["batch pipelines"]
+      },
+      "gap_analyst": {
+        "critical_gaps": [
+          {
+            "skill": "Airflow",
+            "impact": "high",
+            "rationale": "The role explicitly requires Airflow for batch pipelines."
+          }
+        ],
+        "nice_to_have_gaps": [
+          {
+            "skill": "dbt",
+            "impact": "low",
+            "rationale": "dbt is listed as nice to have."
+          },
+          {
+            "skill": "Spark",
+            "impact": "low",
+            "rationale": "Spark is listed as nice to have."
+          }
+        ]
+      },
+      "cover_letter": {
+        "subject": "Data/ML Engineer application",
+        "body": "I am interested in the Data/ML Engineer role at MetricForge because it combines Python data engineering with model evaluation and quality checks. My experience includes Python, SQL, pandas, pytest, data validation scripts, and model evaluation experiments. I have built batch scripts for tabular datasets and focused on making outputs testable. I would contribute immediately to data quality and evaluation work while ramping up on Airflow and the broader modern data stack used by the team.",
+        "tone_notes": "honest and technical"
+      },
+      "resume_tailorer": {
+        "headline": "Data and ML Engineer",
+        "summary": "Engineer with Python, SQL, pandas, data validation, and model evaluation experience.",
+        "skills": ["Python", "SQL", "pandas", "pytest", "data validation", "model evaluation"],
+        "experience": [
+          {
+            "company": null,
+            "role": "Data/ML Engineer",
+            "dates": null,
+            "bullets": [
+              "Built Python and pandas batch scripts for tabular dataset processing.",
+              "Added pytest-backed data validation checks for model evaluation workflows."
+            ]
+          }
+        ],
+        "projects": [],
+        "education": [],
+        "tailored_bullets": [
+          {
+            "original": "Built quality checks for tabular datasets.",
+            "rewritten": "Implemented Python and SQL quality checks for tabular datasets used in model evaluation experiments.",
+            "rationale": "Highlights relevant data quality work."
+          }
+        ],
+        "omitted_items": []
+      }
+    }
+  },
+  {
+    "case_id": "forward_deployed_engineer_ai",
+    "job_description": "AtlasField is hiring a Forward Deployed Engineer to work directly with customers and build AI workflow integrations. The role requires Python, API integration, SQL, customer communication, debugging production issues, and rapid prototyping. Nice to have: React and enterprise security experience.",
+    "candidate_profile_text": "Synthetic candidate: full-stack engineer with Python, FastAPI, SQL, React, customer-facing project demos, debugging skills, and rapid prototyping experience. Has not owned enterprise security programs.",
+    "resume_text": "## CV Text\nSynthetic Candidate. Skills: Python, FastAPI, SQL, React, debugging, rapid prototyping, customer demos. Experience: Built integrations and presented technical demos to stakeholders.",
+    "expected": {
+      "title_keywords": ["Forward", "Deployed", "Engineer"],
+      "company": "AtlasField",
+      "seniority": null,
+      "required_skills": ["Python", "API integration", "SQL", "customer communication", "debugging", "rapid prototyping"],
+      "score_min": 72,
+      "score_max": 88,
+      "relevant_skills": ["Python", "SQL", "customer demos", "rapid prototyping"],
+      "missing_skills": ["enterprise security"],
+      "forbidden_unsupported_claims": ["enterprise security owner", "Fortune 100 account lead", "SOC 2 auditor"],
+      "completeness": {
+        "cover_letter_min_words": 70,
+        "resume_min_skills": 4,
+        "resume_min_bullets": 2
+      }
+    },
+    "mocked_outputs": {
+      "job_parser": {
+        "required_skills": ["Python", "API integration", "SQL", "customer communication", "debugging", "rapid prototyping"],
+        "nice_to_have": ["React", "enterprise security"],
+        "years_experience": null,
+        "role_type": "Forward Deployed Engineer",
+        "seniority": "Mid",
+        "company": "AtlasField"
+      },
+      "match_scorer": {
+        "score": 81,
+        "matched_skills": ["Python", "SQL", "API integration", "debugging", "rapid prototyping", "customer demos", "React"],
+        "missing_skills": ["enterprise security"],
+        "partial_matches": ["customer communication"]
+      },
+      "gap_analyst": {
+        "critical_gaps": [],
+        "nice_to_have_gaps": [
+          {
+            "skill": "enterprise security",
+            "impact": "medium",
+            "rationale": "Enterprise security is useful for customer deployments."
+          }
+        ]
+      },
+      "cover_letter": {
+        "subject": "Forward Deployed Engineer application",
+        "body": "I am interested in the Forward Deployed Engineer role at AtlasField because it sits between customer problems and practical AI workflow delivery. My background includes Python, FastAPI, SQL, React, API integrations, debugging, and rapid prototyping. I have also presented technical demos to stakeholders, which fits the customer-facing side of the role. I would bring a hands-on engineering approach to discovering workflow needs, building integrations, and communicating trade-offs clearly while growing further into enterprise security requirements.",
+        "tone_notes": "customer-aware and technical"
+      },
+      "resume_tailorer": {
+        "headline": "Forward Deployed AI Engineer",
+        "summary": "Full-stack engineer building customer-facing integrations and AI workflow prototypes.",
+        "skills": ["Python", "FastAPI", "SQL", "React", "debugging", "rapid prototyping"],
+        "experience": [
+          {
+            "company": null,
+            "role": "Forward Deployed Engineer",
+            "dates": null,
+            "bullets": [
+              "Built API integrations and technical prototypes using Python, FastAPI, and SQL.",
+              "Presented customer-facing demos and debugged workflow issues with stakeholders."
+            ]
+          }
+        ],
+        "projects": [],
+        "education": [],
+        "tailored_bullets": [
+          {
+            "original": "Built integrations and presented demos.",
+            "rewritten": "Built Python API integrations and presented stakeholder demos for customer-facing workflow prototypes.",
+            "rationale": "Emphasizes forward-deployed responsibilities."
+          }
+        ],
+        "omitted_items": []
+      }
+    }
+  }
+]

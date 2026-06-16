@@ -201,16 +201,16 @@ export function Results() {
     }
   };
 
-  if (error) return <p className="p-6 text-red-600">{error}</p>;
-  if (!data) return <p className="p-6 text-slate-500">Loading…</p>;
+  if (error) return <p className="p-4 sm:p-6 text-red-600">{error}</p>;
+  if (!data) return <p className="p-4 sm:p-6 text-slate-500">Loading…</p>;
   const r = data.results;
   const steps: Step[] = data.steps ?? [];
   const effectiveStatus = (s: Step): string => retryRunning[s.name] ?? s.status;
   const tabs = user?.is_admin ? TABS : TABS.filter((t) => t.id !== "cold_email");
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="max-w-2xl mx-auto p-0 sm:p-6 space-y-4">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <h1 className="text-2xl font-bold text-slate-900">Results</h1>
         <div className="flex items-center gap-2 text-sm">
           {feedbackRating === null ? (
@@ -242,7 +242,7 @@ export function Results() {
 
       {steps.length > 0 && (
         <div className="text-xs text-slate-600 space-y-2 border border-slate-200 rounded-lg p-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
             <span className="font-semibold text-slate-500 uppercase">Pipeline steps</span>
             {data.partial && (
               <button
@@ -286,13 +286,13 @@ export function Results() {
       )}
 
       {data.evaluate_only && !generating && (
-        <div className="flex items-center gap-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-800 flex-1">
+        <div className="flex flex-col items-start gap-4 p-4 bg-indigo-50 border border-indigo-200 rounded-lg sm:flex-row sm:items-center">
+          <p className="text-sm text-indigo-900 flex-1">
             Evaluation complete. Generate your cover letter, resource plan, and tailored resume.
           </p>
           <button
             onClick={generate}
-            className="shrink-0 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+            className="w-full shrink-0 px-4 py-2 rounded-lg bg-indigo-950 text-white text-sm font-medium hover:bg-indigo-900 sm:w-auto"
           >
             Generate Documents
           </button>
@@ -330,7 +330,7 @@ export function Results() {
         </div>
       )}
 
-      <div className="flex gap-2 border-b">
+        <div className="-mx-4 flex gap-2 overflow-x-auto border-b px-4 sm:mx-0 sm:px-0">
         {tabs
           .filter((t) => t.id !== "cold_email" || !!r.job_parser?.company)
           .map((t) => (
@@ -339,7 +339,7 @@ export function Results() {
               onClick={() => setTab(t.id)}
               className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
                 tab === t.id
-                  ? "border-blue-600 text-blue-600"
+                  ? "border-indigo-700 text-indigo-700"
                   : "border-transparent text-slate-500 hover:text-slate-700"
               }`}
             >
@@ -461,7 +461,7 @@ export function Results() {
                     <p className="text-sm text-slate-500">
                       No contacts discovered yet. Enter a company domain to search:
                     </p>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       <input
                         type="text"
                         placeholder="stripe.com"
@@ -471,14 +471,14 @@ export function Results() {
                       />
                       <button
                         onClick={() => handleDiscover(domainOverride)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded text-sm"
+                        className="px-4 py-2 bg-indigo-950 text-white rounded text-sm hover:bg-indigo-900"
                       >
                         Search
                       </button>
                     </div>
                     <button
                       onClick={() => handleDiscover()}
-                      className="text-sm text-blue-600 underline"
+                      className="text-sm text-indigo-700 underline"
                     >
                       Auto-detect from job description
                     </button>
@@ -499,7 +499,7 @@ export function Results() {
                         <label
                           key={c.id}
                           className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer ${
-                            selectedContactId === c.id ? "border-blue-500 bg-blue-50" : ""
+                            selectedContactId === c.id ? "border-indigo-500 bg-indigo-50" : ""
                           }`}
                         >
                           <input
@@ -525,7 +525,7 @@ export function Results() {
                     <button
                       onClick={handleDraft}
                       disabled={!selectedContactId || drafting}
-                      className="px-4 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-50"
+                      className="px-4 py-2 bg-indigo-950 text-white rounded text-sm disabled:opacity-50 hover:bg-indigo-900"
                     >
                       {drafting ? "Drafting…" : "Draft Email"}
                     </button>
@@ -560,7 +560,7 @@ export function Results() {
                         className="w-full border rounded px-3 py-2 text-sm font-mono"
                       />
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       <button
                         onClick={() => setColdEmailScreen("picker")}
                         className="px-4 py-2 border rounded text-sm text-slate-500 hover:bg-slate-50"
@@ -581,7 +581,7 @@ export function Results() {
                       <button
                         onClick={() => setShowSendModal(true)}
                         disabled={sending}
-                        className="px-4 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-50"
+                        className="px-4 py-2 bg-indigo-950 text-white rounded text-sm disabled:opacity-50 hover:bg-indigo-900"
                       >
                         {sending ? "Sending…" : "Send"}
                       </button>
@@ -613,14 +613,14 @@ export function Results() {
             {showSendModal && (() => {
               const target = contacts.find((c) => c.id === selectedContactId);
               return (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
                   <div className="bg-white rounded-lg p-6 max-w-sm w-full shadow-xl space-y-4">
                     <p className="text-sm text-slate-800">
                       Send to <strong>{target?.email}</strong>? This will send via Gmail. The email
                       lands in Drafts briefly before firing — you can delete it from there if you
                       act fast.
                     </p>
-                    <div className="flex gap-3 justify-end">
+                    <div className="flex flex-col gap-3 justify-end sm:flex-row">
                       <button
                         onClick={() => setShowSendModal(false)}
                         className="px-4 py-2 text-sm border rounded text-slate-700"
@@ -629,7 +629,7 @@ export function Results() {
                       </button>
                       <button
                         onClick={handleSendConfirm}
-                        className="px-4 py-2 text-sm bg-blue-600 text-white rounded"
+                        className="px-4 py-2 text-sm bg-indigo-950 text-white rounded hover:bg-indigo-900"
                       >
                         Confirm Send
                       </button>

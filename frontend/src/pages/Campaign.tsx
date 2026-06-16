@@ -20,7 +20,7 @@ function fmt(ts: string | null | undefined): string {
 
 function RunRow({ run }: { run: CampaignRun }) {
   return (
-    <div className="rounded-lg border bg-white px-4 py-3 flex items-center gap-3 text-sm">
+    <div className="flex flex-col gap-2 rounded-lg border bg-white px-4 py-3 text-sm sm:flex-row sm:items-center sm:gap-3">
       <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium shrink-0 ${STATUS_BADGE[run.status] ?? "bg-slate-100 text-slate-500"}`}>
         {run.status === "running" && (
           <span className="relative flex h-1.5 w-1.5">
@@ -32,12 +32,12 @@ function RunRow({ run }: { run: CampaignRun }) {
       </span>
       <span className="text-slate-600">{fmt(run.started_at)}</span>
       <span className="text-slate-400">→ {fmt(run.finished_at)}</span>
-      <span className="ml-auto text-xs text-slate-500 shrink-0">
+      <span className="text-xs text-slate-500 sm:ml-auto sm:shrink-0">
         <strong className="text-slate-700">{run.jobs_considered}</strong> considered ·{" "}
         <strong className="text-emerald-700">{run.jobs_drafted}</strong> drafted ·{" "}
         <strong className={run.jobs_failed > 0 ? "text-red-700" : "text-slate-700"}>{run.jobs_failed}</strong> failed
       </span>
-      {run.error && <span className="text-xs text-red-700 shrink-0" title={run.error}>· {run.error}</span>}
+      {run.error && <span className="text-xs text-red-700 sm:shrink-0" title={run.error}>· {run.error}</span>}
     </div>
   );
 }
@@ -182,11 +182,11 @@ export function Campaign() {
   const running = activeRunId !== null;
   const activeTargets = targets.filter((t) => t.active).length;
 
-  if (loading) return <p className="p-6 text-slate-500">Loading…</p>;
+  if (loading) return <p className="p-4 sm:p-6 text-slate-500">Loading…</p>;
 
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
+    <div className="max-w-3xl mx-auto p-0 sm:p-6 space-y-6">
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Campaign</h1>
           <p className="text-sm text-slate-500 mt-1">
@@ -196,7 +196,7 @@ export function Campaign() {
         <button
           onClick={handleRunNow}
           disabled={starting || running}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shrink-0"
+          className="w-full px-4 py-2 bg-indigo-950 text-white text-sm font-semibold rounded-lg hover:bg-indigo-900 disabled:opacity-50 transition-colors sm:w-auto sm:shrink-0"
         >
           {running ? "Running…" : starting ? "Starting…" : "Run now"}
         </button>
@@ -215,7 +215,7 @@ export function Campaign() {
       )}
 
       {timedOut && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-center justify-between gap-3">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <span>The run is taking longer than expected. Refresh to check status.</span>
           <button
             onClick={() => { setTimedOut(false); loadAll(); }}
@@ -247,10 +247,10 @@ export function Campaign() {
         ) : (
           <div className="space-y-2">
             {targets.map((t) => (
-              <div key={t.id} className="flex items-center gap-3 text-sm border border-slate-200 rounded-lg px-3 py-2">
+            <div key={t.id} className="flex flex-col gap-2 text-sm border border-slate-200 rounded-lg px-3 py-2 sm:flex-row sm:items-center sm:gap-3">
                 <span className={`font-medium ${t.active ? "text-slate-800" : "text-slate-400"}`}>{t.name}</span>
                 <span className="text-xs text-slate-400">{t.ats} · {t.slug}</span>
-                <div className="ml-auto flex items-center gap-2">
+                <div className="flex items-center gap-2 sm:ml-auto">
                   <button
                     onClick={() => handleToggleTarget(t)}
                     className={`text-xs px-2 py-1 rounded-md border transition-colors ${t.active ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}
@@ -269,19 +269,19 @@ export function Campaign() {
           </div>
         )}
 
-        <form onSubmit={handleAddTarget} className="flex flex-wrap gap-2 items-center pt-1">
+        <form onSubmit={handleAddTarget} className="grid gap-2 pt-1 sm:flex sm:flex-wrap sm:items-center">
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Company name"
             required
-            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-200 w-44"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 sm:w-44"
           />
           <select
             value={ats}
             onChange={(e) => setAts(e.target.value)}
-            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 sm:w-auto"
           >
             {ATS_OPTIONS.map((o) => (
               <option key={o} value={o}>{o}</option>
@@ -293,11 +293,11 @@ export function Campaign() {
             onChange={(e) => setSlug(e.target.value)}
             placeholder="ATS slug (e.g. stripe)"
             required
-            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-200 w-44"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 sm:w-44"
           />
           <button
             type="submit"
-            className="px-4 py-2 border border-blue-600 text-blue-700 text-sm font-semibold rounded-lg hover:bg-blue-50 transition-colors"
+            className="w-full px-4 py-2 border border-indigo-200 text-indigo-800 text-sm font-semibold rounded-lg hover:bg-indigo-50 transition-colors sm:w-auto"
           >
             Add target
           </button>
@@ -328,17 +328,17 @@ export function Campaign() {
               <Link
                 key={h.id}
                 to={`/results/${h.id}`}
-                className="flex items-center gap-3 text-sm border border-slate-200 rounded-lg px-4 py-3 bg-white hover:bg-slate-50 transition-colors"
+                className="flex flex-col gap-2 text-sm border border-slate-200 rounded-lg px-4 py-3 bg-white hover:bg-slate-50 transition-colors sm:flex-row sm:items-center sm:gap-3"
               >
                 <span className="font-medium text-slate-800">
                   {h.company ?? h.role_type ?? h.jd_text.slice(0, 60)}
                 </span>
                 {h.match_score != null && (
-                  <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100">
+                  <span className="w-fit text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-100">
                     score {h.match_score}
                   </span>
                 )}
-                <span className="ml-auto text-xs text-slate-400">{fmt(h.created_at)}</span>
+                <span className="text-xs text-slate-400 sm:ml-auto">{fmt(h.created_at)}</span>
               </Link>
             ))}
           </div>

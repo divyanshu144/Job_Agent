@@ -203,6 +203,40 @@ async def test_iter_batch_results_yields_none_on_errored():
     assert out_toks == 0
 
 
+async def test_iter_batch_results_yields_none_on_malformed_stage2_json():
+    from anthropic.types.beta import BetaTextBlock
+
+    from backend.services.batch_processor import iter_batch_results
+
+    succeeded = MagicMock()
+    succeeded.custom_id = "job_bad_json"
+    succeeded.result.type = "succeeded"
+    succeeded.result.message.content = [
+        BetaTextBlock(type="text", text='{"reason": "missing required relevant"}')
+    ]
+    succeeded.result.message.usage.input_tokens = 10
+    succeeded.result.message.usage.output_tokens = 5
+
+    async def mock_results(batch_id):
+        async def _gen():
+            yield succeeded
+
+        return _gen()
+
+    mock_client = MagicMock()
+    mock_client.beta.messages.batches.results = mock_results
+
+    collected = []
+    async for item in iter_batch_results(mock_client, "msgbatch_test001"):
+        collected.append(item)
+
+    job_id, s2, in_toks, out_toks = collected[0]
+    assert job_id == "job_bad_json"
+    assert s2 is None
+    assert in_toks == 0
+    assert out_toks == 0
+
+
 async def test_log_batch_llm_call_writes_at_batch_rates(Session):
     """log_batch_llm_call writes LLMCall with 50% cost and latency_ms=0."""
     from sqlalchemy import select

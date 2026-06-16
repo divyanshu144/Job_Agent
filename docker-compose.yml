@@ -64,6 +64,8 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        NGINX_CONF: nginx.conf
     restart: unless-stopped
     ports:
       - "8080:80"

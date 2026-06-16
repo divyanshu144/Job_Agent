@@ -368,6 +368,25 @@ class UserLogin(BaseModel):
     password: str
 
 
+class PasswordResetRequest(BaseModel):
+    email: str
+
+
+class PasswordResetRequestResponse(BaseModel):
+    ok: bool
+    message: str
+    reset_url: str | None = None
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    password: str
+
+
+class PasswordResetConfirmResponse(BaseModel):
+    ok: bool
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.services.auth_service import get_current_user
+from backend.services.auth_service import get_current_user, hash_password, verify_password
 from tests.factories import make_user
 
 
@@ -95,3 +95,65 @@ async def test_register_requires_invite_after_first_user(app_client):
 
     assert resp.status_code == 400
     assert resp.json()["detail"] == "Invite token required"
+
+
+async def test_password_reset_request_returns_dev_reset_url(unauthenticated_client, db_session):
+    await make_user(
+        db_session,
+        email="reset@example.com",
+        hashed_password=hash_password("old-password"),
+        is_active=True,
+    )
+    await db_session.commit()
+
+    resp = await unauthenticated_client.post(
+        "/api/auth/password-reset/request",
+        json={"email": "reset@example.com"},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["reset_url"].startswith("/reset-password?token=")
+
+
+async def test_password_reset_confirm_updates_password_once(unauthenticated_client, db_session):
+    user = await make_user(
+        db_session,
+        email="reset-once@example.com",
+        hashed_password=hash_password("old-password"),
+        is_active=True,
+    )
+    await db_session.commit()
+    request_resp = await unauthenticated_client.post(
+        "/api/auth/password-reset/request",
+        json={"email": "reset-once@example.com"},
+    )
+    token = request_resp.json()["reset_url"].split("token=", 1)[1]
+
+    confirm_resp = await unauthenticated_client.post(
+        "/api/auth/password-reset/confirm",
+        json={"token": token, "password": "new-password"},
+    )
+    second_resp = await unauthenticated_client.post(
+        "/api/auth/password-reset/confirm",
+        json={"token": token, "password": "another-password"},
+    )
+    await db_session.refresh(user)
+
+    assert confirm_resp.status_code == 200
+    assert confirm_resp.json() == {"ok": True}
+    assert second_resp.status_code == 400
+    assert second_resp.json()["detail"] == "Invalid or expired reset token"
+    assert verify_password("new-password", user.hashed_password)
+
+
+async def test_password_reset_request_does_not_reveal_unknown_email(unauthenticated_client):
+    resp = await unauthenticated_client.post(
+        "/api/auth/password-reset/request",
+        json={"email": "missing@example.com"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    assert resp.json()["reset_url"] is None

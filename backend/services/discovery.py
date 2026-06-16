@@ -24,6 +24,12 @@ from backend.services.orchestrator import _run_phase1
 from backend.services.profile_builder import build_compact_profile, get_or_build_profile
 from backend.services.reed_client import fetch_reed_jobs
 from backend.services.remotive_client import fetch_remotive_jobs
+from backend.services.stage2 import (
+    Stage2Result,
+    build_stage2_system_prompt,
+    parse_stage2_result,
+    stage2_prompt_version,
+)
 from backend.services.targets_client import _TARGET_FILE, fetch_target_jobs
 from backend.services.workatastartup_client import fetch_workatastartup_jobs
 
@@ -46,15 +52,6 @@ class SearchProfile:
     target_roles: list[str]
     allowed_locations: list[str]
     min_score: int
-
-
-@dataclass
-class Stage2Result:
-    relevant: bool
-    reason: str
-    title: str
-    company: str
-    location: str | None
 
 
 def _load_search_profiles() -> list[SearchProfile]:
@@ -105,20 +102,17 @@ async def _stage2_check(
     run_id: str | None = None,
 ) -> Stage2Result:
     """Haiku relevance check. Returns relevance + title/company/location in one call."""
-    system = (
-        "You are evaluating job postings for a candidate.\n\n"
-        f"Candidate summary:\n{compact_profile[:1000]}\n\n"
-        "Evaluate if the job posting is relevant to this candidate. "
-        'Respond with ONLY valid JSON: {"relevant": true/false, "reason": "one sentence", '
-        '"title": "job title or empty string", "company": "company name or empty string", '
-        '"location": "city/remote or null"}'
-    )
+    system = build_stage2_system_prompt(compact_profile)
+    prompt_version = stage2_prompt_version(HAIKU)
     msg = await tracked_call(
         _anthropic_client,
         "stage2_haiku",
         HAIKU,
         db=db,
         run_id=run_id,
+        prompt_name=prompt_version.prompt_name,
+        prompt_hash=prompt_version.prompt_hash,
+        prompt_version=prompt_version.prompt_version,
         max_tokens=200,
         # stage2 intentionally uncached: ~380 tok << 4096 Haiku min; see DevLog
         # 'stage2 enrichment' for the only case that flips this.
@@ -128,17 +122,7 @@ async def _stage2_check(
     if not msg.content:
         raise ValueError("Empty response from Haiku")
     raw = msg.content[0].text.strip()  # type: ignore[union-attr]
-    start, end = raw.find("{"), raw.rfind("}") + 1
-    if start == -1 or end == 0:
-        raise ValueError(f"No JSON object in Haiku response: {raw!r}")
-    data = json.loads(raw[start:end])
-    return Stage2Result(
-        relevant=bool(data.get("relevant", False)),
-        reason=data.get("reason", ""),
-        title=data.get("title", ""),
-        company=data.get("company", ""),
-        location=data.get("location"),
-    )
+    return parse_stage2_result(raw)
 
 
 def _match_profiles(score: int, profiles: list[SearchProfile]) -> list[str]:
@@ -756,6 +740,7 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
 
             # Log cost for this result even if irrelevant
             if in_toks > 0 or out_toks > 0:
+                prompt_version = stage2_prompt_version(HAIKU)
                 await log_batch_llm_call(
                     db,
                     agent_name="stage2_haiku_batch",
@@ -763,6 +748,9 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
                     input_tokens=in_toks,
                     output_tokens=out_toks,
                     run_id=run_id,
+                    prompt_name=prompt_version.prompt_name,
+                    prompt_hash=prompt_version.prompt_hash,
+                    prompt_version=prompt_version.prompt_version,
                 )
 
             if s2 is None or not s2.relevant or not _location_allowed(s2.location, profiles):

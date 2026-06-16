@@ -170,6 +170,9 @@ async def tracked_call(
     run_id: str | None = None,
     analysis_id: str | None = None,
     user_id: str | None = None,
+    prompt_name: str | None = None,
+    prompt_hash: str | None = None,
+    prompt_version: str | None = None,
     **create_kwargs: Any,
 ) -> anthropic.types.Message:
     start = time.monotonic()
@@ -202,6 +205,9 @@ async def tracked_call(
             run_id=run_id,
             analysis_id=analysis_id,
             user_id=user_id,
+            prompt_name=prompt_name,
+            prompt_hash=prompt_hash,
+            prompt_version=prompt_version,
         )
     return msg
 
@@ -229,6 +235,9 @@ async def log_cache_hit(
         run_id=run_id,
         analysis_id=analysis_id,
         user_id=user_id,
+        prompt_name=None,
+        prompt_hash=None,
+        prompt_version=None,
     )
 
 
@@ -247,6 +256,9 @@ async def _write_llm_call(
     run_id: str | None,
     analysis_id: str | None,
     user_id: str | None = None,
+    prompt_name: str | None = None,
+    prompt_hash: str | None = None,
+    prompt_version: str | None = None,
 ) -> None:
     try:
         row = LLMCall(
@@ -259,6 +271,9 @@ async def _write_llm_call(
             cache_hit=cache_hit,
             cache_creation_tokens=cache_creation_tokens,
             cache_read_tokens=cache_read_tokens,
+            prompt_name=prompt_name,
+            prompt_hash=prompt_hash,
+            prompt_version=prompt_version,
             run_id=run_id,
             analysis_id=analysis_id,
             user_id=user_id,
@@ -283,6 +298,9 @@ async def log_batch_llm_call(
     run_id: str | None = None,
     analysis_id: str | None = None,
     user_id: str | None = None,
+    prompt_name: str | None = None,
+    prompt_hash: str | None = None,
+    prompt_version: str | None = None,
 ) -> None:
     """Write an LLMCall row for a completed Anthropic Batch API result.
 
@@ -305,4 +323,7 @@ async def log_batch_llm_call(
         run_id=run_id,
         analysis_id=analysis_id,
         user_id=user_id,
+        prompt_name=prompt_name,
+        prompt_hash=prompt_hash,
+        prompt_version=prompt_version,
     )

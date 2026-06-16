@@ -1,4 +1,4 @@
-.PHONY: run test fmt lint check docker-up eval-consistency
+.PHONY: run test fmt lint check docker-up eval-deterministic eval-live eval-consistency
 
 run:
 	uvicorn backend.main:app --reload --port 8000 & cd frontend && npm run dev
@@ -16,6 +16,12 @@ lint:
 
 check:
 	make fmt && make lint && make test
+
+eval-deterministic:
+	python scripts/run_evals.py
+
+eval-live:
+	python scripts/run_evals.py --live
 
 eval-consistency:
 	pytest tests/test_evals/test_consistency.py -v -m integration
