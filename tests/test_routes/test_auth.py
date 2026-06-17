@@ -97,6 +97,26 @@ async def test_register_requires_invite_after_first_user(app_client):
     assert resp.json()["detail"] == "Invite token required"
 
 
+async def test_login_cookie_is_available_to_all_routes(unauthenticated_client, db_session):
+    await make_user(
+        db_session,
+        email="cookie@example.com",
+        hashed_password=hash_password("password123"),
+        is_active=True,
+    )
+    await db_session.commit()
+
+    resp = await unauthenticated_client.post(
+        "/api/auth/login",
+        json={"email": "cookie@example.com", "password": "password123"},
+    )
+
+    assert resp.status_code == 200
+    set_cookie = resp.headers["set-cookie"]
+    assert "access_token=" in set_cookie
+    assert "Path=/" in set_cookie
+
+
 async def test_password_reset_request_returns_dev_reset_url(unauthenticated_client, db_session):
     await make_user(
         db_session,

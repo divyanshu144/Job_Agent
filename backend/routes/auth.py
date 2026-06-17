@@ -90,6 +90,7 @@ async def register(
         "access_token",
         token,
         httponly=True,
+        path="/",
         samesite="lax",
         secure=settings.cookie_secure,
         max_age=60 * 60 * 24 * 7,
@@ -118,6 +119,7 @@ async def login(
         "access_token",
         token,
         httponly=True,
+        path="/",
         samesite="lax",
         secure=settings.cookie_secure,
         max_age=60 * 60 * 24 * 7,
@@ -127,7 +129,7 @@ async def login(
 
 @router.post("/auth/logout")
 async def logout(response: Response) -> dict[str, bool]:
-    response.delete_cookie("access_token", secure=settings.cookie_secure, samesite="lax")
+    response.delete_cookie("access_token", path="/", secure=settings.cookie_secure, samesite="lax")
     return {"ok": True}
 
 
