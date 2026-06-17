@@ -91,9 +91,7 @@ async def get_analysis(
         r.agent_name: json.loads(r.output_json) for r in analysis.results if r.output_json
     }
     result_contexts = {
-        r.agent_name: json.loads(r.context_json)
-        for r in analysis.results
-        if r.context_json
+        r.agent_name: json.loads(r.context_json) for r in analysis.results if r.context_json
     }
     # Error rows whose agent has no successful output. r.error already holds a
     # user-safe message (orchestrator never stores str(exc)); this route passes
