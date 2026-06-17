@@ -1,16 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import {
-  ArrowRight,
-  CheckCircle2,
-  FileCheck2,
-  FileSearch,
-  FolderCheck,
-  ListChecks,
-  UserRound,
-} from "lucide-react";
+import { ArrowRight, Clock, Download, Sparkles, TrendingUp, UserRound, Zap } from "lucide-react";
 import { api } from "../api/client";
-import { EmptyState, PageHeader, PageShell, Panel, SectionHeader, StatusPill } from "../components/portal";
+import { EmptyState, PageShell, Panel, StatusPill } from "../components/portal";
+import { ScoreRing } from "../components/ScoreRing";
 import type { StatusTone } from "../components/portal";
 import { useAuth } from "../context/AuthContext";
 import type { AnalysisSummary } from "../types";
@@ -25,149 +18,106 @@ export function Dashboard() {
 
   const latest = history[0];
   const documentsReady = history.filter((item) => !item.evaluate_only && !item.partial).length;
+  const scores = history
+    .map((item) => item.match_score)
+    .filter((score): score is number => typeof score === "number");
+  const avgScore = scores.length
+    ? Math.round(scores.reduce((total, score) => total + score, 0) / scores.length)
+    : null;
   const recommendedStep = useMemo(() => {
     if (!history.length) {
-      return {
-        title: "Submit your first role",
-        body: "Paste a job description so we can prepare your first match review and application package.",
-        to: "/analyse",
-        label: "Submit a role",
-      };
+      return { title: "Submit your first role", to: "/analyse" };
     }
     if (latest?.evaluate_only) {
-      return {
-        title: "Complete the latest package",
-        body: "Your match review is ready. Prepare documents when you are ready to apply.",
-        to: `/results/${latest.id}`,
-        label: "Open package",
-      };
+      return { title: "Complete latest package", to: `/results/${latest.id}` };
     }
-    return {
-      title: "Review prepared documents",
-      body: "Check the latest cover letter and resume bullets before using them for an application.",
-      to: latest ? `/results/${latest.id}` : "/results",
-      label: "Review package",
-    };
+    return { title: "Review prepared work", to: latest ? `/results/${latest.id}` : "/results" };
   }, [history.length, latest]);
 
   return (
     <PageShell>
-      <PageHeader
-        title="Your application workspace"
-        description="Submit roles, review your fit, and receive tailored application materials prepared for each opportunity."
-        actions={
-          <>
-            <Link
-              to="/analyse"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
-            >
-              <FileSearch className="size-4" />
-              Submit a role
-            </Link>
-            <Link
-              to="/profile"
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-5 py-3 text-sm font-semibold text-zinc-800 transition-colors hover:bg-zinc-50"
-            >
-              <UserRound className="size-4" />
-              Review profile
-            </Link>
-          </>
-        }
-      />
-      <p className="-mt-3 px-1 text-sm text-zinc-500">
-        Signed in as <span className="text-zinc-800">{user?.email}</span>
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="mb-1 font-mono text-xs uppercase tracking-[0.15em] text-[#71717a]">
+            Workspace
+          </p>
+          <h1 className="text-2xl font-medium leading-tight tracking-[-0.03em] text-[#0f0f17]">
+            Your application workspace
+          </h1>
+          <p className="mt-1 text-sm text-[#71717a]">
+            Submit roles, review fit, and receive tailored application packages.
+          </p>
+          <p className="mt-1 text-xs text-[#9898a8]">Signed in as {user?.email}</p>
+        </div>
+        <Link
+          to="/analyse"
+          className="hidden items-center gap-2 rounded-xl bg-[#0f0f17] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1a1a28] sm:flex"
+        >
+          <Zap className="size-3.5" />
+          New Package
+        </Link>
+      </div>
 
-      <section className="grid gap-4 lg:grid-cols-4">
-        <WorkspaceCard
-          title="Latest application package"
-          value={latest?.role_type ?? "No package yet"}
-          detail={latest?.company ? `For ${latest.company}` : "Submit a role to begin."}
-          icon={FolderCheck}
-          to={latest ? `/results/${latest.id}` : "/analyse"}
-        />
-        <WorkspaceCard
-          title="Documents ready"
-          value={String(documentsReady)}
-          detail="Packages with prepared documents"
-          icon={FileCheck2}
-          to="/results"
-        />
-        <WorkspaceCard
-          title="Profile readiness"
-          value="Review"
-          detail="Keep your profile current for better tailoring"
-          icon={UserRound}
-          to="/profile"
-        />
-        <WorkspaceCard
-          title="Recommended next step"
-          value={recommendedStep.title}
-          detail={recommendedStep.body}
-          icon={ListChecks}
-          to={recommendedStep.to}
-          cta={recommendedStep.label}
-        />
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="Total Packages" value={String(history.length)} sub="Saved workspace items" icon="PK" trend={history.length > 0} />
+        <StatCard label="Avg Match Score" value={avgScore == null ? "--" : String(avgScore)} suffix={avgScore == null ? "" : "%"} sub={scores.length ? "Across recent packages" : "No scores yet"} icon="MS" trend={scores.length > 0} />
+        <StatCard label="Documents Ready" value={String(documentsReady)} sub="Prepared materials" icon="DR" />
+        <StatCard label="Next Step" value={history.length ? "Review" : "Submit"} sub={recommendedStep.title} icon="NS" />
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1.4fr_0.6fr]">
-        <Panel>
-          <SectionHeader
-            title="Recent submissions"
-            description="Roles recently submitted for review"
-            action={
-            <Link to="/results" className="text-sm font-medium text-blue-700 hover:text-blue-600">
-              View packages
+      <section className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
+        <div className="overflow-hidden rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white">
+          <div className="flex items-center justify-between border-b border-[rgba(0,0,0,0.05)] px-5 py-4">
+            <div>
+              <h2 className="text-sm font-medium text-[#0f0f17]">Recent Packages</h2>
+              <p className="mt-0.5 text-xs text-[#71717a]">Your last application packages</p>
+            </div>
+            <Link to="/results" className="flex items-center gap-1 text-xs text-[#5b5bd6] transition-colors hover:text-[#4a4ab8]">
+              View all
+              <ArrowRight className="size-3" />
             </Link>
-            }
-          />
+          </div>
+
           {history.length ? (
-            <div className="divide-y divide-zinc-100">
+            <div className="divide-y divide-[rgba(0,0,0,0.04)]">
               {history.map((item) => (
                 <Link
                   key={item.id}
                   to={`/results/${item.id}`}
-                  className="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0"
+                  className="group flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-[#fafafa]"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-zinc-950">
-                      {item.role_type ?? "Submitted role"}
-                      {item.company ? <span className="font-normal text-zinc-500"> at {item.company}</span> : null}
-                    </p>
-                    <p className="mt-1 truncate text-xs text-zinc-500">
+                  <ScoreRing score={item.match_score} size={44} strokeWidth={4} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-[#0f0f17]">{item.role_type ?? "Submitted role"}</p>
+                    <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-[#71717a]">
+                      {item.company ? <span>{item.company}</span> : null}
+                      {item.company ? <span className="text-[#d4d4d8]">·</span> : null}
+                      <Clock className="size-2.5" />
                       {new Date(item.created_at).toLocaleString()}
                     </p>
                   </div>
                   <PackageStatus item={item} />
+                  <ArrowRight className="size-3.5 text-[#d4d4d8] transition-all group-hover:translate-x-0.5 group-hover:text-[#5b5bd6]" />
                 </Link>
               ))}
             </div>
           ) : (
             <EmptyState
-              icon={FolderCheck}
               title="No submissions yet"
               description="Submit a job description to receive your first match review."
             />
           )}
-        </Panel>
+        </div>
 
         <Panel>
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-600/15 text-emerald-400">
-              <CheckCircle2 className="size-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-semibold text-zinc-950">What JobFit prepares</h3>
-              <p className="mt-1 text-sm text-zinc-500">Client deliverables</p>
-            </div>
+          <div className="mb-4">
+            <h2 className="text-sm font-medium text-[#0f0f17]">Quick Actions</h2>
+            <p className="mt-0.5 text-xs text-[#71717a]">Next recommended steps</p>
           </div>
-          <div className="mt-5 space-y-3 text-sm text-zinc-700">
-            {["Match review", "Skill-gap recommendations", "Cover letter", "Resume bullets"].map((label) => (
-              <div key={label} className="flex items-center gap-2">
-                <CheckCircle2 className="size-4 text-emerald-500" />
-                <span>{label}</span>
-              </div>
-            ))}
+          <div className="space-y-2">
+            <QuickAction to="/analyse" icon={<Sparkles className="size-4" />} title="Submit a new role" desc="Start a new application package" primary />
+            <QuickAction to="/profile" icon={<UserRound className="size-4" />} title="Update your profile" desc="Improve future tailoring" />
+            <QuickAction to={latest ? `/results/${latest.id}` : "/results"} icon={<Download className="size-4" />} title="Review prepared work" desc="Open your latest package" />
           </div>
         </Panel>
       </section>
@@ -175,51 +125,69 @@ export function Dashboard() {
   );
 }
 
-function WorkspaceCard({
-  title,
+function StatCard({
+  label,
   value,
-  detail,
-  icon: Icon,
-  to,
-  cta = "Open",
+  sub,
+  icon,
+  suffix = "",
+  trend = false,
 }: {
-  title: string;
+  label: string;
   value: string;
-  detail: string;
-  icon: typeof FolderCheck;
+  sub: string;
+  icon: string;
+  suffix?: string;
+  trend?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white p-4 transition-shadow hover:shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="font-mono text-xs text-[#9898a8]">{icon}</span>
+        {trend && <TrendingUp className="size-3.5 text-emerald-500" />}
+      </div>
+      <div className="font-mono text-2xl leading-none tracking-tight text-[#0f0f17]">
+        {value}
+        {suffix && <span className="text-sm text-[#71717a]">{suffix}</span>}
+      </div>
+      <div className="mt-1 text-xs leading-tight text-[#71717a]">{label}</div>
+      <div className="mt-1 font-mono text-[11px] text-[#9898a8]">{sub}</div>
+    </div>
+  );
+}
+
+function QuickAction({
+  to,
+  icon,
+  title,
+  desc,
+  primary = false,
+}: {
   to: string;
-  cta?: string;
+  icon: ReactNode;
+  title: string;
+  desc: string;
+  primary?: boolean;
 }) {
   return (
     <Link
       to={to}
-      className="group flex min-h-44 flex-col justify-between rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50/30"
+      className="group flex items-center gap-3 rounded-xl border border-[rgba(0,0,0,0.05)] p-3 text-left transition-all hover:border-[rgba(0,0,0,0.1)] hover:shadow-sm"
     >
-      <div>
-        <div className="flex size-10 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700">
-          <Icon className="size-5" />
-        </div>
-        <p className="mt-5 text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">{title}</p>
-        <p className="mt-2 line-clamp-2 text-lg font-semibold text-zinc-950">{value}</p>
-        <p className="mt-2 line-clamp-2 text-sm leading-6 text-zinc-500">{detail}</p>
-      </div>
-      <span className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-blue-700">
-        {cta}
-        <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+      <span className={`flex size-8 items-center justify-center rounded-lg text-sm ${primary ? "bg-[#0f0f17] text-white" : "bg-[#ededf8] text-[#5b5bd6]"}`}>
+        {icon}
       </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm leading-tight text-[#0f0f17]">{title}</div>
+        <div className="mt-0.5 text-xs text-[#71717a]">{desc}</div>
+      </div>
+      <ArrowRight className="size-3.5 text-[#d4d4d8] transition-colors group-hover:text-[#0f0f17]" />
     </Link>
   );
 }
 
 function PackageStatus({ item }: { item: AnalysisSummary }) {
-  const label = item.partial ? "Partial" : item.evaluate_only ? "Match review" : "Documents ready";
-  const tone: StatusTone = item.partial
-    ? "warning"
-    : item.evaluate_only
-      ? "neutral"
-      : "success";
-
-  return (
-    <StatusPill tone={tone}>{label}</StatusPill>
-  );
+  const label = item.partial ? "Partial" : item.evaluate_only ? "Match review" : "Ready";
+  const tone: StatusTone = item.partial ? "warning" : item.evaluate_only ? "info" : "success";
+  return <StatusPill tone={tone}>{label}</StatusPill>;
 }

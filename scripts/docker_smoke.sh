@@ -91,8 +91,8 @@ fi
 log "Checking backend prompts"
 docker compose exec -T api python -c "from pathlib import Path; prompts=list(Path('backend/prompts').glob('*.md')); assert prompts; assert Path('backend/prompts/job_parser.md').exists(); print(len(prompts))"
 
-log "Checking TeX split"
-docker compose exec -T api sh -lc '! command -v pdflatex >/dev/null'
+log "Checking TeX availability"
+docker compose exec -T api sh -lc 'command -v pdflatex >/dev/null'
 docker compose exec -T worker sh -lc 'command -v pdflatex >/dev/null'
 
 log "Docker smoke passed"

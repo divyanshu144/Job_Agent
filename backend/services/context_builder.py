@@ -7,7 +7,12 @@ from typing import Any
 
 from backend.models import Profile
 from backend.schemas import PriorOutputs
-from backend.services.profile_builder import build_compact_profile, profile_content_hash
+from backend.services.profile_builder import (
+    build_compact_profile,
+    build_profile_review_text,
+    parse_profile_review_data,
+    profile_content_hash,
+)
 
 
 class ContextPrerequisiteError(ValueError):
@@ -36,7 +41,7 @@ AGENT_CONTEXT_MODE: dict[str, str] = {
     "gap_analyst": "retrieved_profile",
     "resource_planner": "retrieved_profile",
     "cover_letter": "retrieved_profile",
-    "resume_tailorer": "retrieved_profile",
+    "resume_tailorer": "full_resume_profile",
     "cold_email": "retrieved_profile",
 }
 
@@ -52,6 +57,25 @@ def profile_context_for_agent(profile: Profile | None, agent_name: str) -> str:
     if agent_name in FULL_PROFILE_AGENTS:
         return profile.merged_profile
     return build_compact_profile(profile.yaml_data, profile.cv_text)
+
+
+def build_resume_tailoring_context(profile: Profile | None) -> str:
+    """Full candidate context for resume generation.
+
+    The resume tailorer must validate against the complete stored CV, not the
+    retrieval-limited evidence snippets used by other late-stage agents. Keeping
+    the `## CV Text` marker is important because validators extract from it.
+    """
+    if profile is None:
+        return ""
+    parts = ["## Candidate Profile (YAML)\n" + profile.yaml_data]
+    review = parse_profile_review_data(profile.profile_review_data)
+    review_text = build_profile_review_text(review)
+    if review_text.strip():
+        parts.append("## Profile Review\n" + review_text)
+    if profile.cv_text.strip():
+        parts.append("## CV Text\n" + profile.cv_text)
+    return "\n\n---\n\n".join(parts)
 
 
 def build_context_manifest(

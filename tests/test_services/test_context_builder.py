@@ -9,6 +9,7 @@ from backend.services.context_builder import (
     ContextPrerequisiteError,
     build_context_manifest,
     build_outreach_profile_context,
+    build_resume_tailoring_context,
     missing_required_priors,
     validate_required_priors,
 )
@@ -90,3 +91,21 @@ def test_outreach_context_is_compact():
 
     assert "## CV Summary" in context
     assert len(context) < len(profile.merged_profile)
+
+
+def test_resume_tailoring_context_uses_full_cv_text_and_review_data():
+    profile = Profile(
+        yaml_data="identity:\n  name: Test",
+        cv_text="A" * 9000 + "\nFastAPI PostgreSQL Docker",
+        profile_review_data='{"target_role":"Backend Engineer","key_skills":["Python"]}',
+        merged_profile="TRUNCATED",
+    )
+
+    context = build_resume_tailoring_context(profile)
+
+    assert "## Candidate Profile (YAML)" in context
+    assert "## Profile Review" in context
+    assert "Target Role" in context
+    assert "## CV Text" in context
+    assert "FastAPI PostgreSQL Docker" in context
+    assert len(context) > 9000

@@ -118,6 +118,11 @@ export const api = {
     if (!r.ok) return _errorMessage(r, "GET", `/analysis/${id}/resume.docx`);
     return r.blob();
   },
+  downloadResumePdf: async (id: string): Promise<Blob> => {
+    const r = await fetch(`${BASE}/analysis/${id}/resume.pdf`, { credentials: "include" });
+    if (!r.ok) return _errorMessage(r, "GET", `/analysis/${id}/resume.pdf`);
+    return r.blob();
+  },
   listHistory: () => get<AnalysisSummary[]>("/history"),
   submitFeedback: (analysisId: string, rating: number, agentName?: string, note?: string) =>
     post<Feedback>("/feedback", { analysis_id: analysisId, rating, agent_name: agentName ?? null, note: note ?? null }),

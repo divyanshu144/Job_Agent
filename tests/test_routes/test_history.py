@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -197,6 +198,48 @@ async def test_download_resume_docx_for_owned_analysis(app_client, db_session):
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
     assert resp.content.startswith(b"PK")
+
+
+async def test_download_resume_pdf_for_owned_analysis(app_client, db_session):
+    profile = await make_profile(db_session, user_id=_USER_ID)
+    analysis = await make_analysis(db_session, profile=profile, user_id=_USER_ID)
+    db_session.add(
+        JobResult(
+            analysis_id=analysis.id,
+            agent_name="resume_tailorer",
+            output_json=json.dumps(
+                {
+                    "headline": "Backend Engineer",
+                    "summary": "Builds APIs.",
+                    "skills": ["Python"],
+                    "experience": [
+                        {
+                            "company": "Acme",
+                            "role": "Engineer",
+                            "dates": "2022-2024",
+                            "bullets": ["Built FastAPI services"],
+                        }
+                    ],
+                    "projects": [],
+                    "education": [],
+                    "tailored_bullets": [],
+                    "omitted_items": [],
+                }
+            ),
+        )
+    )
+    await db_session.commit()
+
+    with patch(
+        "backend.routes.history.render_resume_pdf",
+        new_callable=AsyncMock,
+        return_value=b"%PDF-1.4 generated",
+    ):
+        resp = await app_client.get(f"/api/analysis/{analysis.id}/resume.pdf")
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/pdf")
+    assert resp.content.startswith(b"%PDF")
 
 
 async def test_download_resume_docx_rejects_cross_user_analysis(app_client, db_session):

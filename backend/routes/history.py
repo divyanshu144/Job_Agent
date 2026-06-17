@@ -19,6 +19,7 @@ from backend.schemas import (
 )
 from backend.services.auth_service import get_current_user
 from backend.services.resume_docx import render_resume_docx
+from backend.services.resume_latex_template import ResumeTemplateError, render_resume_pdf
 
 router = APIRouter(tags=["history"])
 
@@ -182,5 +183,47 @@ async def download_resume_docx(
     return Response(
         content=body,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/analysis/{analysis_id}/resume.pdf")
+async def download_resume_pdf(
+    analysis_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    analysis = (
+        await db.execute(
+            select(Analysis).where(Analysis.id == analysis_id, Analysis.user_id == current_user.id)
+        )
+    ).scalar_one_or_none()
+    if analysis is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {analysis_id} not found")
+
+    result = (
+        await db.execute(
+            select(JobResult).where(
+                JobResult.analysis_id == analysis_id,
+                JobResult.agent_name == "resume_tailorer",
+            )
+        )
+    ).scalar_one_or_none()
+    if result is None or not result.output_json:
+        raise HTTPException(status_code=404, detail="Tailored resume is not available")
+
+    output = ResumeTailorerOutput.model_validate(json.loads(result.output_json))
+    try:
+        body = await render_resume_pdf(output)
+    except ResumeTemplateError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Tailored resume PDF could not be generated. Please try again later.",
+        ) from exc
+
+    filename = f"jobfit-resume-{analysis_id}.pdf"
+    return Response(
+        content=body,
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

@@ -1,18 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, ClipboardCopy, FileSearch, Search } from "lucide-react";
+import { ArrowRight, Clock, FileSearch, Search, SlidersHorizontal } from "lucide-react";
 import { api } from "../api/client";
-import { EmptyState, PageHeader, PageShell, Panel, StatusPill } from "../components/portal";
+import { EmptyState, PageShell, StatusPill } from "../components/portal";
+import { ScoreRing } from "../components/ScoreRing";
 import type { StatusTone } from "../components/portal";
 import type { AnalysisSummary } from "../types";
 
-type Filter = "all" | "strong" | "documents" | "needs_work" | "partial";
+type Filter = "all" | "documents" | "partial";
 
 const filters: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "strong", label: "Strong matches" },
-  { id: "documents", label: "Documents ready" },
-  { id: "needs_work", label: "Needs work" },
+  { id: "documents", label: "Complete" },
   { id: "partial", label: "Partial" },
 ];
 
@@ -37,63 +36,71 @@ export function MyResults() {
       const matchesQuery = !q || haystack.includes(q);
       const matchesFilter =
         filter === "all" ||
-        (filter === "strong" && (item.match_score ?? 0) >= 80) ||
         (filter === "documents" && !item.evaluate_only && !item.partial) ||
-        (filter === "needs_work" && (item.match_score ?? 100) < 70) ||
         (filter === "partial" && item.partial);
       return matchesQuery && matchesFilter;
     });
   }, [filter, items, query]);
 
+  const completeCount = items.filter((item) => !item.evaluate_only && !item.partial).length;
+  const scores = items.map((item) => item.match_score).filter((score): score is number => typeof score === "number");
+  const average = scores.length ? Math.round(scores.reduce((total, score) => total + score, 0) / scores.length) : null;
+
   return (
     <PageShell>
-      <PageHeader
-        title="Application packages"
-        description="Review submitted roles, match reviews, prepared documents, and recommendations."
-        actions={
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="mb-1 font-mono text-xs uppercase tracking-[0.15em] text-[#71717a]">
+            My Packages
+          </p>
+          <h1 className="text-2xl font-medium tracking-[-0.03em] text-[#0f0f17]">Application Packages</h1>
+          <p className="mt-1 text-sm text-[#71717a]">
+            {items.length} packages · {completeCount} complete
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-lg bg-[#ededf8] px-2.5 py-1 font-mono text-xs text-[#5b5bd6]">
+            Avg {average == null ? "--" : `${average}%`}
+          </span>
           <Link
             to="/analyse"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500"
+            className="hidden items-center gap-2 rounded-xl bg-[#0f0f17] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1a1a28] sm:flex"
           >
-            <FileSearch className="size-4" />
-            Submit a role
+            <FileSearch className="size-3.5" />
+            New Package
           </Link>
-        }
-      />
-
-      <Panel>
-        <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center">
-          <label className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search role, company, or package text"
-              className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-10 pr-3 text-sm text-zinc-950 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-600/25"
-            />
-          </label>
-          <div className="flex gap-2 overflow-x-auto">
-            {filters.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setFilter(item.id)}
-                className={`shrink-0 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
-                  filter === item.id
-                    ? "border-blue-200 bg-blue-50 text-blue-700"
-                    : "border-zinc-200 text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
         </div>
-      </Panel>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <label className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[#9898a8]" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by role or company..."
+            className="w-full rounded-xl border border-[rgba(0,0,0,0.06)] bg-white py-2.5 pl-9 pr-4 text-sm text-[#0f0f17] outline-none transition-all placeholder:text-[#9898a8] focus:border-[#5b5bd6] focus:ring-4 focus:ring-[rgba(91,91,214,0.06)]"
+          />
+        </label>
+        <div className="flex gap-1 rounded-xl border border-[rgba(0,0,0,0.06)] bg-white p-1">
+          {filters.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setFilter(item.id)}
+              className={`rounded-lg px-3 py-1.5 text-xs capitalize transition-all ${
+                filter === item.id ? "bg-[#0f0f17] text-white" : "text-[#71717a] hover:text-[#0f0f17]"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {loading ? (
         <div className="grid gap-3 lg:grid-cols-2">
           {[0, 1, 2, 3].map((item) => (
-            <div key={item} className="h-40 animate-pulse rounded-3xl border border-zinc-200 bg-white" />
+            <div key={item} className="h-48 animate-pulse rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white" />
           ))}
         </div>
       ) : visible.length ? (
@@ -104,8 +111,8 @@ export function MyResults() {
         </div>
       ) : (
         <EmptyState
-          icon={ClipboardCopy}
-          title="No matching packages"
+          icon={SlidersHorizontal}
+          title="No packages match your search"
           description="Try a different filter, or submit a role to create your first package."
         />
       )}
@@ -114,16 +121,8 @@ export function MyResults() {
 }
 
 function PackageCard({ item }: { item: AnalysisSummary }) {
-  const status = item.partial
-    ? "Partial package"
-    : item.evaluate_only
-      ? "Match review ready"
-      : "Documents ready";
-  const statusTone: StatusTone = item.partial
-    ? "warning"
-    : item.evaluate_only
-      ? "neutral"
-      : "success";
+  const status = item.partial ? "Partial" : item.evaluate_only ? "Review ready" : "Complete";
+  const statusTone: StatusTone = item.partial ? "warning" : item.evaluate_only ? "info" : "success";
   const matchStatus =
     item.match_score == null
       ? "Submitted"
@@ -134,44 +133,38 @@ function PackageCard({ item }: { item: AnalysisSummary }) {
           : "Needs review";
 
   return (
-    <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm transition-colors hover:border-blue-200">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="truncate text-base font-semibold text-zinc-950">
-            {item.role_type ?? "Submitted role"}
-            {item.company ? <span className="font-normal text-zinc-500"> at {item.company}</span> : null}
-          </p>
-          <p className="mt-2 line-clamp-2 text-sm leading-6 text-zinc-500">{item.jd_text}</p>
+    <Link
+      to={`/results/${item.id}`}
+      className="group rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white p-5 transition-all hover:border-[rgba(0,0,0,0.1)] hover:shadow-md"
+    >
+      <div className="mb-4 flex items-start gap-4">
+        <ScoreRing score={item.match_score} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm leading-tight text-[#0f0f17]">{item.role_type ?? "Submitted role"}</h3>
+            <StatusPill tone={statusTone}>{status}</StatusPill>
+          </div>
+          <div className="mt-1 flex items-center gap-1.5">
+            {item.company && <span className="text-xs text-[#71717a]">{item.company}</span>}
+            {item.company && <span className="text-[#d4d4d8]">·</span>}
+            <span className="flex items-center gap-1 font-mono text-xs text-[#9898a8]">
+              <Clock className="size-2.5" />
+              {new Date(item.created_at).toLocaleDateString()}
+            </span>
+          </div>
         </div>
-        <div className="shrink-0 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-right">
-          <p className="text-2xl font-semibold text-zinc-950">{item.match_score ?? "--"}</p>
-          <p className="text-xs text-zinc-600">{item.match_score == null ? "pending" : "score"}</p>
-        </div>
+        <ArrowRight className="mt-1 size-3.5 text-[#d4d4d8] transition-all group-hover:translate-x-0.5 group-hover:text-[#5b5bd6]" />
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <StatusPill tone={item.match_score == null ? "neutral" : item.match_score >= 80 ? "success" : item.match_score >= 60 ? "warning" : "neutral"}>
+      <p className="line-clamp-2 text-sm leading-6 text-[#71717a]">{item.jd_text}</p>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[rgba(0,0,0,0.04)] pt-3">
+        <StatusPill tone={item.match_score == null ? "neutral" : item.match_score >= 80 ? "success" : item.match_score >= 60 ? "info" : "warning"}>
           {matchStatus}
         </StatusPill>
-        <StatusPill tone={statusTone}>{status}</StatusPill>
-        <span className="text-xs text-zinc-500">Submitted {new Date(item.created_at).toLocaleString()}</span>
+        {item.profile_stale && <StatusPill tone="warning">Profile changed</StatusPill>}
+        <span className="ml-auto text-xs text-[#5b5bd6]">Open package</span>
       </div>
-
-      <div className="mt-5 flex flex-wrap items-center gap-2">
-        <Link
-          to={`/results/${item.id}`}
-          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-blue-500"
-        >
-          Open package
-          <ArrowRight className="size-4" />
-        </Link>
-        <Link
-          to={`/results/${item.id}`}
-          className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 px-3.5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-        >
-          View recommendations
-        </Link>
-      </div>
-    </div>
+    </Link>
   );
 }

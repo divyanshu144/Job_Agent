@@ -271,7 +271,6 @@ export function Discover() {
       }
     }, 3000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRunId, profileFilter, locationFilter, loadFeed]);
 
   async function startRun(trigger: () => Promise<{ run_id: string }>) {

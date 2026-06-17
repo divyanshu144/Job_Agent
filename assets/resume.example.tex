@@ -1,9 +1,8 @@
-% Example base résumé template.
+% Example base resume template.
 %
-% The real résumé lives at assets/resume.tex, which is gitignored so personal
-% content is never committed to this (public) repo. The backend reads
-% assets/resume.tex at runtime (backend/services/resume_latex.py); copy this
-% file to assets/resume.tex and replace the placeholders with your details.
+% The real resume lives at assets/resume.tex, which is gitignored so personal
+% content is never committed to this repo. The backend copies this file to
+% assets/resume.tex in containers when a private resume file is not supplied.
 %
 % Keep it compilable with pdflatex (texlive on PATH for real runs).
 
@@ -29,13 +28,13 @@ One or two lines describing your focus, seniority, and strongest domain.
 Language A, Language B, Framework C, Datastore D, Cloud E
 
 \section*{Experience}
-\textbf{Job Title} — Company \hfill 2022--Present
+\textbf{Job Title} -- Company \hfill 2022--Present
 \begin{itemize}
   \item Accomplishment with a measurable outcome.
   \item Another accomplishment, scoped and quantified.
 \end{itemize}
 
-\textbf{Job Title} — Company \hfill 2020--2022
+\textbf{Job Title} -- Company \hfill 2020--2022
 \begin{itemize}
   \item Accomplishment with a measurable outcome.
 \end{itemize}

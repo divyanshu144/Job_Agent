@@ -47,15 +47,12 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: #f6f5f2;
-  color: #18181b;
+  background: #f7f7f5;
+  color: #0f0f17;
 }
 
 .client-main {
-  background:
-    radial-gradient(900px 360px at 14% -10%, rgba(37, 99, 235, 0.10), transparent 58%),
-    radial-gradient(700px 320px at 90% -8%, rgba(24, 24, 27, 0.06), transparent 52%),
-    linear-gradient(180deg, #fbfaf7 0%, #f6f5f2 42%, #f1f0ec 100%);
+  background: #f7f7f5;
 }
 
 @theme inline {
@@ -140,10 +137,10 @@ body {
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-[#f6f5f2] text-zinc-950;
+    @apply bg-[#f7f7f5] text-[#0f0f17];
   }
   html {
     @apply font-sans;
-    background: #f6f5f2;
+    background: #f7f7f5;
   }
 }

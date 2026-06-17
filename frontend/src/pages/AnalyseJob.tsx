@@ -1,34 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import {
-  ArrowRight,
-  ClipboardList,
-  FileText,
-  RotateCcw,
-  Sparkles,
-  Wand2,
-} from "lucide-react";
+import { ArrowRight, CheckCircle2, ChevronDown, ChevronUp, Circle, Sparkles } from "lucide-react";
 import { api, streamAnalysis, streamGenerate } from "../api/client";
 import { AgentProgress } from "../components/AgentProgress";
-import { EmptyState, PageShell, Panel, PrimaryButton, SecondaryButton, SectionHeader } from "../components/portal";
+import { EmptyState, PageShell } from "../components/portal";
 import { AGENT_ORDER } from "../types";
 import type { AgentName, AgentStatus, AnalysisSummary, PipelineDoneData } from "../types";
 
 const initStates = () =>
-  Object.fromEntries(AGENT_ORDER.map((agent) => [agent, "pending"])) as Record<
-    AgentName,
-    AgentStatus
-  >;
+  Object.fromEntries(AGENT_ORDER.map((agent) => [agent, "pending"])) as Record<AgentName, AgentStatus>;
 
 type Phase = "idle" | "evaluating" | "evaluated" | "generating";
 
-const workflowPreview = [
-  ["Reviewing role requirements", "Understand responsibilities, skills, and expectations"],
-  ["Comparing against your profile", "Assess fit using your saved background"],
-  ["Identifying gaps", "Separate important gaps from nice-to-have items"],
-  ["Preparing recommendations", "Create practical next steps for this role"],
-  ["Drafting documents", "Prepare application materials when requested"],
-  ["Finalising package", "Save everything in one application package"],
+const previewSteps = [
+  ["Reviewing role requirements", "Extracting requirements and seniority signals"],
+  ["Comparing against your profile", "Matching the role to your saved background"],
+  ["Identifying gaps", "Finding skills to develop or address"],
+  ["Preparing recommendations", "Creating practical next steps"],
+  ["Drafting documents", "Preparing cover letter and resume materials"],
+  ["Finalising package", "Saving your application package"],
 ];
 
 export function AnalyseJob() {
@@ -36,6 +26,7 @@ export function AnalyseJob() {
   const [roleHint, setRoleHint] = useState("");
   const [companyHint, setCompanyHint] = useState("");
   const [tailoringNotes, setTailoringNotes] = useState("");
+  const [showOptional, setShowOptional] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [states, setStates] = useState<Record<AgentName, AgentStatus>>(initStates());
   const [evalResult, setEvalResult] = useState<PipelineDoneData | null>(null);
@@ -45,7 +36,7 @@ export function AnalyseJob() {
   const cancelRef = useRef<(() => void) | null>(null);
   const navigate = useNavigate();
 
-  const running = phase === "evaluating" || phase === "generating";
+  const wordCount = jd.trim() ? jd.trim().split(/\s+/).filter(Boolean).length : 0;
   const charCount = jd.trim().length;
 
   const loadHistory = () => {
@@ -67,9 +58,7 @@ export function AnalyseJob() {
       roleHint.trim() ? `Role hint: ${roleHint.trim()}` : "",
       companyHint.trim() ? `Company hint: ${companyHint.trim()}` : "",
       tailoringNotes.trim() ? `Tailoring notes: ${tailoringNotes.trim()}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    ].filter(Boolean).join("\n");
     const payload = context ? `${context}\n\nJob description:\n${jd}` : jd;
 
     setError(null);
@@ -122,6 +111,7 @@ export function AnalyseJob() {
     setRoleHint("");
     setCompanyHint("");
     setTailoringNotes("");
+    setShowOptional(false);
     setPhase("idle");
     setStates(initStates());
     setEvalResult(null);
@@ -129,221 +119,216 @@ export function AnalyseJob() {
     setTechnicalError(null);
   };
 
-  return (
-    <PageShell>
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_420px]">
-        <Panel>
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-500">
-                <Sparkles className="size-3.5" />
-                Application package request
+  if (phase === "evaluating" || phase === "evaluated" || phase === "generating") {
+    return (
+      <PageShell width="medium">
+        <div>
+          <p className="mb-1 font-mono text-xs uppercase tracking-[0.15em] text-[#71717a]">Submit Role</p>
+          <h1 className="text-2xl font-medium tracking-[-0.03em] text-[#0f0f17]">
+            {phase === "evaluating" ? "Preparing your package..." : phase === "generating" ? "Preparing documents..." : "Package ready"}
+          </h1>
+          <p className="mt-1 text-sm text-[#71717a]">
+            {roleHint || "Submitted role"} {companyHint ? `· ${companyHint}` : ""}
+          </p>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white">
+          <AgentProgress agentStates={states} />
+        </div>
+
+        {phase === "evaluated" && evalResult && (
+          <div className="rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white p-6">
+            <div className="flex items-center gap-6">
+              <div className="relative flex size-24 shrink-0 items-center justify-center">
+                <svg className="-rotate-90" width={96} height={96}>
+                  <circle cx={48} cy={48} r={40} fill="none" stroke="rgba(91,91,214,0.12)" strokeWidth={7} />
+                  <circle
+                    cx={48}
+                    cy={48}
+                    r={40}
+                    fill="none"
+                    stroke={evalResult.score >= 80 ? "#16a34a" : "#5b5bd6"}
+                    strokeWidth={7}
+                    strokeDasharray={2 * Math.PI * 40}
+                    strokeDashoffset={2 * Math.PI * 40 * (1 - evalResult.score / 100)}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="font-mono text-2xl leading-none text-[#5b5bd6]">{evalResult.score}</span>
+                  <span className="mt-0.5 font-mono text-[10px] text-[#71717a]">MATCH</span>
+                </div>
               </div>
-              <h2 className="mt-4 text-2xl font-semibold tracking-tight text-zinc-950">
-                Submit a role for review
-              </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-                Share the role details and any tailoring notes. JobFit will prepare a match
-                review and application materials for the opportunity.
-              </p>
+              <div className="flex-1">
+                <h3 className="mb-1 text-base font-medium text-[#0f0f17]">Match review complete</h3>
+                <p className="text-sm leading-relaxed text-[#71717a]">
+                  Your match review is ready. Prepare the application documents or open the package.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className="rounded-full border border-[rgba(91,91,214,0.15)] bg-[#ededf8] px-2 py-0.5 text-[11px] text-[#5b5bd6]">
+                    Match score ready
+                  </span>
+                  <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
+                    Saved package
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
+        )}
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <label className="space-y-2">
-              <span className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
-                Role title
-              </span>
-              <input
-                value={roleHint}
-                onChange={(event) => setRoleHint(event.target.value)}
-                placeholder="Backend Engineer"
-                disabled={running}
-                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-950 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-600/25"
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
-                Company
-              </span>
-              <input
-                value={companyHint}
-                onChange={(event) => setCompanyHint(event.target.value)}
-                placeholder="Acme"
-                disabled={running}
-                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-950 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-600/25"
-              />
-            </label>
-          </div>
+        {error && <div className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-600">{error}</div>}
+        {technicalError && (
+          <details className="rounded-xl border border-rose-100 bg-rose-50 p-3 text-sm">
+            <summary className="cursor-pointer text-rose-700">Show error details</summary>
+            <p className="mt-2 whitespace-pre-wrap text-rose-600">{technicalError}</p>
+          </details>
+        )}
 
-          <label className="mt-4 block space-y-2">
-            <span className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
-              Job description
-            </span>
-            <textarea
-              className="h-72 w-full resize-none rounded-2xl border border-zinc-200 bg-white p-4 text-sm leading-6 text-zinc-950 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-600/25"
-              placeholder="Paste the full job description here..."
-              value={jd}
-              onChange={(event) => setJd(event.target.value)}
-              disabled={running}
-            />
-          </label>
-
-          <label className="mt-4 block space-y-2">
-            <span className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
-              Notes for tailoring
-            </span>
-            <textarea
-              className="h-24 w-full resize-none rounded-xl border border-zinc-200 bg-white p-3 text-sm leading-6 text-zinc-950 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-600/25"
-              placeholder="Optional: target tone, achievements to emphasize, concerns, or application context."
-              value={tailoringNotes}
-              onChange={(event) => setTailoringNotes(event.target.value)}
-              disabled={running}
-            />
-          </label>
-
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <span className={`text-xs ${charCount >= 50 ? "text-zinc-500" : "text-amber-500"}`}>
-              {charCount} characters
-            </span>
-            {error && <span className="text-sm font-medium text-rose-600">{error}</span>}
-          </div>
-
-          {technicalError && (
-            <details className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm">
-              <summary className="cursor-pointer font-medium text-rose-700">Show error details</summary>
-              <p className="mt-2 whitespace-pre-wrap text-rose-600">{technicalError}</p>
-            </details>
+        <div className="flex gap-3">
+          {phase === "evaluated" && (
+            <button onClick={generate} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#0f0f17] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1a1a28]">
+              Prepare documents
+              <ArrowRight className="size-3.5" />
+            </button>
           )}
-
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <PrimaryButton
-              onClick={submit}
-              disabled={running}
-            >
-              <Wand2 className={`size-4 ${phase === "evaluating" ? "animate-pulse" : ""}`} />
-              {phase === "evaluating" ? "Preparing match review..." : "Prepare application package"}
-            </PrimaryButton>
-            <SecondaryButton
-              onClick={clear}
-              disabled={running && phase !== "evaluating"}
-            >
-              <RotateCcw className="size-4" />
-              Clear
-            </SecondaryButton>
-
-            {phase === "evaluated" && evalResult && (
-              <>
-                <PrimaryButton
-                  onClick={generate}
-                  className="bg-emerald-600 hover:bg-emerald-500"
-                >
-                  <FileText className="size-4" />
-                  Prepare documents
-                </PrimaryButton>
-                <SecondaryButton
-                  onClick={() => navigate(`/results/${evalResult.analysis_id}`)}
-                >
-                  Open package
-                  <ArrowRight className="size-4" />
-                </SecondaryButton>
-              </>
-            )}
-          </div>
-        </Panel>
-
-        <Panel>
-          <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-xl bg-blue-600/15 text-blue-400">
-              <ClipboardList className="size-5" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-zinc-950">Review progress</p>
-              <p className="text-xs text-zinc-500">Package preparation steps</p>
-            </div>
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-            {phase === "idle" ? (
-              <div className="space-y-4">
-                {workflowPreview.map(([title, description]) => (
-                  <div key={title} className="flex gap-3">
-                    <div className="mt-1.5 size-2 rounded-full bg-zinc-700" />
-                    <div>
-                      <p className="text-sm font-medium text-zinc-800">{title}</p>
-                      <p className="text-xs leading-5 text-zinc-500">{description}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <AgentProgress agentStates={states} />
-            )}
-          </div>
-
           {phase === "evaluated" && evalResult && (
-            <div className="mt-5 rounded-2xl border border-emerald-600/25 bg-emerald-600/10 p-4">
-              <p className="text-sm font-semibold text-emerald-700">Match review complete</p>
-              <div className="mt-3 flex items-end gap-2">
-                <span className="text-4xl font-semibold text-zinc-950">{evalResult.score}</span>
-                <span className="pb-1 text-sm text-zinc-500">/100 match score</span>
+            <button onClick={() => navigate(`/results/${evalResult.analysis_id}`)} className="rounded-xl border border-[rgba(0,0,0,0.08)] px-4 py-2.5 text-sm text-[#71717a] transition-colors hover:border-[rgba(0,0,0,0.15)]">
+              Open package
+            </button>
+          )}
+          <button onClick={clear} className="rounded-xl border border-[rgba(0,0,0,0.08)] px-4 py-2.5 text-sm text-[#71717a] transition-colors hover:border-[rgba(0,0,0,0.15)]">
+            {phase === "evaluated" ? "New Role" : "Cancel"}
+          </button>
+        </div>
+      </PageShell>
+    );
+  }
+
+  return (
+    <PageShell width="medium">
+      <div>
+        <p className="mb-1 font-mono text-xs uppercase tracking-[0.15em] text-[#71717a]">Submit Role</p>
+        <h1 className="text-2xl font-medium tracking-[-0.03em] text-[#0f0f17]">Submit a role for review</h1>
+        <p className="mt-1 text-sm text-[#71717a]">
+          Paste a job description and JobFit will prepare your application package.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="overflow-hidden rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white transition-all focus-within:border-[#5b5bd6] focus-within:ring-4 focus-within:ring-[rgba(91,91,214,0.08)]">
+          <div className="flex items-center justify-between border-b border-[rgba(0,0,0,0.04)] px-4 pb-2 pt-4">
+            <label className="font-mono text-xs uppercase tracking-wide text-[#71717a]">Job Description</label>
+          </div>
+          <textarea
+            value={jd}
+            onChange={(event) => setJd(event.target.value)}
+            placeholder="Paste the full job description here..."
+            rows={12}
+            className="w-full resize-none bg-transparent px-4 py-3 text-sm leading-relaxed text-[#0f0f17] outline-none placeholder:text-[#9898a8]"
+          />
+          <div className="flex items-center justify-between border-t border-[rgba(0,0,0,0.04)] px-4 py-2">
+            <span className={`font-mono text-xs ${charCount >= 50 ? "text-[#9898a8]" : "text-amber-600"}`}>
+              {wordCount > 0 ? `${wordCount} words` : "Minimum 50 characters required"}
+            </span>
+            {jd && (
+              <button onClick={() => setJd("")} className="text-xs text-[#9898a8] transition-colors hover:text-[#71717a]">
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white">
+          <button
+            onClick={() => setShowOptional(!showOptional)}
+            className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-[#fafafa]"
+          >
+            <span className="text-sm text-[#0f0f17]">Optional details</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#9898a8]">Role, company, notes</span>
+              {showOptional ? <ChevronUp className="size-3.5 text-[#71717a]" /> : <ChevronDown className="size-3.5 text-[#71717a]" />}
+            </div>
+          </button>
+          {showOptional && (
+            <div className="grid gap-3 border-t border-[rgba(0,0,0,0.04)] px-4 pb-4 sm:grid-cols-2">
+              <InputBlock label="Role Title" value={roleHint} onChange={setRoleHint} placeholder="e.g. Backend Engineer" />
+              <InputBlock label="Company" value={companyHint} onChange={setCompanyHint} placeholder="e.g. Stripe" />
+              <label className="space-y-1.5 sm:col-span-2">
+                <span className="font-mono text-xs uppercase tracking-wide text-[#71717a]">Notes</span>
+                <textarea
+                  value={tailoringNotes}
+                  onChange={(event) => setTailoringNotes(event.target.value)}
+                  placeholder="Optional: context, achievements to emphasize, or application notes."
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-[rgba(0,0,0,0.06)] bg-[#f7f7f5] px-3 py-2 text-sm text-[#0f0f17] outline-none transition-all placeholder:text-[#9898a8] focus:border-[#5b5bd6] focus:ring-2 focus:ring-[rgba(91,91,214,0.08)]"
+                />
+              </label>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-[rgba(91,91,214,0.1)] bg-[rgba(91,91,214,0.04)] p-4">
+          <p className="mb-2 font-mono text-xs uppercase tracking-wide text-[#5b5bd6]">What happens next</p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {previewSteps.map(([title], index) => (
+              <div key={title} className="flex items-center gap-2">
+                {index < 3 ? <CheckCircle2 className="size-4 text-[#5b5bd6]" /> : <Circle className="size-4 text-[#d4d4d8]" />}
+                <span className="text-xs leading-tight text-[#71717a]">{title}</span>
               </div>
-            </div>
-          )}
-
-          {phase === "generating" && (
-            <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-700">
-              Preparing cover letter, recommendations, and resume bullets...
-            </div>
-          )}
-        </Panel>
-      </section>
-
-      <Panel>
-        <SectionHeader
-          title="Recent submissions"
-          action={
-            <Link to="/results" className="text-sm font-medium text-blue-700 hover:text-blue-600">
-              View all
-            </Link>
-          }
-        />
-        {history.length ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {history.map((item) => (
-              <Link
-                key={item.id}
-                to={`/results/${item.id}`}
-                className="group block rounded-2xl border border-zinc-200 bg-zinc-50 p-4 transition-colors hover:border-blue-200"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-zinc-950">
-                      {item.role_type ?? "Submitted role"}
-                      {item.company ? <span className="font-normal text-zinc-500"> · {item.company}</span> : null}
-                    </p>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">
-                      {item.jd_text.slice(0, 140)}...
-                    </p>
-                  </div>
-                  {item.match_score != null && (
-                    <span className="shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
-                      {item.match_score}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                  <span>{new Date(item.created_at).toLocaleString()}</span>
-                  {item.partial && <span className="text-amber-500">partial</span>}
-                  {item.evaluate_only && <span>match review</span>}
-                </div>
-              </Link>
             ))}
           </div>
-        ) : (
-          <EmptyState title="No submissions yet" description="Submitted roles will appear here." />
-        )}
-      </Panel>
+        </div>
+
+        {error && <div className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-600">{error}</div>}
+
+        <button
+          onClick={submit}
+          disabled={!jd.trim()}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0f0f17] px-4 py-3 text-sm font-medium text-white transition-all hover:bg-[#1a1a28] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Sparkles className="size-4" />
+          Prepare application package
+          <ArrowRight className="size-3.5" />
+        </button>
+      </div>
+
+      {history.length ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          {history.slice(0, 4).map((item) => (
+            <Link key={item.id} to={`/results/${item.id}`} className="rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white p-4 transition-all hover:shadow-sm">
+              <p className="truncate text-sm text-[#0f0f17]">{item.role_type ?? "Submitted role"}</p>
+              <p className="mt-1 truncate text-xs text-[#71717a]">{item.company ?? new Date(item.created_at).toLocaleString()}</p>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="No submissions yet" description="Submitted roles will appear here." />
+      )}
     </PageShell>
+  );
+}
+
+function InputBlock({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <label className="space-y-1.5 pt-3">
+      <span className="font-mono text-xs uppercase tracking-wide text-[#71717a]">{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-[rgba(0,0,0,0.06)] bg-[#f7f7f5] px-3 py-2 text-sm text-[#0f0f17] outline-none transition-all placeholder:text-[#9898a8] focus:border-[#5b5bd6] focus:ring-2 focus:ring-[rgba(91,91,214,0.08)]"
+      />
+    </label>
   );
 }

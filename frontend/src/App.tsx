@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   BarChart3,
+  Bell,
   BriefcaseBusiness,
+  ChevronRight,
   Compass,
   FileClock,
   FileSearch,
@@ -10,6 +12,8 @@ import {
   LogOut,
   MailPlus,
   Menu,
+  Search,
+  Settings,
   Sparkles,
   UserRound,
   X,
@@ -33,10 +37,10 @@ import { AdminInvites } from "./pages/AdminInvites";
 import { Campaign } from "./pages/Campaign";
 
 const navLink = ({ isActive }: { isActive: boolean }) =>
-  `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+  `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 ${
     isActive
-      ? "bg-blue-50 text-blue-700 ring-1 ring-blue-100"
-      : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950"
+      ? "bg-[rgba(91,91,214,0.18)] text-white"
+      : "text-[#9898a8] hover:bg-[rgba(255,255,255,0.07)] hover:text-[#e8e8ef]"
   }`;
 
 const pageTitles: Record<string, string> = {
@@ -74,12 +78,20 @@ function Shell({ children }: { children: ReactNode }) {
     pageTitles[location.pathname] ??
     (location.pathname.startsWith("/results") ? "Application Package" : "JobFit");
   const linkClass = navLink;
+  const initials = user.email.slice(0, 2).toUpperCase();
+  const isOperations =
+    location.pathname.startsWith("/costs") ||
+    location.pathname.startsWith("/discover") ||
+    location.pathname.startsWith("/campaign") ||
+    location.pathname.startsWith("/saved") ||
+    location.pathname.startsWith("/admin");
 
   const nav = (
     <nav className="space-y-1">
       <NavLink to="/" end className={linkClass} onClick={() => setMobileOpen(false)}>
         <FileClock className="size-4" />
         <span>Workspace</span>
+        {location.pathname === "/" && <ChevronRight className="ml-auto size-3.5 text-[#6060d0]" />}
       </NavLink>
       <NavLink to="/analyse" className={linkClass} onClick={() => setMobileOpen(false)}>
         <FileSearch className="size-4" />
@@ -95,7 +107,7 @@ function Shell({ children }: { children: ReactNode }) {
       </NavLink>
       {user.is_admin && (
         <>
-          <div className="px-3 pb-1 pt-5 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
+          <div className="px-3 pb-1 pt-5 text-[10px] font-mono uppercase tracking-[0.15em] text-[#3a3a4a]">
             Operations
           </div>
           <NavLink to="/discover" className={linkClass} onClick={() => setMobileOpen(false)}>
@@ -124,51 +136,68 @@ function Shell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-[#f6f5f2] text-zinc-950">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-zinc-200 bg-white px-4 py-5 lg:block">
-        <div className="flex items-center gap-3 px-2">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-zinc-950 text-white">
-            <Sparkles className="size-5" />
-          </div>
-          <div>
-            <p className="text-sm font-bold leading-tight text-zinc-950">JobFit</p>
-            <p className="text-xs leading-tight text-zinc-500">Application support service</p>
+    <div className="min-h-screen bg-[#f7f7f5] text-[#0f0f17]">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-[#0f0f17] lg:flex">
+        <div className="border-b border-[rgba(255,255,255,0.07)] px-5 py-5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-[#5b5bd6] text-white">
+              <Sparkles className="size-3.5" />
+            </div>
+            <div>
+              <p className="font-semibold leading-none tracking-[-0.03em] text-white">JobFit</p>
+              <p className="mt-0.5 font-mono text-xs tracking-wide text-[#4a4a5a]">Your Hunting Partner</p>
+            </div>
           </div>
         </div>
-        <div className="mt-8">{nav}</div>
-        <div className="absolute bottom-5 left-4 right-4 rounded-2xl border border-zinc-200 bg-[#fafafa] p-3 shadow-[0_18px_60px_rgba(24,24,27,0.08)]">
-          <p className="truncate text-sm font-medium text-zinc-900">{user.email}</p>
-          <div className="mt-3 flex items-center justify-between gap-2">
-            {user.is_admin ? (
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                admin
-              </span>
-            ) : (
-              <span className="rounded-full border border-zinc-200 px-2 py-0.5 text-xs font-medium text-zinc-500">
-                client
-              </span>
-            )}
-            <button
-              onClick={handleLogout}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-950"
-            >
-              <LogOut className="size-3.5" />
-              Sign out
-            </button>
+
+        <div className="border-b border-[rgba(255,255,255,0.07)] px-4 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-[#5b5bd6] to-[#9333ea] text-xs font-semibold text-white">
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm leading-tight text-[#e8e8ef]">{user.email}</p>
+              <p className="truncate text-xs text-[#4a4a5a]">{user.is_admin ? "admin" : "client"}</p>
+            </div>
+            <Settings className="size-3.5 text-[#3a3a4a]" />
           </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-3 py-4">{nav}</div>
+
+        <div className="px-4 pb-5">
+          <div className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] p-3.5">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs text-[#9898a8]">Profile Readiness</span>
+              <span className="font-mono text-xs text-[#8888f0]">Live</span>
+            </div>
+            <div className="h-1 rounded-full bg-[rgba(255,255,255,0.07)]">
+              <div className="h-full w-3/4 rounded-full bg-gradient-to-r from-[#5b5bd6] to-[#9333ea]" />
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-[#4a4a5a]">
+              Keep your profile updated before submitting roles.
+            </p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[rgba(255,255,255,0.08)] px-3 py-2 text-xs font-medium text-[#9898a8] transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-white"
+          >
+            <LogOut className="size-3.5" />
+            Sign out
+          </button>
         </div>
       </aside>
 
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 bg-white lg:hidden">
-          <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-4">
+        <div className="fixed inset-0 z-40 bg-[#0f0f17] lg:hidden">
+          <div className="flex items-center justify-between border-b border-[rgba(255,255,255,0.07)] px-4 py-4">
             <div className="flex items-center gap-3">
-              <div className="flex size-9 items-center justify-center rounded-lg bg-zinc-950 text-white">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-[#5b5bd6] text-white">
                 <Sparkles className="size-4" />
               </div>
-              <span className="text-sm font-bold">JobFit</span>
+              <span className="text-sm font-bold text-white">JobFit</span>
             </div>
-            <button onClick={() => setMobileOpen(false)} className="rounded-lg border border-zinc-200 p-2">
+            <button onClick={() => setMobileOpen(false)} className="rounded-lg border border-[rgba(255,255,255,0.1)] p-2 text-white">
               <X className="size-4" />
             </button>
           </div>
@@ -176,34 +205,45 @@ function Shell({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      <div className="lg:pl-72">
-        <header className="sticky top-0 z-20 border-b border-zinc-200 bg-[#f6f5f2]/90 backdrop-blur-xl">
-          <div className="flex min-h-16 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+      <div className="lg:pl-64">
+        <header className="sticky top-0 z-20 h-14 border-b border-[rgba(0,0,0,0.06)] bg-[#f7f7f5]/90 backdrop-blur-sm">
+          <div className="flex h-full items-center justify-between gap-3 px-4 sm:px-6">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setMobileOpen(true)}
-                className="rounded-lg border border-zinc-200 p-2 text-zinc-700 lg:hidden"
+                className="rounded-lg border border-[rgba(0,0,0,0.08)] p-2 text-[#71717a] lg:hidden"
               >
                 <Menu className="size-4" />
               </button>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-[0.22em] text-zinc-500">
-                  {location.pathname.startsWith("/costs") || location.pathname.startsWith("/discover") || location.pathname.startsWith("/saved") || location.pathname.startsWith("/admin")
-                    ? "Operations"
-                    : "Client portal"}
-                </p>
-                <h1 className="text-base font-semibold text-zinc-950 sm:text-lg">{title}</h1>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="hidden font-mono text-xs uppercase tracking-[0.1em] text-[#9898a8] sm:block">
+                  JobFit
+                </span>
+                <span className="hidden text-[#d4d4d8] sm:block">/</span>
+                <span className="text-sm text-[#0f0f17]">{title}</span>
               </div>
             </div>
-            {user.is_admin && (
-              <div className="hidden items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-500 shadow-sm sm:flex">
-                <span className="size-2 rounded-full bg-zinc-400" />
-                Operations available
+            <div className="flex items-center gap-2">
+              <button className="hidden size-8 items-center justify-center rounded-lg text-[#71717a] transition-colors hover:bg-[rgba(0,0,0,0.04)] sm:flex">
+                <Search className="size-4" />
+              </button>
+              {user.is_admin && (
+                <div className="hidden items-center gap-2 rounded-lg border border-[rgba(0,0,0,0.06)] bg-white px-3 py-1.5 text-xs font-medium text-[#71717a] shadow-sm sm:flex">
+                  <span className="size-1.5 rounded-full bg-[#9898a8]" />
+                  {isOperations ? "Operations" : "Operations available"}
+                </div>
+              )}
+              <button className="relative hidden size-8 items-center justify-center rounded-lg text-[#71717a] transition-colors hover:bg-[rgba(0,0,0,0.04)] sm:flex">
+                <Bell className="size-4" />
+                <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-[#5b5bd6]" />
+              </button>
+              <div className="flex size-7 items-center justify-center rounded-full bg-gradient-to-br from-[#5b5bd6] to-[#9333ea] text-xs font-semibold text-white">
+                {initials}
               </div>
-            )}
+            </div>
           </div>
         </header>
-        <main className="client-main relative min-h-[calc(100vh-4rem)] px-4 py-8 sm:px-6 lg:px-8">
+        <main className="client-main relative min-h-[calc(100vh-3.5rem)] px-4 py-8 sm:px-6">
           <div className="relative z-10">{children}</div>
         </main>
       </div>

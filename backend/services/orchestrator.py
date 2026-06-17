@@ -30,6 +30,7 @@ from backend.schemas import (
 )
 from backend.services.context_builder import (
     build_context_manifest,
+    build_resume_tailoring_context,
     normalize_job_description,
     profile_context_for_agent,
     retrieval_query_for_agent,
@@ -153,6 +154,8 @@ async def _profile_context(
 ) -> str:
     if profile is None:
         return ""
+    if agent_name == "resume_tailorer":
+        return build_resume_tailoring_context(profile)
     if agent_name in {"job_parser", "match_scorer"}:
         return profile_context_for_agent(profile, agent_name)
     chunks = await retrieve_profile_memory(

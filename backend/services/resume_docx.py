@@ -3,6 +3,8 @@ from __future__ import annotations
 import io
 
 from docx import Document
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.shared import Inches, Pt
 
 from backend.schemas import ResumeTailorerOutput
 
@@ -16,9 +18,19 @@ def render_resume_docx(output: ResumeTailorerOutput) -> bytes:
     does not compile templates or edit uploaded files in place.
     """
     document = Document()
+    section = document.sections[0]
+    section.top_margin = Inches(0.6)
+    section.bottom_margin = Inches(0.6)
+    section.left_margin = Inches(0.7)
+    section.right_margin = Inches(0.7)
+
+    normal = document.styles["Normal"]
+    normal.font.name = "Arial"
+    normal.font.size = Pt(10)
 
     if output.headline:
-        document.add_heading(output.headline, level=0)
+        heading = document.add_heading(output.headline, level=0)
+        heading.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
     if output.summary:
         document.add_heading("Summary", level=1)
@@ -59,6 +71,12 @@ def render_resume_docx(output: ResumeTailorerOutput) -> bytes:
                 line = f"{line} ({education.dates})" if line else education.dates
             if line:
                 document.add_paragraph(line)
+
+    if output.tailored_bullets:
+        document.add_heading("Additional Highlights", level=1)
+        for item in output.tailored_bullets:
+            if item.rewritten.strip():
+                document.add_paragraph(item.rewritten, style=_BULLET_STYLE)
 
     buffer = io.BytesIO()
     document.save(buffer)

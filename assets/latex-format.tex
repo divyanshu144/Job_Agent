@@ -1,0 +1,67 @@
+\documentclass[a4paper,9pt]{article}
+\usepackage[top=0.08in, bottom=0.08in, left=0.42in, right=0.42in]{geometry}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage[T1]{fontenc}
+\usepackage{textcomp}
+
+\definecolor{accent}{HTML}{1A1A2E}
+
+\hypersetup{colorlinks=true, urlcolor=black, linkcolor=black, pdfborder={0 0 0}}
+
+\titleformat{\section}{\large\bfseries\color{accent}}{}{0em}{}
+  [\vspace{-6pt}\rule{\linewidth}{0.6pt}]
+\titlespacing*{\section}{0pt}{1pt}{0pt}
+
+\pagestyle{empty}
+
+\setlength{\parskip}{0pt}
+\setlength{\parindent}{0pt}
+
+\setlist[itemize]{leftmargin=1.2em, itemsep=0.3pt, parsep=0pt, topsep=0.3pt}
+
+\newcommand{\resumeheading}[4]{
+  \begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+    \textbf{#1} & \textit{\small #2} \\
+    \textit{\small #3} & \textit{\small #4} \\
+  \end{tabular*}
+}
+
+\newcommand{\projectheading}[3]{
+  \begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+    \textbf{#1} \textit{\small | #2} & \small #3 \\
+  \end{tabular*}
+}
+\begin{document}
+
+\begin{center}
+    {\LARGE \textbf{DIVYANSHU CHARAK}} \\[3pt]
+    \small Exeter, UK $\cdot$ \href{mailto:divyanshucharak1407@gmail.com}{divyanshucharak1407@gmail.com} $\cdot$ +44 7407 103 440 \\[2pt]
+    \href{https://www.linkedin.com/in/divyanshu-charak-a1820516a/}{LinkedIn} $\cdot$
+    \href{https://github.com/divyanshu144}{GitHub} $\cdot$
+    \href{https://my-portfolio-nine-lyart-36.vercel.app/}{Portfolio}
+\end{center}
+
+\section{Professional Summary}
+%%JOBFIT_SUMMARY%%
+
+\section{Experience}
+
+%%JOBFIT_EXPERIENCE%%
+
+\section{Projects}
+
+%%JOBFIT_PROJECTS%%
+
+\section{Technical Skills}
+\begin{tabular}{@{}p{3.4cm}p{14.6cm}@{}}
+%%JOBFIT_SKILLS%%
+\end{tabular}
+
+\section{Education}
+
+%%JOBFIT_EDUCATION%%
+
+\end{document}
