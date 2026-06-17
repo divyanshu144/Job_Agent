@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.database import get_db
-from backend.models import Analysis, JobResult, User
+from backend.models import Analysis, JobResult, Profile, User
 from backend.schemas import (
     AnalysisDetail,
     AnalysisSummary,
@@ -27,6 +27,33 @@ _PHASE1 = ["job_parser", "match_scorer", "gap_analyst"]
 _PHASE2 = ["resource_planner", "cover_letter", "resume_tailorer"]
 
 
+async def _latest_profile_id(db: AsyncSession, user_id: str) -> str | None:
+    return (
+        await db.execute(
+            select(Profile.id)
+            .where(Profile.user_id == user_id)
+            .order_by(Profile.last_refreshed_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
+def _summary_from_analysis(analysis: Analysis, current_profile_id: str | None) -> AnalysisSummary:
+    return AnalysisSummary(
+        id=analysis.id,
+        jd_text=analysis.jd_text,
+        profile_id=analysis.profile_id,
+        created_at=analysis.created_at,
+        partial=analysis.partial,
+        evaluate_only=analysis.evaluate_only,
+        status=analysis.status,
+        role_type=analysis.role_type,
+        company=analysis.company,
+        match_score=analysis.match_score,
+        profile_stale=bool(current_profile_id and analysis.profile_id != current_profile_id),
+    )
+
+
 @router.get("/history", response_model=list[AnalysisSummary])
 async def list_history(
     limit: int = Query(default=20, ge=0, le=100),
@@ -34,6 +61,7 @@ async def list_history(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[AnalysisSummary]:
+    current_profile_id = await _latest_profile_id(db, current_user.id)
     result = await db.execute(
         select(Analysis)
         .where(Analysis.user_id == current_user.id)
@@ -41,7 +69,7 @@ async def list_history(
         .limit(limit)
         .offset(offset)
     )
-    return [AnalysisSummary.model_validate(a) for a in result.scalars()]
+    return [_summary_from_analysis(a, current_profile_id) for a in result.scalars()]
 
 
 @router.get("/analysis/{analysis_id}", response_model=AnalysisDetail)
@@ -61,6 +89,11 @@ async def get_analysis(
         raise HTTPException(status_code=404, detail=f"Analysis {analysis_id} not found")
     results_map = {
         r.agent_name: json.loads(r.output_json) for r in analysis.results if r.output_json
+    }
+    result_contexts = {
+        r.agent_name: json.loads(r.context_json)
+        for r in analysis.results
+        if r.context_json
     }
     # Error rows whose agent has no successful output. r.error already holds a
     # user-safe message (orchestrator never stores str(exc)); this route passes
@@ -83,6 +116,7 @@ async def get_analysis(
         else:
             steps.append(Step(name=name, phase=phase, status="pending"))
 
+    current_profile_id = await _latest_profile_id(db, current_user.id)
     return AnalysisDetail(
         id=analysis.id,
         jd_text=analysis.jd_text,
@@ -92,7 +126,10 @@ async def get_analysis(
         evaluate_only=analysis.evaluate_only,
         results=results_map,
         result_errors=result_errors,
+        result_contexts=result_contexts,
         steps=steps,
+        profile_stale=bool(current_profile_id and analysis.profile_id != current_profile_id),
+        current_profile_id=current_profile_id,
     )
 
 
@@ -112,7 +149,8 @@ async def update_analysis_status(
         raise HTTPException(status_code=404, detail=f"Analysis {analysis_id} not found")
     analysis.status = request.status
     await db.commit()
-    return AnalysisSummary.model_validate(analysis)
+    current_profile_id = await _latest_profile_id(db, current_user.id)
+    return _summary_from_analysis(analysis, current_profile_id)
 
 
 @router.get("/analysis/{analysis_id}/resume.docx")

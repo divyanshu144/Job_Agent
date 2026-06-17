@@ -84,6 +84,47 @@ async def test_get_analysis_detail_includes_failed_agent_errors(app_client, db_s
     assert data["result_errors"]["resume_tailorer"] == "resume_tailorer: invalid JSON"
 
 
+async def test_get_analysis_detail_includes_context_metadata(app_client, db_session):
+    profile = await make_profile(db_session, user_id=_USER_ID)
+    analysis = await make_analysis(db_session, profile=profile, user_id=_USER_ID)
+    db_session.add(
+        JobResult(
+            analysis_id=analysis.id,
+            agent_name="job_parser",
+            output_json=json.dumps(
+                {
+                    "required_skills": ["Python"],
+                    "nice_to_have": [],
+                    "years_experience": None,
+                    "role_type": "Backend Engineer",
+                    "seniority": "Senior",
+                    "company": "Acme",
+                }
+            ),
+            context_json=json.dumps({"profile_context": "compact_profile"}),
+        )
+    )
+    await db_session.commit()
+
+    resp = await app_client.get(f"/api/analysis/{analysis.id}")
+
+    assert resp.status_code == 200
+    assert resp.json()["result_contexts"]["job_parser"]["profile_context"] == "compact_profile"
+
+
+async def test_history_marks_old_profile_as_stale(app_client, db_session):
+    old_profile = await make_profile(db_session, user_id=_USER_ID)
+    analysis = await make_analysis(db_session, profile=old_profile, user_id=_USER_ID)
+    await make_profile(db_session, user_id=_USER_ID, merged_profile="newer")
+    await db_session.commit()
+
+    resp = await app_client.get("/api/history")
+
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert any(row["id"] == analysis.id and row["profile_stale"] is True for row in rows)
+
+
 async def test_history_pagination(client_with_data):
     client, _ = client_with_data
     resp = await client.get("/api/history?limit=0&offset=0")

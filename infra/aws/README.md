@@ -119,6 +119,10 @@ Non-secret values can live in task definition `environment` entries:
 - `COOKIE_SECURE=true`
 - `LOG_LEVEL=INFO`
 - `ANTHROPIC_MAX_RETRIES=3`
+- `EMBEDDING_PROVIDER=openai`
+- `EMBEDDING_MODEL=text-embedding-3-small`
+- `EMBEDDING_DIMENSIONS=1536`
+- `PGVECTOR_ENABLED=true`
 - `CV_PATH=/app/data/cv.pdf`
 - `PROFILE_YAML_PATH=/app/data/candidate_profile.yaml`
 - `ENABLE_WORKATASTARTUP_SOURCE=false`
@@ -131,6 +135,7 @@ Sensitive values should live in Secrets Manager or SSM Parameter Store and be re
 - `CELERY_RESULT_BACKEND`
 - `JWT_SECRET`
 - `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY`
 - `HUNTER_API_KEY`
 - `GMAIL_CLIENT_ID`
 - `GMAIL_CLIENT_SECRET`

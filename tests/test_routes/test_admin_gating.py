@@ -33,6 +33,8 @@ ADMIN_ROUTES: list[tuple[str, str, dict]] = [
     ("GET", "/api/discovery/saved", {}),
     ("POST", "/api/campaign/run", {}),
     ("GET", "/api/campaign/status", {}),
+    ("POST", "/api/campaign/run-now", {}),
+    ("GET", "/api/campaign/runs", {}),
     ("GET", "/api/metrics/costs/summary", {}),
     ("GET", "/api/metrics/costs/runs", {}),
     ("GET", "/api/contacts", {"params": {"analysis_id": "some-analysis"}}),
@@ -49,6 +51,7 @@ ADMIN_SAFE_READS: list[tuple[str, str, dict]] = [
     ("GET", "/api/discovery/feed", {}),
     ("GET", "/api/discovery/saved", {}),
     ("GET", "/api/campaign/status", {}),
+    ("GET", "/api/campaign/runs", {}),
     ("GET", "/api/metrics/costs/summary", {}),
     ("GET", "/api/metrics/costs/runs", {}),
 ]

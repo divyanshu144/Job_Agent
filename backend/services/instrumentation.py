@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
 from backend.models import LLMCall, PipelineEvent
+from backend.services.context_builder import estimate_context_chars
 from backend.services.cost_calculator import calculate_cost
 
 # Correlation id for one request / pipeline run. Set at each entry point via
@@ -63,6 +64,10 @@ class JsonLogFormatter(logging.Formatter):
             "message": record.getMessage(),
             "trace_id": getattr(record, "trace_id", None),
         }
+        for field in ("agent_name", "model", "context_chars", "analysis_id", "run_id", "user_id"):
+            value = getattr(record, field, None)
+            if value is not None:
+                payload[field] = value
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
         return json.dumps(payload)
@@ -176,6 +181,20 @@ async def tracked_call(
     **create_kwargs: Any,
 ) -> anthropic.types.Message:
     start = time.monotonic()
+    context_chars = estimate_context_chars(
+        create_kwargs.get("system"), create_kwargs.get("messages")
+    )
+    logging.getLogger(__name__).info(
+        "llm_context_size",
+        extra={
+            "agent_name": agent_name,
+            "model": model,
+            "context_chars": context_chars,
+            "analysis_id": analysis_id,
+            "run_id": run_id,
+            "user_id": user_id,
+        },
+    )
     msg = cast(anthropic.types.Message, await client.messages.create(model=model, **create_kwargs))
     latency_ms = int((time.monotonic() - start) * 1000)
     LLM_CALLS.labels(agent=agent_name, model=model).inc()
@@ -202,6 +221,7 @@ async def tracked_call(
             cache_hit=False,
             cache_creation_tokens=cache_creation_tokens,
             cache_read_tokens=cache_read_tokens,
+            context_chars=context_chars,
             run_id=run_id,
             analysis_id=analysis_id,
             user_id=user_id,
@@ -232,6 +252,7 @@ async def log_cache_hit(
         cache_hit=True,
         cache_creation_tokens=0,
         cache_read_tokens=0,
+        context_chars=0,
         run_id=run_id,
         analysis_id=analysis_id,
         user_id=user_id,
@@ -253,6 +274,7 @@ async def _write_llm_call(
     cache_hit: bool,
     cache_creation_tokens: int,
     cache_read_tokens: int,
+    context_chars: int = 0,
     run_id: str | None,
     analysis_id: str | None,
     user_id: str | None = None,
@@ -271,6 +293,7 @@ async def _write_llm_call(
             cache_hit=cache_hit,
             cache_creation_tokens=cache_creation_tokens,
             cache_read_tokens=cache_read_tokens,
+            context_chars=context_chars,
             prompt_name=prompt_name,
             prompt_hash=prompt_hash,
             prompt_version=prompt_version,
@@ -320,6 +343,7 @@ async def log_batch_llm_call(
         cache_hit=False,
         cache_creation_tokens=0,
         cache_read_tokens=0,
+        context_chars=0,
         run_id=run_id,
         analysis_id=analysis_id,
         user_id=user_id,

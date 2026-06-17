@@ -18,6 +18,7 @@ from backend import models  # noqa: F401
 from backend.database import Base, _run_upgrade
 
 _REQUIRED = {"users", "alembic_version"}
+LATEST_REVISION = "0012_pgvector_embeddings"
 
 
 def test_run_upgrade_brings_clean_db_to_head() -> None:
@@ -76,7 +77,7 @@ def test_run_upgrade_stamps_complete_legacy_schema() -> None:
 
     missing = _REQUIRED - tables
     assert not missing, f"legacy boot stamp path missing tables: {missing}"
-    assert revision == "0009_password_reset_tokens"
+    assert revision == LATEST_REVISION
 
 
 def test_run_upgrade_applies_0007_to_index_less_legacy_schema() -> None:
@@ -120,4 +121,4 @@ def test_run_upgrade_applies_0007_to_index_less_legacy_schema() -> None:
         indexes, revision = asyncio.run(_index_names_and_revision())
 
     assert "uq_campaign_runs_one_running" in indexes  # 0007 actually applied
-    assert revision == "0009_password_reset_tokens"
+    assert revision == LATEST_REVISION

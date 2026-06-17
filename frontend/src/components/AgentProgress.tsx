@@ -2,42 +2,42 @@ import { AGENT_ORDER } from "../types";
 import type { AgentName, AgentStatus } from "../types";
 
 const LABELS: Record<AgentName, string> = {
-  job_parser: "Parse Job",
-  match_scorer: "Score Match",
-  gap_analyst: "Analyse Gaps",
-  resource_planner: "Plan Resources",
-  cover_letter: "Write Cover Letter",
-  resume_tailorer: "Tailor Resume",
+  job_parser: "Reviewing role requirements",
+  match_scorer: "Comparing against your profile",
+  gap_analyst: "Identifying gaps",
+  resource_planner: "Preparing recommendations",
+  cover_letter: "Drafting documents",
+  resume_tailorer: "Finalising package",
 };
 
 const STATUS_META: Record<AgentStatus, { label: string; row: string; dot: string; text: string; subtext: string }> = {
   pending: {
     label: "Waiting",
-    row: "border-white/10 bg-white/6",
-    dot: "border-white/15 bg-white/20",
-    text: "text-indigo-100",
-    subtext: "text-indigo-200/70",
+    row: "border-zinc-200 bg-white",
+    dot: "border-zinc-300 bg-zinc-200",
+    text: "text-zinc-700",
+    subtext: "text-zinc-500",
   },
   running: {
     label: "Running",
-    row: "border-sky-300/40 bg-sky-400/15 shadow-sm shadow-sky-950/20",
-    dot: "border-sky-200 bg-sky-300",
-    text: "text-white",
-    subtext: "text-sky-100",
+    row: "border-blue-500/35 bg-blue-600/15",
+    dot: "border-blue-200 bg-blue-500",
+    text: "text-blue-900",
+    subtext: "text-blue-700",
   },
   done: {
     label: "Done",
-    row: "border-emerald-300/35 bg-emerald-400/15",
-    dot: "border-emerald-100 bg-emerald-300",
-    text: "text-white",
-    subtext: "text-emerald-100",
+    row: "border-emerald-600/35 bg-emerald-600/15",
+    dot: "border-emerald-200 bg-emerald-500",
+    text: "text-emerald-900",
+    subtext: "text-emerald-700",
   },
   error: {
     label: "Failed",
-    row: "border-red-300/40 bg-red-400/15",
-    dot: "border-red-100 bg-red-300",
-    text: "text-white",
-    subtext: "text-red-100",
+    row: "border-rose-300/40 bg-rose-400/15",
+    dot: "border-rose-100 bg-rose-300",
+    text: "text-rose-900",
+    subtext: "text-rose-700",
   },
 };
 
@@ -51,8 +51,8 @@ function Icon({ s }: { s: AgentStatus }) {
       </span>
     );
   }
-  if (s === "done") return <span className={`flex size-4 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold text-indigo-950 ${meta.dot}`}>✓</span>;
-  if (s === "error") return <span className={`flex size-4 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold text-indigo-950 ${meta.dot}`}>!</span>;
+  if (s === "done") return <span className={`flex size-4 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold text-zinc-950 ${meta.dot}`}>✓</span>;
+  if (s === "error") return <span className={`flex size-4 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold text-zinc-950 ${meta.dot}`}>!</span>;
   return <span className={`size-4 shrink-0 rounded-full border ${meta.dot}`} />;
 }
 

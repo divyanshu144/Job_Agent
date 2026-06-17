@@ -4,16 +4,19 @@ import { useState } from "react";
 function Card({ item }: { item: ResourceItem }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border rounded-lg overflow-hidden">
-      <button className="w-full flex justify-between p-4 bg-slate-50 text-left" onClick={() => setOpen(!open)}>
-        <span className="font-medium">{item.skill}</span>
-        <span className="text-xs text-slate-500">~{item.estimated_hours}h {open ? "▲" : "▼"}</span>
+    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+      <button
+        className="flex w-full justify-between gap-3 p-4 text-left transition-colors hover:bg-zinc-50"
+        onClick={() => setOpen(!open)}
+      >
+        <span className="font-medium text-zinc-950">{item.skill}</span>
+        <span className="shrink-0 text-xs font-medium text-blue-700">~{item.estimated_hours}h {open ? "Collapse" : "Details"}</span>
       </button>
       {open && (
-        <div className="p-4 space-y-2 text-sm">
-          {item.courses.length > 0 && <div><p className="font-semibold text-slate-600 mb-1">Courses</p><ul className="list-disc list-inside">{item.courses.map((c, i) => <li key={i}>{c}</li>)}</ul></div>}
-          {item.books.length > 0 && <div><p className="font-semibold text-slate-600 mb-1">Books</p><ul className="list-disc list-inside">{item.books.map((b, i) => <li key={i}>{b}</li>)}</ul></div>}
-          {item.projects.length > 0 && <div><p className="font-semibold text-slate-600 mb-1">Projects</p><ul className="list-disc list-inside">{item.projects.map((p, i) => <li key={i}>{p}</li>)}</ul></div>}
+        <div className="space-y-4 border-t border-zinc-200 p-4 text-sm text-zinc-700">
+          {item.courses.length > 0 && <Section title="Courses" items={item.courses} />}
+          {item.books.length > 0 && <Section title="Books" items={item.books} />}
+          {item.projects.length > 0 && <Section title="Projects" items={item.projects} />}
         </div>
       )}
     </div>
@@ -21,6 +24,27 @@ function Card({ item }: { item: ResourceItem }) {
 }
 
 export function ResourcePanel({ gaps }: { gaps: ResourceItem[] }) {
-  if (!gaps.length) return <p className="text-slate-500 text-sm">No resources needed.</p>;
-  return <div className="space-y-4">{gaps.map(g => <Card key={g.skill} item={g} />)}</div>;
+  if (!gaps.length) {
+    return (
+      <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600">
+        No recommendations needed for this package.
+      </div>
+    );
+  }
+  return <div className="space-y-3">{gaps.map((g) => <Card key={g.skill} item={g} />)}</div>;
+}
+
+function Section({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">{title}</p>
+      <ul className="space-y-2">
+        {items.map((item, index) => (
+          <li key={index} className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }

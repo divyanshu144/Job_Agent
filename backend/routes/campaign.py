@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database import get_db
 from backend.models import CampaignJob, CampaignRun, User
 from backend.schemas import CampaignRunResponse
-from backend.services.auth_service import get_current_user, require_admin
+from backend.services.auth_service import require_admin
 from backend.services.campaign_orchestrator import run_campaign
 
 logger = logging.getLogger(__name__)
@@ -100,14 +100,12 @@ async def campaign_status(
     }
 
 
-# ── Regular-tier (in-app) campaign: on-demand run + history. NOT admin. ──────────
-# Materials only (analysis/score/gaps/cover letter/tailored resume) — no contact
-# discovery, cold email, or Gmail. Those stay in the admin campaign above.
+# ── Admin-only campaign: keep campaign automation out of the client portal for now. ──
 
 
 @router.post("/campaign/run-now", status_code=202)
 async def run_now(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """Enqueue this user's campaign. 409 if one is already running; 503 if the
@@ -128,7 +126,7 @@ async def run_now(
 
 @router.get("/campaign/runs", response_model=list[CampaignRunResponse])
 async def my_campaign_runs(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> list[CampaignRunResponse]:
     from backend.services.campaign_run import _heal_stale_runs

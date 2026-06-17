@@ -18,8 +18,10 @@ from backend.database import SessionLocal
 from backend.models import Analysis, CampaignJob, Contact, Job, Profile
 from backend.schemas import ColdEmailOutput, PriorOutputs
 from backend.services.contact_discovery import ContactDiscoveryUnavailable, discover_contacts
+from backend.services.context_builder import profile_context_for_agent, retrieval_query_for_agent
 from backend.services.gmail_service import gmail_client as _gmail_client
-from backend.services.profile_builder import build_compact_profile, get_or_build_profile
+from backend.services.memory import build_retrieved_profile_context
+from backend.services.profile_builder import get_or_build_profile
 from backend.services.resume_latex import load_resume_latex, tailor_resume_pdf
 
 logger = logging.getLogger(__name__)
@@ -42,12 +44,16 @@ async def _score_job(job: Job, profile: Profile, db: AsyncSession) -> float:
     required_skills), so we run both. Returns a 0–1 fraction (match_scorer
     emits 0–100). Patched out in tests.
     """
-    compact = build_compact_profile(profile.yaml_data, profile.cv_text)
+    compact = profile_context_for_agent(profile, "job_parser")
     parsed = await JobParserAgent().with_tracking(db).run(compact, job.raw_text, PriorOutputs())
     scored = await (
         MatchScorerAgent()
         .with_tracking(db)
-        .run(profile.merged_profile, job.raw_text, PriorOutputs(job_parser=parsed))
+        .run(
+            profile_context_for_agent(profile, "match_scorer"),
+            job.raw_text,
+            PriorOutputs(job_parser=parsed),
+        )
     )
     return scored.score / 100.0
 
@@ -270,8 +276,14 @@ async def run_campaign(threshold: float = 0.75) -> CampaignRunResult:
             pdf = await _resume_tailor(job_id, job_description)
             async with SessionLocal() as db:
                 contact = await _contact_find(job_id, company, db)
+                outreach_context = await build_retrieved_profile_context(
+                    db,
+                    profile,
+                    retrieval_query_for_agent("cold_email", job_description, PriorOutputs()),
+                    limit=4,
+                )
                 email = await _cold_email(
-                    job_id, job_description, contact, profile.merged_profile, db
+                    job_id, job_description, contact, outreach_context, db
                 )
                 draft_id = await _draft_create(job_id, pdf, contact, email, db)
 

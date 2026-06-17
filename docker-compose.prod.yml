@@ -10,6 +10,7 @@
 # image's nginx.prod.conf does not proxy to a Docker Compose hostname.
 services:
   db:
+    image: pgvector/pgvector:pg16
     ports: !reset []
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-jobfit}

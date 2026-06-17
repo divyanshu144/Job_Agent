@@ -3,20 +3,31 @@ import { useState } from "react";
 
 function Row({ item, critical }: { item: GapItem; critical: boolean }) {
   const [open, setOpen] = useState(false);
-  const cls = critical ? "border-red-300 bg-red-50" : "border-amber-300 bg-amber-50";
+  const cls = critical
+    ? "border-rose-200 bg-rose-50"
+    : "border-amber-200 bg-amber-50";
+  const label = critical ? "High impact" : "Nice to have";
+
   return (
-    <div className={`border rounded-lg p-3 cursor-pointer ${cls}`} onClick={() => setOpen(!open)}>
-      <div className="flex justify-between">
-        <span className="font-medium">{item.skill}</span>
-        <span className="text-xs text-slate-400">{open ? "▲" : "▼"}</span>
+    <button
+      type="button"
+      className={`w-full cursor-pointer rounded-2xl border p-4 text-left transition-colors hover:bg-white ${cls}`}
+      onClick={() => setOpen(!open)}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <span className="font-medium text-zinc-950">{item.skill}</span>
+          <p className="mt-1 text-xs font-medium text-zinc-500">{label}</p>
+        </div>
+        <span className="text-xs text-zinc-500">{open ? "Collapse" : "Details"}</span>
       </div>
       {open && (
-        <div className="mt-2 text-sm text-slate-600 space-y-1">
-          <p><b>Impact:</b> {item.impact}</p>
-          <p><b>Why:</b> {item.rationale}</p>
+        <div className="mt-3 space-y-2 text-sm leading-6 text-zinc-700">
+          <p><span className="font-semibold text-zinc-950">Impact:</span> {item.impact}</p>
+          <p><span className="font-semibold text-zinc-950">Why:</span> {item.rationale}</p>
         </div>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -25,17 +36,21 @@ export function GapList({ critical, niceToHave }: { critical: GapItem[]; niceToH
     <div className="space-y-4">
       {critical.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-red-600 uppercase mb-2">Critical</h3>
-          <div className="space-y-2">{critical.map(g => <Row key={g.skill} item={g} critical />)}</div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-rose-700">High-impact gaps</h3>
+          <div className="space-y-2">{critical.map((g) => <Row key={g.skill} item={g} critical />)}</div>
         </div>
       )}
       {niceToHave.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-amber-600 uppercase mb-2">Nice to Have</h3>
-          <div className="space-y-2">{niceToHave.map(g => <Row key={g.skill} item={g} critical={false} />)}</div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">Nice-to-have gaps</h3>
+          <div className="space-y-2">{niceToHave.map((g) => <Row key={g.skill} item={g} critical={false} />)}</div>
         </div>
       )}
-      {!critical.length && !niceToHave.length && <p className="text-slate-500 text-sm">No gaps identified.</p>}
+      {!critical.length && !niceToHave.length && (
+        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600">
+          No gaps identified for this package.
+        </div>
+      )}
     </div>
   );
 }
