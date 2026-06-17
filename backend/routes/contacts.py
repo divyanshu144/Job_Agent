@@ -11,13 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.agents.cold_email_agent import ColdEmailAgent
 from backend.database import get_db
 from backend.models import Analysis, Contact, Profile, User
-from backend.schemas import ContactRead, DiscoverRequest, DraftResponse, SendResponse
+from backend.schemas import ContactRead, DiscoverRequest, DraftResponse, PriorOutputs, SendResponse
 from backend.services import gmail_service
 from backend.services.auth_service import require_admin
 from backend.services.contact_discovery import ContactDiscoveryUnavailable, discover_contacts
 from backend.services.context_builder import retrieval_query_for_agent
 from backend.services.memory import build_retrieved_profile_context
-from backend.schemas import PriorOutputs
 
 logger = logging.getLogger(__name__)
 

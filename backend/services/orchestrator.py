@@ -28,9 +28,6 @@ from backend.schemas import (
     PriorOutputs,
     ResourcePlannerOutput,
 )
-from backend.services.instrumentation import new_trace_id, span
-from backend.services.job_result import upsert_job_result
-from backend.services.pipeline_errors import to_user_error
 from backend.services.context_builder import (
     build_context_manifest,
     normalize_job_description,
@@ -38,12 +35,15 @@ from backend.services.context_builder import (
     retrieval_query_for_agent,
     validate_required_priors,
 )
+from backend.services.instrumentation import new_trace_id, span
+from backend.services.job_result import upsert_job_result
+from backend.services.memory import format_retrieved_profile_context, retrieve_profile_memory
+from backend.services.pipeline_errors import to_user_error
 from backend.services.profile_builder import (
     ProfileNotConfiguredError,
     get_or_build_profile,
     profile_content_hash,
 )
-from backend.services.memory import format_retrieved_profile_context, retrieve_profile_memory
 
 logger = logging.getLogger(__name__)
 

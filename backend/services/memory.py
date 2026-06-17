@@ -11,8 +11,8 @@ from typing import Any
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models import MemoryChunk, Profile
 from backend.config import settings
+from backend.models import MemoryChunk, Profile
 from backend.services.profile_builder import (
     build_compact_profile,
     build_profile_review_text,

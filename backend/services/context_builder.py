@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import re
 from typing import Any
 
 from backend.models import Profile
 from backend.schemas import PriorOutputs
-from backend.services.profile_builder import build_compact_profile
-from backend.services.profile_builder import profile_content_hash
+from backend.services.profile_builder import build_compact_profile, profile_content_hash
 
 
 class ContextPrerequisiteError(ValueError):
