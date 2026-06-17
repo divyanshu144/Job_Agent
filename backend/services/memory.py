@@ -297,7 +297,7 @@ async def _retrieve_semantic(
                         "limit": limit,
                     },
                 )
-                rows = list(result)
+                vector_rows = list(result)
             return [
                 RetrievedChunk(
                     text=row.text,
@@ -306,12 +306,12 @@ async def _retrieve_semantic(
                     score=float(row.score or 0.0),
                     metadata=json.loads(row.metadata_json or "{}"),
                 )
-                for row in rows
+                for row in vector_rows
             ]
         except Exception as e:
             logger.warning("pgvector retrieval failed; falling back to JSON embeddings: %s", e)
 
-    rows = (
+    chunks = (
         (
             await db.execute(
                 select(MemoryChunk).where(
@@ -324,7 +324,7 @@ async def _retrieve_semantic(
         .all()
     )
     scored: list[RetrievedChunk] = []
-    for row in rows:
+    for row in chunks:
         embedding = json.loads(row.embedding_json or "[]")
         score = dense_cosine_similarity(query_embedding, embedding)
         if score <= 0:
