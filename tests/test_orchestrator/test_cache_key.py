@@ -27,3 +27,12 @@ def test_cache_key_changes_with_jd():
 
     p = Profile(id="id-a", merged_profile="MERGED")
     assert analysis_cache_key("jd one", p) != analysis_cache_key("jd two", p)
+
+
+def test_cache_key_normalizes_jd_whitespace():
+    from backend.services.orchestrator import analysis_cache_key
+
+    p = Profile(id="id-a", merged_profile="MERGED")
+    assert analysis_cache_key("jd   one\n\nwith spacing", p) == analysis_cache_key(
+        "jd one with spacing", p
+    )

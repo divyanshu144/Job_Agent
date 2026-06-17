@@ -27,8 +27,9 @@ CELERY_BROKER_URL="${CELERY_BROKER_URL:-$REDIS_URL}"
 CELERY_RESULT_BACKEND="${CELERY_RESULT_BACKEND:-$REDIS_URL}"
 JWT_SECRET="${JWT_SECRET:-CHANGE_ME_LONG_RANDOM_SECRET}"
 ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-CHANGE_ME_ANTHROPIC_API_KEY}"
+OPENAI_API_KEY="${OPENAI_API_KEY:-CHANGE_ME_OPENAI_API_KEY}"
 
-case "$DATABASE_URL$REDIS_URL$JWT_SECRET$ANTHROPIC_API_KEY" in
+case "$DATABASE_URL$REDIS_URL$JWT_SECRET$ANTHROPIC_API_KEY$OPENAI_API_KEY" in
   *CHANGE_ME*)
     echo "Refusing to write placeholder secrets. Edit your local copy first." >&2
     exit 1
@@ -53,6 +54,7 @@ put_secret /jobfit/staging/celery-broker-url "$CELERY_BROKER_URL"
 put_secret /jobfit/staging/celery-result-backend "$CELERY_RESULT_BACKEND"
 put_secret /jobfit/staging/jwt-secret "$JWT_SECRET"
 put_secret /jobfit/staging/anthropic-api-key "$ANTHROPIC_API_KEY"
+put_secret /jobfit/staging/openai-api-key "$OPENAI_API_KEY"
 
 echo
 echo "SSM parameter bootstrap complete."

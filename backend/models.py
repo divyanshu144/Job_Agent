@@ -100,6 +100,7 @@ class LLMCall(Base):
     prompt_name: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
     prompt_hash: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
     prompt_version: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    context_chars: Mapped[int] = mapped_column(Integer, default=0)
     analysis_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("analyses.id"), nullable=True, default=None
     )
@@ -147,6 +148,27 @@ class UserTargetCompany(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     __table_args__ = (UniqueConstraint("user_id", "ats", "slug", name="uq_user_target"),)
+
+
+class MemoryChunk(Base):
+    """Sparse-vector memory chunk derived from a candidate profile version."""
+
+    __tablename__ = "memory_chunks"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("users.id"), nullable=True, index=True, default=None
+    )
+    profile_id: Mapped[str] = mapped_column(String, ForeignKey("profiles.id"), index=True)
+    namespace: Mapped[str] = mapped_column(String, default="/candidate")
+    source: Mapped[str] = mapped_column(String)
+    source_ref: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    text: Mapped[str] = mapped_column(Text)
+    metadata_json: Mapped[str] = mapped_column(Text, default="{}")
+    sparse_vector_json: Mapped[str] = mapped_column(Text, default="{}")
+    embedding_model: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    __table_args__ = (Index("ix_memory_chunks_profile_namespace", "profile_id", "namespace"),)
 
 
 class CampaignRun(Base):
@@ -277,6 +299,7 @@ class JobResult(Base):
     analysis_id: Mapped[str] = mapped_column(String, ForeignKey("analyses.id"))
     agent_name: Mapped[str] = mapped_column(String)
     output_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    context_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     # User-safe error classification (see services/pipeline_errors.py). NULL on success.
     error_code: Mapped[str | None] = mapped_column(String, nullable=True, default=None)

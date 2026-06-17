@@ -225,6 +225,7 @@ class AnalysisSummary(BaseModel):
     role_type: str | None = None
     company: str | None = None
     match_score: int | None = None
+    profile_stale: bool = False
 
 
 class RetryRequest(BaseModel):
@@ -250,7 +251,10 @@ class AnalysisDetail(BaseModel):
     status: str | None = None
     results: dict[str, dict]  # type: ignore[type-arg]
     result_errors: dict[str, str] = Field(default_factory=dict)
+    result_contexts: dict[str, dict] = Field(default_factory=dict)  # type: ignore[type-arg]
     steps: list[Step] = Field(default_factory=list)
+    profile_stale: bool = False
+    current_profile_id: str | None = None
 
 
 class TargetCompanyCreate(BaseModel):

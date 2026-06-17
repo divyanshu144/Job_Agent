@@ -24,6 +24,10 @@
         { "name": "COOKIE_SECURE", "value": "true" },
         { "name": "LOG_LEVEL", "value": "INFO" },
         { "name": "ANTHROPIC_MAX_RETRIES", "value": "3" },
+        { "name": "EMBEDDING_PROVIDER", "value": "openai" },
+        { "name": "EMBEDDING_MODEL", "value": "text-embedding-3-small" },
+        { "name": "EMBEDDING_DIMENSIONS", "value": "1536" },
+        { "name": "PGVECTOR_ENABLED", "value": "true" },
         { "name": "CV_PATH", "value": "/app/data/cv.pdf" },
         { "name": "PROFILE_YAML_PATH", "value": "/app/data/candidate_profile.yaml" },
         { "name": "ENABLE_WORKATASTARTUP_SOURCE", "value": "false" }
@@ -34,7 +38,8 @@
         { "name": "CELERY_BROKER_URL", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/celery-broker-url" },
         { "name": "CELERY_RESULT_BACKEND", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/celery-result-backend" },
         { "name": "JWT_SECRET", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/jwt-secret" },
-        { "name": "ANTHROPIC_API_KEY", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/anthropic-api-key" }
+        { "name": "ANTHROPIC_API_KEY", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/anthropic-api-key" },
+        { "name": "OPENAI_API_KEY", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/openai-api-key" }
       ],
       "healthCheck": {
         "command": ["CMD-SHELL", "celery -A backend.celery_app:celery_app inspect ping --timeout=5 >/dev/null || exit 1"],

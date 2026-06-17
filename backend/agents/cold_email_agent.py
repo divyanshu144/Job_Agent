@@ -19,4 +19,9 @@ class ColdEmailAgent(BaseAgent):
             .replace("{contact_name}", contact_name or "")
             .replace("{contact_title}", contact_title or "")
         )
-        return await self._call_structured(system, jd, ColdEmailOutput, label="cold_email")
+        return await self._call_structured(
+            system,
+            "Draft the cold email as valid JSON using only the context above.",
+            ColdEmailOutput,
+            label="cold_email",
+        )

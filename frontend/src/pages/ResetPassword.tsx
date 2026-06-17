@@ -26,15 +26,15 @@ export function ResetPassword() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] p-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/70">
+    <div className="flex min-h-screen items-center justify-center bg-[#f6f5f2] p-4">
+      <div className="w-full max-w-md rounded-3xl border border-zinc-200 bg-white p-8 shadow-[0_24px_80px_rgba(24,24,27,0.10)]">
         <div className="mb-7 flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-indigo-950 text-white">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-zinc-950 text-white">
             <Sparkles className="size-5" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-950">JobFit Agent</p>
-            <p className="text-xs text-slate-500">Account recovery</p>
+            <p className="text-sm font-semibold text-zinc-950">JobFit</p>
+            <p className="text-xs text-zinc-500">Application support service</p>
           </div>
         </div>
         <div className="space-y-6">
@@ -63,14 +63,14 @@ export function ResetPassword() {
               minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm shadow-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300"
+              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm shadow-sm shadow-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
             />
             <p className="text-xs text-slate-400">Minimum 8 characters</p>
           </div>
           <button
             type="submit"
             disabled={loading || !token}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-950 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-900 disabled:opacity-50"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
           >
             {loading ? "Updating password..." : "Update password"}
             {!loading && <ArrowRight className="size-4" />}

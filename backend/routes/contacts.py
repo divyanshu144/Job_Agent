@@ -15,6 +15,9 @@ from backend.schemas import ContactRead, DiscoverRequest, DraftResponse, SendRes
 from backend.services import gmail_service
 from backend.services.auth_service import require_admin
 from backend.services.contact_discovery import ContactDiscoveryUnavailable, discover_contacts
+from backend.services.context_builder import retrieval_query_for_agent
+from backend.services.memory import build_retrieved_profile_context
+from backend.schemas import PriorOutputs
 
 logger = logging.getLogger(__name__)
 
@@ -86,10 +89,17 @@ async def draft_email(
         await db.execute(select(Profile).where(Profile.id == analysis.profile_id))
     ).scalar_one()
 
-    agent = ColdEmailAgent().with_tracking(db, analysis_id=analysis.id)
+    agent = ColdEmailAgent().with_tracking(
+        db, analysis_id=analysis.id, user_id=analysis.user_id or current_user.id
+    )
     try:
         result = await agent.run(
-            profile=profile.merged_profile,
+            profile=await build_retrieved_profile_context(
+                db,
+                profile,
+                retrieval_query_for_agent("cold_email", analysis.jd_text, PriorOutputs()),
+                limit=4,
+            ),
             jd=analysis.jd_text,
             contact_name=contact.name,
             contact_title=contact.title,

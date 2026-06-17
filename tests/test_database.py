@@ -36,6 +36,45 @@ async def test_analysis_with_results(session):
     assert r.id is not None
 
 
+async def test_job_result_accepts_context_json(session):
+    p = Profile(yaml_data="x", cv_text="", merged_profile="x")
+    session.add(p)
+    await session.flush()
+    a = Analysis(jd_text="Senior ML Engineer", profile_id=p.id)
+    session.add(a)
+    await session.flush()
+    r = JobResult(
+        analysis_id=a.id,
+        agent_name="job_parser",
+        output_json='{"skills": []}',
+        context_json='{"profile_context": "compact_profile"}',
+    )
+    session.add(r)
+    await session.commit()
+    assert r.context_json == '{"profile_context": "compact_profile"}'
+
+
+async def test_memory_chunk_accepts_embedding_metadata(session):
+    from backend.models import MemoryChunk
+
+    p = Profile(yaml_data="x", cv_text="", merged_profile="x")
+    session.add(p)
+    await session.flush()
+    chunk = MemoryChunk(
+        profile_id=p.id,
+        source="cv_text",
+        text="Built FastAPI services",
+        embedding_model="text-embedding-3-small",
+        embedding_json="[0.1, 0.2]",
+    )
+    session.add(chunk)
+    await session.commit()
+
+    result = await session.get(MemoryChunk, chunk.id)
+    assert result.embedding_model == "text-embedding-3-small"
+    assert result.embedding_json == "[0.1, 0.2]"
+
+
 async def test_llm_call_has_cache_token_columns(session):
     """LLMCall model accepts and stores cache_creation_tokens and cache_read_tokens."""
     from datetime import datetime, timezone
@@ -60,6 +99,7 @@ async def test_llm_call_has_cache_token_columns(session):
     result = await session.get(LLMCall, row.id)
     assert result.cache_creation_tokens == 800
     assert result.cache_read_tokens == 0
+    assert result.context_chars == 0
 
 
 async def test_llm_call_accepts_prompt_version_metadata(session):
@@ -86,3 +126,22 @@ async def test_llm_call_accepts_prompt_version_metadata(session):
     assert result.prompt_name == "job_parser"
     assert result.prompt_hash == "a" * 64
     assert result.prompt_version == "sha256:" + "a" * 12
+
+
+async def test_llm_call_accepts_context_chars(session):
+    from backend.models import LLMCall
+
+    row = LLMCall(
+        agent_name="job_parser",
+        model="claude-haiku-4-5-20251001",
+        input_tokens=100,
+        output_tokens=20,
+        cost_usd=0.0001,
+        latency_ms=500,
+        context_chars=1234,
+    )
+    session.add(row)
+    await session.commit()
+
+    result = await session.get(LLMCall, row.id)
+    assert result.context_chars == 1234

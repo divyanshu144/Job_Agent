@@ -78,7 +78,7 @@ export interface ProfileReviewResponse {
   reviewed_at?: string | null;
   has_cv_text: boolean;
 }
-export interface AnalysisSummary { id: string; jd_text: string; profile_id: string; created_at: string; partial: boolean; evaluate_only: boolean; status?: string | null; role_type?: string | null; company?: string | null; match_score?: number | null; }
+export interface AnalysisSummary { id: string; jd_text: string; profile_id: string; created_at: string; partial: boolean; evaluate_only: boolean; status?: string | null; role_type?: string | null; company?: string | null; match_score?: number | null; profile_stale?: boolean; }
 // Per-step status for the retry strip (mirrors backend Step).
 export interface Step { name: string; phase: 1 | 2; status: "success" | "error" | "pending"; error_code?: string | null; message?: string | null; }
 export interface RetryRequest { agents?: string[]; scope?: "failed" | "all"; }
@@ -90,7 +90,10 @@ export interface AnalysisDetail {
     cover_letter?: CoverLetterOutput; resume_tailorer?: ResumeTailorerOutput;
   };
   result_errors?: Partial<Record<AgentName, string>>;
+  result_contexts?: Partial<Record<AgentName, Record<string, unknown>>>;
   steps?: Step[];
+  profile_stale?: boolean;
+  current_profile_id?: string | null;
 }
 export type AgentName = "job_parser"|"match_scorer"|"gap_analyst"|"resource_planner"|"cover_letter"|"resume_tailorer";
 export const AGENT_ORDER: AgentName[] = ["job_parser","match_scorer","gap_analyst","resource_planner","cover_letter","resume_tailorer"];

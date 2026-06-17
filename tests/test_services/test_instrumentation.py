@@ -89,6 +89,7 @@ async def test_tracked_call_records_cache_creation_tokens(db_session):
     row = (await db_session.execute(select(LLMCall))).scalar_one()
     assert row.cache_creation_tokens == 800
     assert row.cache_read_tokens == 0
+    assert row.context_chars > 0
     # Cost: 100 input ($0.80/M) + 20 output ($4.00/M) + 800 cache_write ($1.00/M)
     assert row.cost_usd == pytest.approx((100 * 0.80 + 20 * 4.00 + 800 * 1.00) / 1_000_000)
 

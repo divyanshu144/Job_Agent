@@ -215,6 +215,9 @@ async def build_profile(
     )
     db.add(profile)
     await db.flush()
+    from backend.services.memory import write_profile_memory
+
+    await write_profile_memory(db, profile)
     return profile
 
 
@@ -251,6 +254,9 @@ async def build_profile_from_text(
     )
     db.add(profile)
     await db.flush()
+    from backend.services.memory import write_profile_memory
+
+    await write_profile_memory(db, profile)
     return profile
 
 

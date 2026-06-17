@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     )
 
     anthropic_api_key: str = ""
+    openai_api_key: str = ""
+    embedding_provider: str = "disabled"  # disabled | openai
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
+    pgvector_enabled: bool = True
     app_env: str = "development"
     # Postgres via the asyncpg driver. Local default matches docker-compose.
     database_url: str = "postgresql+asyncpg://jobfit:jobfit@localhost:5432/jobfit"

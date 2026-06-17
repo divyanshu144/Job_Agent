@@ -20,6 +20,7 @@ async def upsert_job_result(
     agent: str,
     *,
     output_json: str | None = None,
+    context_json: str | None = None,
     error: str | None = None,
     error_code: str | None = None,
 ) -> JobResult:
@@ -49,6 +50,7 @@ async def upsert_job_result(
         analysis_id=analysis_id,
         agent_name=agent,
         output_json=output_json,
+        context_json=context_json,
         error=error,
         error_code=error_code,
         retry_count=next_count,

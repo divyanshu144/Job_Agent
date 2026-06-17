@@ -18,6 +18,7 @@ from tenacity import (
 from backend.agents.prompt_versions import PromptVersion, build_prompt_version
 from backend.config import settings
 from backend.schemas import PriorOutputs
+from backend.services.context_builder import find_unresolved_prior_placeholders
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -123,6 +124,9 @@ class BaseAgent:
         result = template.replace("{profile}", profile).replace("{jd}", jd)
         for field, value in prior.model_dump(exclude_none=True).items():
             result = result.replace(f"{{prior.{field}}}", json.dumps(value, indent=2))
+        unresolved = find_unresolved_prior_placeholders(result)
+        if unresolved:
+            raise AgentError(f"Missing prompt context for {', '.join(unresolved)}")
         return result
 
     async def _call(self, system: str, user: str) -> str:

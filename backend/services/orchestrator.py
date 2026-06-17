@@ -31,12 +31,19 @@ from backend.schemas import (
 from backend.services.instrumentation import new_trace_id, span
 from backend.services.job_result import upsert_job_result
 from backend.services.pipeline_errors import to_user_error
+from backend.services.context_builder import (
+    build_context_manifest,
+    normalize_job_description,
+    profile_context_for_agent,
+    retrieval_query_for_agent,
+    validate_required_priors,
+)
 from backend.services.profile_builder import (
     ProfileNotConfiguredError,
-    build_compact_profile,
     get_or_build_profile,
     profile_content_hash,
 )
+from backend.services.memory import format_retrieved_profile_context, retrieve_profile_memory
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +94,7 @@ def analysis_cache_key(jd: str, profile: Profile) -> str:
     (merged_profile), not profile.id — which rotates on every build. The one helper
     every cache site calls."""
     return hashlib.sha256(
-        f"{jd}::{profile_content_hash(profile.merged_profile)}".encode()
+        f"{normalize_job_description(jd)}::{profile_content_hash(profile.merged_profile)}".encode()
     ).hexdigest()
 
 
@@ -137,6 +144,26 @@ class _AgentProtocol(Protocol):
     async def run(self, profile: str, jd: str, prior: PriorOutputs) -> Any: ...
 
 
+async def _profile_context(
+    db: AsyncSession,
+    profile: Profile | None,
+    agent_name: str,
+    jd: str,
+    prior: PriorOutputs,
+) -> str:
+    if profile is None:
+        return ""
+    if agent_name in {"job_parser", "match_scorer"}:
+        return profile_context_for_agent(profile, agent_name)
+    chunks = await retrieve_profile_memory(
+        db,
+        profile,
+        retrieval_query_for_agent(agent_name, jd, prior),
+        limit=6,
+    )
+    return format_retrieved_profile_context(profile, chunks)
+
+
 async def _run_phase1(
     jd: str,
     profile: Profile,
@@ -179,9 +206,6 @@ async def _run_phase1(
             prior=PriorOutputs(),
         )
 
-    compact = build_compact_profile(profile.yaml_data, profile.cv_text)
-    full = profile.merged_profile
-
     # Create placeholder Analysis row BEFORE agents run so analysis_id is
     # available for LLM call tracking.
     analysis = Analysis(
@@ -199,24 +223,33 @@ async def _run_phase1(
     partial = False
     prior = PriorOutputs()
 
-    phase1_agents: list[tuple[str, _AgentProtocol, str]] = [
-        ("job_parser", JobParserAgent(), compact),
-        ("match_scorer", MatchScorerAgent(), compact),
-        ("gap_analyst", GapAnalystAgent(), full),
+    phase1_agents: list[tuple[str, _AgentProtocol]] = [
+        ("job_parser", JobParserAgent()),
+        ("match_scorer", MatchScorerAgent()),
+        ("gap_analyst", GapAnalystAgent()),
     ]
 
     errors: dict[str, tuple[str, str]] = {}
     try:
-        for agent_name, agent, profile_str in phase1_agents:
+        for agent_name, agent in phase1_agents:
             agent.model = model  # type: ignore[attr-defined]
             agent.with_tracking(db, run_id=run_id, analysis_id=analysis.id)  # type: ignore[attr-defined]
             try:
+                validate_required_priors(agent_name, prior)
+                prior_before = prior
+                profile_str = await _profile_context(db, profile, agent_name, jd, prior)
                 async with span(
                     db, kind="span", name=agent_name, analysis_id=analysis.id, run_id=run_id
                 ):
                     output = await agent.run(profile_str, jd, prior)
                 prior = prior.model_copy(update={agent_name: output})
                 results[agent_name] = output.model_dump()
+                results[agent_name]["__context_manifest"] = build_context_manifest(
+                    agent_name=agent_name,
+                    profile=profile,
+                    jd=jd,
+                    prior=prior_before,
+                )
             except Exception as e:
                 logger.exception("phase1 agent %s failed", agent_name)
                 partial = True
@@ -225,9 +258,25 @@ async def _run_phase1(
     finally:
         analysis.partial = partial
         for name, data in results.items():
-            await upsert_job_result(db, analysis.id, name, output_json=json.dumps(data))
+            context = data.pop("__context_manifest", None)
+            await upsert_job_result(
+                db,
+                analysis.id,
+                name,
+                output_json=json.dumps(data),
+                context_json=json.dumps(context) if context else None,
+            )
         for name, (msg, code) in errors.items():
-            await upsert_job_result(db, analysis.id, name, error=msg, error_code=code)
+            await upsert_job_result(
+                db,
+                analysis.id,
+                name,
+                error=msg,
+                error_code=code,
+                context_json=json.dumps(
+                    build_context_manifest(agent_name=name, profile=profile, jd=jd, prior=prior)
+                ),
+            )
         await db.commit()
 
     score = results.get("match_scorer", {}).get("score", 0)
@@ -291,9 +340,6 @@ async def run_evaluate_pipeline(
         )
         return
 
-    compact = build_compact_profile(profile.yaml_data, profile.cv_text)
-    full = profile.merged_profile
-
     yield SSEEvent("pipeline_start", {"total_agents": 3})
 
     # Create placeholder Analysis before agents so analysis_id is trackable
@@ -312,22 +358,31 @@ async def run_evaluate_pipeline(
     partial = False
     prior = PriorOutputs()
 
-    phase1: list[tuple[str, _AgentProtocol, str]] = [
-        ("job_parser", JobParserAgent(), compact),
-        ("match_scorer", MatchScorerAgent(), compact),
-        ("gap_analyst", GapAnalystAgent(), full),
+    phase1: list[tuple[str, _AgentProtocol]] = [
+        ("job_parser", JobParserAgent()),
+        ("match_scorer", MatchScorerAgent()),
+        ("gap_analyst", GapAnalystAgent()),
     ]
 
     errors: dict[str, tuple[str, str]] = {}
     try:
-        for agent_name, agent, profile_str in phase1:
+        for agent_name, agent in phase1:
             agent.with_tracking(db, analysis_id=analysis.id, user_id=user_id)  # type: ignore[attr-defined]
             yield SSEEvent("agent_start", {"agent": agent_name})
             try:
+                validate_required_priors(agent_name, prior)
+                prior_before = prior
+                profile_str = await _profile_context(db, profile, agent_name, jd, prior)
                 async with span(db, kind="span", name=agent_name, analysis_id=analysis.id):
                     output = await agent.run(profile_str, jd, prior)
                 prior = prior.model_copy(update={agent_name: output})
                 results[agent_name] = output.model_dump()
+                results[agent_name]["__context_manifest"] = build_context_manifest(
+                    agent_name=agent_name,
+                    profile=profile,
+                    jd=jd,
+                    prior=prior_before,
+                )
                 yield SSEEvent("agent_done", {"agent": agent_name, "output": output.model_dump()})
             except Exception as e:
                 logger.exception("phase1 agent %s failed", agent_name)
@@ -346,9 +401,25 @@ async def run_evaluate_pipeline(
         analysis.company = jp_out.get("company")
         analysis.match_score = results.get("match_scorer", {}).get("score")
         for name, output in results.items():
-            await upsert_job_result(db, analysis.id, name, output_json=json.dumps(output))
+            context = output.pop("__context_manifest", None)
+            await upsert_job_result(
+                db,
+                analysis.id,
+                name,
+                output_json=json.dumps(output),
+                context_json=json.dumps(context) if context else None,
+            )
         for name, (msg, code) in errors.items():
-            await upsert_job_result(db, analysis.id, name, error=msg, error_code=code)
+            await upsert_job_result(
+                db,
+                analysis.id,
+                name,
+                error=msg,
+                error_code=code,
+                context_json=json.dumps(
+                    build_context_manifest(agent_name=name, profile=profile, jd=jd, prior=prior)
+                ),
+            )
         await db.commit()
 
     score = results.get("match_scorer", {}).get("score", 0)
@@ -396,17 +467,6 @@ async def run_steps(
     profile = (
         await db.execute(select(Profile).where(Profile.id == analysis.profile_id))
     ).scalar_one_or_none()
-    full = profile.merged_profile if profile else ""
-    compact = build_compact_profile(profile.yaml_data, profile.cv_text) if profile else ""
-    profile_for = {
-        "job_parser": compact,
-        "match_scorer": compact,
-        "gap_analyst": full,
-        "resource_planner": full,
-        "cover_letter": full,
-        "resume_tailorer": full,
-    }
-
     stored = (
         (await db.execute(select(JobResult).where(JobResult.analysis_id == analysis_id)))
         .scalars()
@@ -425,17 +485,45 @@ async def run_steps(
         agent.with_tracking(db, analysis_id=analysis.id, user_id=analysis.user_id)
         yield SSEEvent("agent_start", {"agent": name})
         try:
+            validate_required_priors(name, prior)
+            prior_before = prior
+            profile_str = await _profile_context(db, profile, name, analysis.jd_text, prior)
             async with span(db, kind="span", name=name, analysis_id=analysis.id):
-                output = await agent.run(profile_for[name], analysis.jd_text, prior)
+                output = await agent.run(profile_str, analysis.jd_text, prior)
             prior = prior.model_copy(update={name: output})
             await upsert_job_result(
-                db, analysis.id, name, output_json=json.dumps(output.model_dump())
+                db,
+                analysis.id,
+                name,
+                output_json=json.dumps(output.model_dump()),
+                context_json=json.dumps(
+                    build_context_manifest(
+                        agent_name=name,
+                        profile=profile,
+                        jd=analysis.jd_text,
+                        prior=prior_before,
+                    )
+                ),
             )
             yield SSEEvent("agent_done", {"agent": name, "output": output.model_dump()})
         except Exception as e:
             logger.exception("step %s failed", name)
             ue = to_user_error(name, e)
-            await upsert_job_result(db, analysis.id, name, error=ue.message, error_code=ue.code)
+            await upsert_job_result(
+                db,
+                analysis.id,
+                name,
+                error=ue.message,
+                error_code=ue.code,
+                context_json=json.dumps(
+                    build_context_manifest(
+                        agent_name=name,
+                        profile=profile,
+                        jd=analysis.jd_text,
+                        prior=prior,
+                    )
+                ),
+            )
             yield SSEEvent("pipeline_error", {"agent": name, "error": ue.message, "code": ue.code})
 
     if parallel:
@@ -445,6 +533,11 @@ async def run_steps(
         uid = analysis.user_id
         jd = analysis.jd_text
         snapshot = prior
+        parallel_profile_for: dict[str, str] = {}
+        for name in parallel:
+            parallel_profile_for[name] = await _profile_context(
+                db, profile, name, analysis.jd_text, snapshot
+            )
 
         async def _tracked(name: str) -> Any:
             # Own session per coroutine — sharing the route session across
@@ -452,8 +545,9 @@ async def run_steps(
             async with SessionLocal() as own_db:
                 agent = _AGENT_CLASSES[name]()
                 agent.with_tracking(own_db, analysis_id=aid, user_id=uid)
+                validate_required_priors(name, snapshot)
                 async with span(own_db, kind="span", name=name, analysis_id=aid):
-                    return await agent.run(full, jd, snapshot)
+                    return await agent.run(parallel_profile_for[name], jd, snapshot)
 
         results = await asyncio.gather(*[_tracked(n) for n in parallel], return_exceptions=True)
         for name, result in zip(parallel, results):
@@ -470,7 +564,18 @@ async def run_steps(
                 )
             else:
                 await upsert_job_result(
-                    db, analysis.id, name, output_json=json.dumps(result.model_dump())
+                    db,
+                    analysis.id,
+                    name,
+                    output_json=json.dumps(result.model_dump()),
+                    context_json=json.dumps(
+                        build_context_manifest(
+                            agent_name=name,
+                            profile=profile,
+                            jd=analysis.jd_text,
+                            prior=snapshot,
+                        )
+                    ),
                 )
                 yield SSEEvent("agent_done", {"agent": name, "output": result.model_dump()})
 
