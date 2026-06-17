@@ -20,6 +20,10 @@ env:
   WORKER_SERVICE: jobfit-worker-service
   BEAT_SERVICE: jobfit-beat-service
   FRONTEND_SERVICE: jobfit-frontend-service
+  API_DESIRED_COUNT: 1
+  WORKER_DESIRED_COUNT: 1
+  BEAT_DESIRED_COUNT: 1
+  FRONTEND_DESIRED_COUNT: 1
 
 jobs:
   deploy:
@@ -161,7 +165,8 @@ jobs:
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$API_SERVICE" \
-            --task-definition "${{ steps.register-api.outputs.task_definition_arn }}" >/dev/null
+            --task-definition "${{ steps.register-api.outputs.task_definition_arn }}" \
+            --desired-count "$API_DESIRED_COUNT" >/dev/null
           aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$API_SERVICE"
 
       - name: Deploy worker service
@@ -187,6 +192,13 @@ jobs:
           service: ${{ env.FRONTEND_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
+
+      - name: Ensure ECS services are scaled for smoke test
+        run: |
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$WORKER_SERVICE" --desired-count "$WORKER_DESIRED_COUNT" >/dev/null
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$BEAT_SERVICE" --desired-count "$BEAT_DESIRED_COUNT" >/dev/null
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$FRONTEND_SERVICE" --desired-count "$FRONTEND_DESIRED_COUNT" >/dev/null
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$WORKER_SERVICE" "$BEAT_SERVICE" "$FRONTEND_SERVICE"
 
       - name: Verify ECS service wiring
         run: |
