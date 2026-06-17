@@ -94,5 +94,6 @@ docker compose exec -T api python -c "from pathlib import Path; prompts=list(Pat
 log "Checking TeX availability"
 docker compose exec -T api sh -lc 'command -v pdflatex >/dev/null'
 docker compose exec -T worker sh -lc 'command -v pdflatex >/dev/null'
+docker compose exec -T beat sh -lc '! command -v pdflatex >/dev/null'
 
 log "Docker smoke passed"
