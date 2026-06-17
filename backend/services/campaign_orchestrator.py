@@ -282,9 +282,7 @@ async def run_campaign(threshold: float = 0.75) -> CampaignRunResult:
                     retrieval_query_for_agent("cold_email", job_description, PriorOutputs()),
                     limit=4,
                 )
-                email = await _cold_email(
-                    job_id, job_description, contact, outreach_context, db
-                )
+                email = await _cold_email(job_id, job_description, contact, outreach_context, db)
                 draft_id = await _draft_create(job_id, pdf, contact, email, db)
 
             # _draft_create owns its own failure (status=failed, no raise): an

@@ -131,7 +131,9 @@ def test_alembic_upgrade_head_adds_memory_chunks_table():
                 async with engine.connect() as conn:
                     return set(
                         await conn.run_sync(
-                            lambda c: [col["name"] for col in inspect(c).get_columns("memory_chunks")]
+                            lambda c: [
+                                col["name"] for col in inspect(c).get_columns("memory_chunks")
+                            ]
                         )
                     )
             finally:
@@ -163,7 +165,9 @@ def test_plain_postgres_skips_pgvector_column_but_keeps_embedding_json():
                 async with engine.connect() as conn:
                     return set(
                         await conn.run_sync(
-                            lambda c: [col["name"] for col in inspect(c).get_columns("memory_chunks")]
+                            lambda c: [
+                                col["name"] for col in inspect(c).get_columns("memory_chunks")
+                            ]
                         )
                     )
             finally:

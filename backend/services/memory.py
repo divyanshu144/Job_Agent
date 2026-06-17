@@ -216,7 +216,9 @@ async def write_profile_memory(db: AsyncSession, profile: Profile) -> None:
 async def ensure_profile_memory(db: AsyncSession, profile: Profile) -> None:
     count = (
         await db.execute(
-            select(func.count()).select_from(MemoryChunk).where(MemoryChunk.profile_id == profile.id)
+            select(func.count())
+            .select_from(MemoryChunk)
+            .where(MemoryChunk.profile_id == profile.id)
         )
     ).scalar_one()
     if count == 0:
@@ -235,7 +237,11 @@ async def retrieve_profile_memory(
     if semantic:
         return semantic
     query_vector = sparse_vector(query)
-    rows = ((await db.execute(select(MemoryChunk).where(MemoryChunk.profile_id == profile.id)))).scalars().all()
+    rows = (
+        (await db.execute(select(MemoryChunk).where(MemoryChunk.profile_id == profile.id)))
+        .scalars()
+        .all()
+    )
     scored: list[RetrievedChunk] = []
     for row in rows:
         vector = json.loads(row.sparse_vector_json or "{}")
