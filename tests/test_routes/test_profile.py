@@ -443,3 +443,29 @@ async def test_cv_upload_preserves_yaml_when_extractor_fails(app_client, db_sess
     assert resp.status_code == 200
     assert resp.json()["yaml_data"] == "identity:\n  name: Existing Hand Edited\n"
     assert resp.json()["cv_text"] == "New resume text with Python and SQL experience."
+
+
+async def test_put_profile_yaml_persists_for_user(app_client, db_session):
+    resp = await app_client.put(
+        "/api/profile/yaml",
+        json={"yaml_text": "identity:\n  name: Edited By User\n"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["yaml_data"] == "identity:\n  name: Edited By User\n"
+    assert "Edited By User" in resp.json()["merged_profile"]
+
+
+async def test_put_profile_yaml_rejects_invalid_yaml(app_client):
+    resp = await app_client.put(
+        "/api/profile/yaml",
+        json={"yaml_text": "identity:\n  name: [unclosed\n"},
+    )
+    assert resp.status_code == 422
+    assert "YAML" in resp.json()["detail"]
+
+
+async def test_put_profile_yaml_requires_authentication(unauthenticated_client):
+    resp = await unauthenticated_client.put(
+        "/api/profile/yaml", json={"yaml_text": "identity:\n  name: X\n"}
+    )
+    assert resp.status_code == 401

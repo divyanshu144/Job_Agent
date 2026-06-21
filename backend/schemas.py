@@ -240,6 +240,10 @@ class ProfileReviewUpdate(BaseModel):
     review_data: ProfileReviewData
 
 
+class ProfileYamlUpdate(BaseModel):
+    yaml_text: str
+
+
 class PipelineDoneData(BaseModel):
     analysis_id: str
     score: int

@@ -4,6 +4,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
+import yaml
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.agents.profile_extractor import ProfileExtractorAgent
 from backend.database import get_db
 from backend.models import Profile, User
-from backend.schemas import ProfileResponse, ProfileReviewResponse, ProfileReviewUpdate
+from backend.schemas import (
+    ProfileResponse,
+    ProfileReviewResponse,
+    ProfileReviewUpdate,
+    ProfileYamlUpdate,
+)
 from backend.services.auth_service import get_current_user
 from backend.services.cv_parser import extract_text_from_docx_bytes, extract_text_from_pdf_bytes
 from backend.services.profile_builder import (
@@ -113,6 +119,32 @@ async def update_profile_review(
     await db.commit()
     await db.refresh(profile)
     return _profile_review_response(profile)
+
+
+@router.put("/profile/yaml", response_model=ProfileResponse)
+async def update_profile_yaml(
+    payload: ProfileYamlUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ProfileResponse:
+    """Save the user's own YAML profile. Available to all users."""
+    try:
+        yaml.safe_load(payload.yaml_text)
+    except yaml.YAMLError:
+        raise HTTPException(status_code=422, detail="Invalid YAML — could not parse the profile")
+    existing = await _latest_user_profile(db, current_user.id)
+    profile = await build_profile_from_text(
+        db,
+        yaml_text=payload.yaml_text,
+        cv_text=existing.cv_text if existing is not None else "",
+        user_id=current_user.id,
+        profile_review_data=existing.profile_review_data if existing is not None else "{}",
+        review_status=existing.review_status if existing is not None else "draft",
+        reviewed_at=existing.reviewed_at if existing is not None else None,
+    )
+    await db.commit()
+    await db.refresh(profile)
+    return _profile_response(profile)
 
 
 @router.post("/profile/refresh", response_model=ProfileResponse)
