@@ -154,6 +154,40 @@ class ProfileReviewData(BaseModel):
     work_preferences: ProfileWorkPreferences = Field(default_factory=ProfileWorkPreferences)
 
 
+class ExtractedIdentity(BaseModel):
+    name: str = ""
+    headline: str = ""
+    location: str = ""
+
+
+class ExtractedSkills(BaseModel):
+    languages: list[str] = Field(default_factory=list)
+    frameworks: list[str] = Field(default_factory=list)
+    tools: list[str] = Field(default_factory=list)
+
+
+class ExtractedExperience(BaseModel):
+    company: str = ""
+    role: str = ""
+    dates: str = ""
+    highlights: list[str] = Field(default_factory=list)
+
+
+class ExtractedProject(BaseModel):
+    name: str = ""
+    themes: list[str] = Field(default_factory=list)
+
+
+class ExtractedProfile(BaseModel):
+    """Structured candidate profile extracted from resume text by profile_extractor.
+    Serialized to YAML (extracted_profile_to_yaml) to populate Profile.yaml_data."""
+
+    identity: ExtractedIdentity = Field(default_factory=ExtractedIdentity)
+    core_skills: ExtractedSkills = Field(default_factory=ExtractedSkills)
+    experience: list[ExtractedExperience] = Field(default_factory=list)
+    featured_projects: list[ExtractedProject] = Field(default_factory=list)
+
+
 class PriorOutputs(BaseModel):
     job_parser: JobParserOutput | None = None
     match_scorer: MatchScorerOutput | None = None

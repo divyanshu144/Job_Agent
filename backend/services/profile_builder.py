@@ -6,12 +6,13 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
 from backend.models import Profile, User
-from backend.schemas import ProfileReviewData
+from backend.schemas import ExtractedProfile, ProfileReviewData
 from backend.services.cv_parser import extract_text_from_file
 
 logger = logging.getLogger(__name__)
@@ -163,6 +164,36 @@ def build_compact_profile(yaml_text: str, cv_text: str) -> str:
     if cv_text.strip():
         parts.append("## CV Summary\n" + cv_text[:500])
     return "\n\n---\n\n".join(parts)
+
+
+def extracted_profile_to_yaml(profile: ExtractedProfile) -> str:
+    """Render an ExtractedProfile as YAML matching the candidate_profile schema.
+    Does NOT emit search_profiles — that is left to the user/discovery."""
+    data = {
+        "identity": {
+            "name": profile.identity.name,
+            "headline": profile.identity.headline,
+            "location": profile.identity.location,
+        },
+        "core_skills": {
+            "languages": list(profile.core_skills.languages),
+            "frameworks": list(profile.core_skills.frameworks),
+            "tools": list(profile.core_skills.tools),
+        },
+        "experience": [
+            {
+                "company": e.company,
+                "role": e.role,
+                "dates": e.dates,
+                "highlights": list(e.highlights),
+            }
+            for e in profile.experience
+        ],
+        "featured_projects": [
+            {"name": p.name, "themes": list(p.themes)} for p in profile.featured_projects
+        ],
+    }
+    return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
 
 
 def _read_yaml(yaml_path: str) -> str:
