@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
@@ -7,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.agents.profile_extractor import ProfileExtractorAgent
 from backend.database import get_db
 from backend.models import Profile, User
 from backend.schemas import ProfileResponse, ProfileReviewResponse, ProfileReviewUpdate
@@ -16,8 +18,11 @@ from backend.services.profile_builder import (
     build_profile,
     build_profile_from_text,
     default_profile_yaml,
+    extracted_profile_to_yaml,
     parse_profile_review_data,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["profile"])
 
@@ -143,6 +148,17 @@ async def refresh_profile(
     return _profile_response(profile)
 
 
+async def _yaml_from_resume(cv_text: str, fallback_yaml: str) -> str:
+    """Extract structured YAML from resume text. On any extractor failure, keep the
+    user's existing YAML so an upload never fails because of the LLM."""
+    try:
+        extracted = await ProfileExtractorAgent().run(cv_text)
+        return extracted_profile_to_yaml(extracted)
+    except Exception:
+        logger.warning("profile extraction failed; preserving existing YAML", exc_info=True)
+        return fallback_yaml
+
+
 @router.post("/profile/cv", response_model=ProfileResponse)
 async def upload_cv(
     file: UploadFile,
@@ -168,7 +184,8 @@ async def upload_cv(
             detail="Could not extract enough resume text from the uploaded file",
         )
     existing = await _latest_user_profile(db, current_user.id)
-    yaml_text = existing.yaml_data if existing is not None else default_profile_yaml()
+    fallback_yaml = existing.yaml_data if existing is not None else default_profile_yaml()
+    yaml_text = await _yaml_from_resume(cv_text, fallback_yaml)
     profile = await build_profile_from_text(
         db,
         yaml_text=yaml_text,

@@ -368,3 +368,78 @@ async def test_upload_rejects_near_empty_extraction(app_client):
 
     assert resp.status_code == 400
     assert "extract enough resume text" in resp.json()["detail"]
+
+
+async def test_cv_upload_populates_yaml_from_extractor(app_client):
+    from unittest.mock import AsyncMock, patch
+
+    from backend.schemas import ExtractedProfile
+
+    extracted = ExtractedProfile.model_validate(
+        {
+            "identity": {"name": "Ada Lovelace", "headline": "ML Engineer", "location": "London"},
+            "core_skills": {"languages": ["Python"], "frameworks": ["FastAPI"], "tools": []},
+            "experience": [],
+            "featured_projects": [],
+        }
+    )
+
+    with (
+        patch(
+            "backend.routes.profile.extract_text_from_pdf_bytes",
+            new_callable=AsyncMock,
+            return_value="Ada Lovelace ML Engineer with Python and FastAPI experience.",
+        ),
+        patch(
+            "backend.routes.profile.ProfileExtractorAgent.run",
+            new_callable=AsyncMock,
+            return_value=extracted,
+        ),
+    ):
+        resp = await app_client.post(
+            "/api/profile/cv",
+            files={"file": ("cv.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        )
+
+    assert resp.status_code == 200
+    yaml_data = resp.json()["yaml_data"]
+    assert "Ada Lovelace" in yaml_data
+    assert "Python" in yaml_data
+    assert "FastAPI" in yaml_data
+
+
+async def test_cv_upload_preserves_yaml_when_extractor_fails(app_client, db_session):
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, patch
+
+    db_session.add(
+        Profile(
+            yaml_data="identity:\n  name: Existing Hand Edited\n",
+            cv_text="old cv",
+            merged_profile="old merged",
+            last_refreshed_at=datetime.now(timezone.utc),
+            user_id="test-user-id",
+        )
+    )
+    await db_session.commit()
+
+    with (
+        patch(
+            "backend.routes.profile.extract_text_from_pdf_bytes",
+            new_callable=AsyncMock,
+            return_value="New resume text with Python and SQL experience.",
+        ),
+        patch(
+            "backend.routes.profile.ProfileExtractorAgent.run",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("LLM down"),
+        ),
+    ):
+        resp = await app_client.post(
+            "/api/profile/cv",
+            files={"file": ("cv.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["yaml_data"] == "identity:\n  name: Existing Hand Edited\n"
+    assert resp.json()["cv_text"] == "New resume text with Python and SQL experience."
