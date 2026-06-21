@@ -1,36 +1,30 @@
 # Session Handoff
 
 **Updated:** 2026-06-21
-**Branch:** main — docs synced + pushed (origin/main = `d646828`); now brainstorming a feature
+**Branch:** `feat/resume-yaml-autopopulate` — feature COMPLETE, all 7 tasks green, NOT yet merged/pushed
 
 ---
 
-## Active work — auto-populate YAML profile from resume (brainstorming, no code yet)
+## Active work — auto-populate YAML profile from resume (COMPLETE, awaiting merge)
 
-**Problem found:** the `match_scorer` (and `job_parser`) only see `build_compact_profile`
-= `yaml_data` + **first 500 chars of CV** (`profile_builder.py:164`). Uploading a resume
-keeps `yaml_data` at the empty starter (`profile.py:170`), so the score is computed
-against almost nothing → low score + false `missing_skills`. User chose option 3:
-auto-populate the structured profile at upload so all agents benefit.
+**Problem fixed:** the `match_scorer`/`job_parser` only see `build_compact_profile`
+= `yaml_data` + first 500 chars of CV; uploading a resume left `yaml_data` empty, so the
+score was computed against almost nothing. Now the resume auto-populates `yaml_data`.
 
-**Agreed design direction (in brainstorming skill):**
-- Auto-populate **`yaml_data`** (not `ProfileReviewData`) from `cv_text` at upload —
-  `yaml_data` is in the compact profile, so it directly fixes scoring.
-- Make YAML the **single editable surface in the UI for all users** (today `ProfileSetup.tsx`
-  shows it read-only); add a per-user YAML save endpoint.
-- Remove the structured review form (Projects/Skills, etc.) from the UI; leave the
-  `profile_review_data` backend column **dormant** (no migration, minimal blast radius) —
-  optional later cleanup.
+**Shipped on branch `feat/resume-yaml-autopopulate`** (spec: `docs/superpowers/specs/2026-06-21-resume-to-yaml-autopopulate-design.md`, plan: `docs/superpowers/plans/2026-06-21-resume-to-yaml-autopopulate.md`):
+- `ExtractedProfile` schema + `extracted_profile_to_yaml()` serializer (`537308f`)
+- `ProfileExtractorAgent` (Haiku) + `profile_extractor.md` prompt (`9ce244a`)
+- `POST /profile/cv` auto-populates `yaml_data` every upload, fail-open preserves prior YAML (`9ca88a8`); test-isolation autouse stub (`afc9ab1`)
+- `PUT /profile/yaml` editable YAML for all users, 422 on invalid YAML (`b33fa45`)
+- Frontend: editable YAML for all users; structured form trimmed to Links only (`ab5c2cb`)
 
-**Open decision before writing the spec:** extraction mechanism — LLM extractor agent
-(recommended: new `profile_extractor`, Haiku, structured YAML output) vs deterministic parser.
+Each task passed a two-stage subagent review (spec compliance + code quality).
 
-**Gotcha noted:** discovery `search_profiles` reads the on-disk `data/candidate_profile.yaml`
-(`discovery.py:57`), not per-user `yaml_data` — per-user YAML editing won't change discovery
-keywords. Out of scope for the scoring fix; follow-up only.
+**Verification baseline:** `make check` → 561 passed, 1 deselected, 83.18% coverage, ruff/mypy/schema-drift clean. `cd frontend && npm run build` → clean (tsc + vite).
 
-Next step: finish brainstorming Q (extraction mechanism) → write design doc under
-`docs/superpowers/specs/` → writing-plans.
+**Next action:** final whole-implementation review, then merge `feat/resume-yaml-autopopulate` → `main` (or open a PR) via finishing-a-development-branch.
+
+**Follow-ups (out of scope, deferred):** wire discovery `search_profiles` to per-user `yaml_data` (today reads on-disk `data/candidate_profile.yaml`, `discovery.py:57`); remove the now-dormant non-`links` `ProfileReviewData` fields. Also still pending: the stashed `infra/aws/task-definitions/*` CORS cutover decision (`stash@{0}`).
 
 ---
 
