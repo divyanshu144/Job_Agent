@@ -1,3 +1,7 @@
+import json
+from unittest.mock import patch
+
+import pytest
 import yaml
 
 from backend.schemas import ExtractedProfile
@@ -42,3 +46,50 @@ def test_extracted_profile_to_yaml_handles_empty_profile():
     assert loaded["core_skills"]["languages"] == []
     assert loaded["experience"] == []
     assert loaded["featured_projects"] == []
+
+
+HAPPY_EXTRACT = json.dumps(
+    {
+        "identity": {"name": "Ada Lovelace", "headline": "ML Engineer", "location": "London"},
+        "core_skills": {"languages": ["Python"], "frameworks": ["FastAPI"], "tools": ["Docker"]},
+        "experience": [
+            {"company": "Acme", "role": "Engineer", "dates": "2023", "highlights": ["Shipped X"]}
+        ],
+        "featured_projects": [{"name": "JobFit", "themes": ["LLM"]}],
+    }
+)
+
+
+async def test_profile_extractor_happy_path():
+    from backend.agents.profile_extractor import ProfileExtractorAgent
+
+    async def _call(self, s, u):
+        return HAPPY_EXTRACT
+
+    with patch.object(ProfileExtractorAgent, "_call", new=_call):
+        result = await ProfileExtractorAgent().run("Ada Lovelace, ML Engineer, Python, FastAPI...")
+
+    assert isinstance(result, ExtractedProfile)
+    assert result.identity.name == "Ada Lovelace"
+    assert result.core_skills.languages == ["Python"]
+    assert result.experience[0].company == "Acme"
+
+
+async def test_profile_extractor_uses_haiku():
+    from backend.agents.base import HAIKU
+    from backend.agents.profile_extractor import ProfileExtractorAgent
+
+    assert ProfileExtractorAgent.model == HAIKU
+
+
+@pytest.mark.parametrize("bad", ["not json", json.dumps({"identity": "wrong-type"})])
+async def test_profile_extractor_malformed_raises(bad):
+    from backend.agents.base import AgentError
+    from backend.agents.profile_extractor import ProfileExtractorAgent
+
+    async def _call(self, s, u):
+        return bad
+
+    with patch.object(ProfileExtractorAgent, "_call", new=_call):
+        with pytest.raises(AgentError):
+            await ProfileExtractorAgent().run("resume text")
