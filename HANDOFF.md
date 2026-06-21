@@ -1,79 +1,60 @@
 # Session Handoff
 
-**Updated:** 2026-06-13
-**Branch:** main — clean, fully pushed (origin/main = `87117f2`)
+**Updated:** 2026-06-21
+**Branch:** main — fully pushed (origin/main = HEAD = `eacd3d7`)
 
 ---
 
 ## Current State
 
-**FDE-readiness goal (5 tasks) COMPLETE.** All shipped this session, each with
-`make check` green and pushed individually:
+The multi-tenant campaign feature and the FDE-readiness goal are complete (see
+git history through `87117f2`). Since that baseline, work has been **deployment
+and infrastructure** focused, all landed on `main`:
 
-| Task | Commit | What |
+| Theme | Commits | What |
 |---|---|---|
-| 0 Housekeeping | `e99e37d` | docs/architecture-review committed + everything pushed |
-| 1 Health + metrics | `cea8f44` | /health DB ping (200/503, exc class name only), /metrics via prometheus-fastapi-instrumentator, `llm_calls_total{agent,model}` in tracked_call |
-| 2 Agent retry | `68f7201` | tenacity in BaseAgent._call: 3 attempts, exp+jitter, 529/timeout-only predicate, reraise=True; CRITICAL log at 5 consecutive failures (once per streak) |
-| 3 Campaign UI (unit 8) | `5a9de23` | /campaign page: run-now (409→banner), 3s polling, run history, targets CRUD, materials via /history; drift checker now 11 classes |
-| 4 Consistency evals | n/a | Already on main (`3c39fe0`); feat/evals-clean was integrated previously and deleted. No-op. |
-| 5 Rate limiting | `f56a443` | slowapi: 10/min per-IP register/login, 100/min per-user (JWT sub key, IP fallback), 429+Retry-After, /health exempt |
+| Docker + local K8s | `dba75c7`, `7891775`, `369f0ab` | Multi-stage Dockerfile (api/worker/beat/frontend targets), docker-compose + prod override, k8s/ manifests, Docker Image CI, `make check` CI, `.dockerignore` |
+| AWS ECS Fargate | `514a8aa`, `85505b8`, `120d3d3` | ECS deploy (`deploy-aws.yml`) + migration workflow (`aws-migrate.yml`), task definitions under `infra/aws/`, RDS Postgres + ElastiCache Redis, scale services before smoke test |
+| Semantic memory | `6ebc598`, `93c9f55` | OpenAI embeddings (`text-embedding-3-small`) with pgvector storage + keyword fallback (`services/memory.py`, `MemoryChunk` model); retrieval typing fix |
+| Migrations/CI | `9f5c4ce`, `9de7606`, `1fcf005`, `d56a92f` | startup migration head expectation, mypy decorator ignores, Ruff import order, frontend lockfile |
+| Auth/UI | `f733461`, `4a10576` | cookie handling fix, UI changes |
+| Resume PDF tooling | `eacd3d7` | TeX/`pdflatex` moved to a dedicated `backend-tex` Docker stage (api + worker only; beat has no TeX); smoke test asserts beat lacks pdflatex |
 
-The multi-tenant campaign feature (backend units 1–6 + frontend unit 8) is now
-complete end to end.
-
-**Whole-code review (10 findings) FIXED** — `4a56584` (backend) + `3a148dd`
-(frontend): owner-scoped Phase-1 cache via find_cached_analysis (cross-tenant
-hit + MultipleResultsFound), DB-enforced one-running-campaign-run (partial
-unique index, migration 0007), zombie-run self-heal + queue-failure handling
-(503), jwt-default CRITICAL startup signal, llm_calls(user_id,created_at)
-index, settings create-race fix, cap-stop reason on completed runs, ApiError
-status codes (409 branch, 429-tolerant polling). 472 passed, 82.04%.
-
-**Second review round (Fable 5) — top 5 findings FIXED, TDD:**
-`3fa0eb9` (batch 1): hard tenant boundary — regular users are refused
-("complete your profile first", zero LLM spend) instead of ever falling back
-to the shared profile_yaml_path/cv_path (admin-only); GET /profile mints the
-per-user starter row; refresh rebuilds regular users from OWN data only;
-repeat campaign runs count existing materials as drafted (already_generated
-event code). `a4f733b` (batch 2): late queue messages can't re-execute
-non-running runs; dispatch rolls back after a per-user failure; the
-create_all stamp heuristic stamps to the matching revision (0006 when the
-0007 indexes are missing) instead of blindly to head. 482 passed, 82.11%.
-
-Cleanup pass DONE — `3cdfe4d` (backend #7/#8/#9): get_or_create_settings
-re-raises the original IntegrityError on FK violation; _heal_stale_runs
-shared by enqueue + GET /campaign/runs (zombies show failed on the poll
-path); QueueUnavailableError so run-now 503s ONLY on a broker outage.
-`87117f2` (frontend #5/#10): 429 poll ticks don't burn the timeout budget;
-shared errorMessage() helper replaces unsafe (err as Error).message casts.
-486 passed, 82.25%. All review findings (both rounds) now closed.
+Documentation refreshed this session (CLAUDE.md, README.md, HANDOFF.md, todo.md)
+to match the now much larger codebase — Postgres/pgvector/Redis/Celery,
+multi-source discovery, resume PDF/DOCX rendering, semantic memory, and the
+AWS/ECS deployment path. See **Open Questions** for the deferred review finding.
 
 ## Next Action
 
 Nothing in flight. Candidate follow-ups (not committed to):
-- `GET/PATCH /api/campaign/settings` route pair → unlocks the settings section
-  omitted from /campaign (enabled toggle + caps display)
-- Per-run cost on CampaignRunResponse (join LLMCall by run window/user)
+- **Dockerfile build-cache regression** (from /code-review of `eacd3d7`): the
+  texlive install now sits below `COPY backend/` (in `backend-tex` FROM
+  `backend-base`), so every backend source change re-downloads/installs texlive
+  for the api+worker images. Move the apt/texlive layer above the source COPYs.
+- Drop the redundant `chown -R appuser:appuser /app` in the `backend-tex` stage
+  (no ownership change; bloats the image layer).
+- `GET/PATCH /api/campaign/settings` route pair (enabled toggle + caps display)
+- Per-run cost on `CampaignRunResponse`
 - Redis storage_uri for the rate limiter when going multi-worker
-- Prometheus multiprocess mode if worker LLM metrics matter
 
 ## Why It Stopped
 
-Goal complete — all 5 tasks green and pushed.
+Documentation sync task complete; deployment work was already green and pushed.
 
 ## In-Flight
 
-None. Working tree clean.
+Working tree has pre-existing **uncommitted** edits to
+`infra/aws/task-definitions/{api,beat,worker}.json` (CORS origin changed to
+`https://app.jobfitapp.uk`) — made outside this session, left untouched. Decide
+whether to commit these as part of the custom-domain cutover.
 
 ## Open Questions
 
-None.
+- Confirm the custom domain (`app.jobfitapp.uk`) cutover plan before committing
+  the task-definition CORS changes.
 
 ## Verification Baseline
 
-| Check | Result |
-|---|---|
-| `make check` | ✓ 466 passed, 1 deselected (integration eval) · 82.08% |
-| frontend `npm run build` | ✓ clean (tsc + vite) |
-| schema drift | ✓ 11 classes |
+Not re-run this session (docs-only changes). Last known green: `make check`
+≈486 passed / ~82% (per `87117f2`). Run `make check` before the next code change.

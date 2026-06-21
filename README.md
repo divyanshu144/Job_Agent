@@ -20,6 +20,7 @@ The app also includes job discovery, saved jobs, contact discovery, cold-email d
 ## Core Features
 
 - **Profile setup**: upload CV, edit profile data, and build a compact profile for agent prompts.
+- **Semantic profile memory**: profile content is chunked and embedded (OpenAI `text-embedding-3-small`) into pgvector for semantic recall, with a keyword fallback when embeddings are disabled.
 - **Two-phase job analysis**: `job_parser -> match_scorer -> gap_analyst`, then generation with `resource_planner`, `cover_letter`, and `resume_tailorer`.
 - **Live progress**: analysis/generation events stream to the browser over SSE.
 - **History and results**: saved analyses, status updates, generated materials, DOCX resume download.
@@ -30,7 +31,7 @@ The app also includes job discovery, saved jobs, contact discovery, cold-email d
 - **Admin controls**: first registered user becomes admin; admin invite and cost pages are present.
 - **Cost dashboard**: total spend, per-run/agent breakdown, Haiku/Sonnet cost comparison, and cache metrics.
 - **Observability**: Prometheus endpoint at `/metrics`, structured logging, `PipelineEvent`, `LLMCall`.
-- **Deployment**: Docker Compose local/demo stack, production-style Compose override, and local Kubernetes manifests.
+- **Deployment**: Docker Compose local/demo stack, production-style Compose override, local Kubernetes manifests, and an AWS ECS Fargate staging deployment (ECR images + task definitions, GitHub Actions CD).
 
 ## Architecture Overview
 
@@ -100,13 +101,13 @@ Phase 1 is sequential because later agents depend on earlier structured outputs.
 |---|---|
 | Backend | Python 3.11, FastAPI, Pydantic v2, SQLAlchemy 2 async, Alembic |
 | Frontend | React 19, Vite 8, TypeScript, Tailwind CSS, shadcn-style components |
-| AI | Anthropic SDK, Claude Sonnet and Haiku model tiers |
-| Database | PostgreSQL 16 locally in Docker/Kubernetes |
+| AI | Anthropic SDK, Claude Sonnet and Haiku model tiers; OpenAI embeddings (`text-embedding-3-small`) for semantic memory |
+| Database | PostgreSQL 16 (+ pgvector) locally in Docker/Kubernetes |
 | Queue | Redis 7, Celery worker, Celery beat |
 | Auth | Cookie JWT, bcrypt passwords, invite/admin boundaries |
 | Observability | Prometheus FastAPI instrumentation, `LLMCall`, `PipelineEvent` |
-| Deployment | Docker Compose, production-style Compose override, local Kubernetes manifests |
-| CI | Python checks/tests, Docker target builds, Docker smoke validation |
+| Deployment | Docker Compose, production-style Compose override, local Kubernetes manifests, AWS ECS Fargate (RDS Postgres + ElastiCache Redis) |
+| CI/CD | Python checks/tests, Docker target builds, Docker smoke validation; AWS deploy + migration workflows (`deploy-aws.yml`, `aws-migrate.yml`) |
 
 ## Local Development
 
@@ -243,6 +244,12 @@ scripts/k8s_smoke.sh
 ```
 
 More details: `k8s/README.md`.
+
+## AWS (ECS Fargate)
+
+A practical staging/demo deployment maps the Compose services onto AWS managed services: `api`/`frontend`/`worker`/`beat` run as ECS Fargate services behind an ALB (which routes `/api/*` to the API), with **RDS PostgreSQL** replacing the `db` container, **ElastiCache Redis** replacing `redis`, secrets in Secrets Manager/SSM, and logs to CloudWatch. The `beat` service must run at desired count `1`. Images are pushed to ECR and deployed via GitHub Actions (`.github/workflows/deploy-aws.yml`); migrations run via `.github/workflows/aws-migrate.yml`.
+
+This intentionally avoids Terraform/CDK/Helm/EKS/Bedrock — the Anthropic integration is unchanged. Task definitions live under `infra/aws/task-definitions/`. More details: `infra/aws/README.md`.
 
 ## Environment Variables
 
