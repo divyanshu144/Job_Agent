@@ -100,6 +100,8 @@ export const api = {
   getProfileReview: () => get<ProfileReviewResponse>("/profile/review"),
   saveProfileReview: (reviewData: ProfileReviewData) =>
     put<ProfileReviewResponse>("/profile/review", { review_data: reviewData }),
+  saveProfileYaml: (yamlText: string) =>
+    put<ProfileResponse>("/profile/yaml", { yaml_text: yamlText }),
   refreshProfile: async (): Promise<ProfileResponse> => {
     const r = await fetch(`${BASE}/profile/refresh`, { method: "POST", credentials: "include" });
     if (!r.ok) return _errorMessage(r, "POST", "/profile/refresh");

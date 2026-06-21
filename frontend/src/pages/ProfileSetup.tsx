@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, FileUp, FolderGit2, Link2, MapPin, RefreshCw, ShieldCheck, Sparkles, UserRound } from "lucide-react";
+import { CheckCircle2, FileUp, Link2, RefreshCw, ShieldCheck, Sparkles, UserRound } from "lucide-react";
 import { api, errorMessage } from "../api/client";
 import { PageHeader, PageShell, Panel, PrimaryButton, SectionHeader, StatusPill } from "../components/portal";
 import { useAuth } from "../context/AuthContext";
@@ -8,7 +8,6 @@ import type {
   ProfileResponse,
   ProfileReviewData,
   ProfileReviewLink,
-  ProfileReviewProject,
   ProfileReviewResponse,
 } from "../types";
 
@@ -24,12 +23,6 @@ const emptyReviewData = (): ProfileReviewData => ({
     role_types: [],
     industries: [],
   },
-});
-
-const emptyProject = (): ProfileReviewProject => ({
-  name: "",
-  description: "",
-  highlights: [],
 });
 
 const emptyLink = (): ProfileReviewLink => ({
@@ -54,60 +47,6 @@ function reviewFromProfile(profile: ProfileResponse): ProfileReviewResponse {
     reviewed_at: profile.reviewed_at ?? null,
     has_cv_text: Boolean(profile.cv_text.trim()),
   };
-}
-
-function ListEditor({
-  label,
-  values,
-  placeholder,
-  onChange,
-}: {
-  label: string;
-  values: string[];
-  placeholder?: string;
-  onChange: (values: string[]) => void;
-}) {
-  const items = values.length ? values : [""];
-
-  const update = (index: number, value: string) => {
-    const next = [...items];
-    next[index] = value;
-    onChange(next);
-  };
-
-  const remove = (index: number) => {
-    onChange(items.filter((_, i) => i !== index));
-  };
-
-  return (
-    <div className="space-y-2">
-      <label className="text-sm font-medium text-zinc-700">{label}</label>
-      {items.map((value, index) => (
-        <div key={index} className="flex flex-col gap-2 sm:flex-row">
-          <input
-            value={value}
-            onChange={(e) => update(index, e.target.value)}
-            placeholder={placeholder}
-            className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-950 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-          />
-          <button
-            type="button"
-            onClick={() => remove(index)}
-            className="rounded-xl border border-zinc-200 px-3 py-2.5 text-sm text-zinc-600 hover:bg-zinc-50"
-          >
-            Remove
-          </button>
-        </div>
-      ))}
-      <button
-        type="button"
-        onClick={() => onChange([...items, ""])}
-        className="text-sm font-medium text-blue-700 hover:text-blue-600"
-      >
-        Add {label.toLowerCase()}
-      </button>
-    </div>
-  );
 }
 
 function ResumeUpload({
@@ -160,10 +99,55 @@ function ResumeUpload({
   );
 }
 
+function YamlEditor({
+  value,
+  onSave,
+  saving,
+}: {
+  value: string;
+  onSave: (yaml: string) => Promise<void>;
+  saving: boolean;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Sparkles className="size-4 text-blue-600" />
+          <h2 className="text-sm font-semibold text-slate-800">YAML Profile</h2>
+        </div>
+        <button
+          type="button"
+          onClick={() => onSave(draft)}
+          disabled={saving}
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save YAML"}
+        </button>
+      </div>
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        spellCheck={false}
+        className="h-72 w-full resize-y rounded-xl border border-zinc-200 bg-zinc-50 p-4 font-mono text-xs leading-5 text-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+      />
+      <p className="mt-2 text-xs text-zinc-400">
+        Skills, experience, and projects live here. Auto-filled from your resume on upload.
+      </p>
+    </div>
+  );
+}
+
 function AdminProfileTools() {
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [savingYaml, setSavingYaml] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
 
@@ -207,6 +191,18 @@ function AdminProfileTools() {
       setError(errorMessage(error));
     } finally {
       setUploading(false);
+    }
+  };
+
+  const saveYaml = async (yaml: string) => {
+    setSavingYaml(true);
+    setError(null);
+    try {
+      setProfile(await api.saveProfileYaml(yaml));
+    } catch (error) {
+      setError(errorMessage(error));
+    } finally {
+      setSavingYaml(false);
     }
   };
 
@@ -294,15 +290,7 @@ function AdminProfileTools() {
             </div>
           )}
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <Sparkles className="size-4 text-blue-600" />
-              <h2 className="text-sm font-semibold text-slate-800">YAML Profile</h2>
-            </div>
-            <pre className="max-h-72 overflow-auto rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-xs leading-5 text-zinc-700">
-              {profile.yaml_data}
-            </pre>
-          </div>
+          <YamlEditor value={profile.yaml_data} onSave={saveYaml} saving={savingYaml} />
 
           {profile.cv_text && (
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -335,6 +323,8 @@ export function ProfileSetup() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [yamlData, setYamlData] = useState("");
+  const [savingYaml, setSavingYaml] = useState(false);
 
   const loadReview = async () => {
     setLoading(true);
@@ -343,8 +333,9 @@ export function ProfileSetup() {
       const data = await api.getProfileReview();
       setReview(data);
       setForm(data.review_data);
+      const profile = await api.getProfile();
+      setYamlData(profile.yaml_data);
       if (data.has_cv_text) {
-        const profile = await api.getProfile();
         setResumePreview(profile.cv_text);
       }
     } catch (error) {
@@ -353,6 +344,7 @@ export function ProfileSetup() {
         const fallbackReview = reviewFromProfile(profile);
         setReview(fallbackReview);
         setForm(fallbackReview.review_data);
+        setYamlData(profile.yaml_data);
         setResumePreview(profile.cv_text);
         if (!fallbackReview.has_cv_text) {
           setError(errorMessage(error));
@@ -377,26 +369,6 @@ export function ProfileSetup() {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
-  const setPreferences = <K extends keyof ProfileReviewData["work_preferences"]>(
-    key: K,
-    value: ProfileReviewData["work_preferences"][K],
-  ) => {
-    setForm((current) => ({
-      ...current,
-      work_preferences: { ...current.work_preferences, [key]: value },
-    }));
-  };
-
-  const updateProject = (
-    index: number,
-    updater: (project: ProfileReviewProject) => ProfileReviewProject,
-  ) => {
-    setField(
-      "projects",
-      form.projects.map((project, i) => (i === index ? updater(project) : project)),
-    );
-  };
-
   const updateLink = (index: number, updater: (link: ProfileReviewLink) => ProfileReviewLink) => {
     setField("links", form.links.map((link, i) => (i === index ? updater(link) : link)));
   };
@@ -411,6 +383,7 @@ export function ProfileSetup() {
       setReview(uploadedReview);
       setForm(uploadedReview.review_data);
       setResumePreview(uploadedProfile.cv_text);
+      setYamlData(uploadedProfile.yaml_data);
       setSuccess("Resume uploaded.");
       try {
         const data = await api.getProfileReview();
@@ -443,13 +416,26 @@ export function ProfileSetup() {
     }
   };
 
+  const saveYaml = async (yaml: string) => {
+    setSavingYaml(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const profile = await api.saveProfileYaml(yaml);
+      setYamlData(profile.yaml_data);
+      setSuccess("YAML profile saved.");
+    } catch (error) {
+      setError(errorMessage(error));
+    } finally {
+      setSavingYaml(false);
+    }
+  };
+
   const busy = loading || saving || uploading;
-  const clean = (values: string[]) => values.filter((value) => value.trim());
   const readinessItems = [
-    { label: "Resume uploaded", ready: Boolean(review?.has_cv_text), detail: "Used to prepare tailored packages" },
-    { label: "Target role", ready: Boolean(form.target_role.trim()), detail: form.target_role || "Add the roles you want" },
-    { label: "Skills added", ready: clean(form.key_skills).length > 0, detail: `${clean(form.key_skills).length} listed` },
-    { label: "Projects added", ready: form.projects.some((project) => project.name.trim() || project.description.trim()), detail: `${form.projects.length} project${form.projects.length === 1 ? "" : "s"}` },
+    { label: "Resume uploaded", ready: Boolean(review?.has_cv_text), detail: "Auto-fills your YAML profile" },
+    { label: "YAML profile", ready: yamlData.trim().length > 0, detail: "Skills, experience, projects" },
+    { label: "Links added", ready: form.links.some((link) => link.url.trim()), detail: `${form.links.length} link${form.links.length === 1 ? "" : "s"}` },
   ];
   const completeCount = readinessItems.filter((item) => item.ready).length;
 
@@ -521,76 +507,11 @@ export function ProfileSetup() {
       </section>
 
       <form onSubmit={save} className="grid gap-4 lg:grid-cols-12">
-        <Panel className="space-y-4 lg:col-span-5">
-          <SectionHeader title="Target roles and skills" description="Tell JobFit what opportunities should be prioritised." />
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-700">Target role</label>
-            <input
-              value={form.target_role}
-              onChange={(e) => setField("target_role", e.target.value)}
-              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-              placeholder="Senior Backend Engineer"
-            />
-          </div>
-          <ListEditor
-            label="Skills"
-            values={form.key_skills}
-            placeholder="Python"
-            onChange={(values) => setField("key_skills", values)}
-          />
-        </Panel>
+        <div className="lg:col-span-12">
+          <YamlEditor value={yamlData} onSave={saveYaml} saving={savingYaml} />
+        </div>
 
-        <Panel className="space-y-4 lg:col-span-7">
-          <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2">
-              <FolderGit2 className="size-4 text-zinc-500" />
-              <h2 className="text-lg font-semibold text-zinc-950">Projects</h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => setField("projects", [...form.projects, emptyProject()])}
-              className="text-sm font-medium text-blue-700 hover:text-blue-600"
-            >
-              Add project
-            </button>
-          </div>
-          {form.projects.length === 0 && <p className="text-sm text-zinc-400">No projects added.</p>}
-          {form.projects.map((project, index) => (
-            <div key={index} className="space-y-3 border-t border-zinc-200 pt-4 first:border-t-0 first:pt-0">
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setField("projects", form.projects.filter((_, i) => i !== index))}
-                  className="text-sm text-zinc-500 hover:text-zinc-800"
-                >
-                  Remove
-                </button>
-              </div>
-              <input
-                value={project.name}
-                onChange={(e) => updateProject(index, (p) => ({ ...p, name: e.target.value }))}
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-                placeholder="Project name"
-              />
-              <textarea
-                value={project.description}
-                onChange={(e) =>
-                  updateProject(index, (p) => ({ ...p, description: e.target.value }))
-                }
-                className="min-h-20 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-                placeholder="Short description"
-              />
-              <ListEditor
-                label="Highlights"
-                values={project.highlights}
-                placeholder="Improved matching quality"
-                onChange={(values) => updateProject(index, (p) => ({ ...p, highlights: values }))}
-              />
-            </div>
-          ))}
-        </Panel>
-
-        <Panel className="space-y-4 lg:col-span-5">
+        <Panel className="space-y-4 lg:col-span-12">
           <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
             <div className="flex items-center gap-2">
               <Link2 className="size-4 text-zinc-500" />
@@ -628,40 +549,6 @@ export function ProfileSetup() {
               </button>
             </div>
           ))}
-        </Panel>
-
-        <Panel className="space-y-4 lg:col-span-7">
-          <div className="flex items-center gap-2">
-            <MapPin className="size-4 text-zinc-500" />
-            <h2 className="text-lg font-semibold text-zinc-950">Work preferences</h2>
-          </div>
-          <ListEditor
-            label="Locations"
-            values={form.work_preferences.locations}
-            placeholder="London"
-            onChange={(values) => setPreferences("locations", values)}
-          />
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-700">Remote preference</label>
-            <input
-              value={form.work_preferences.remote ?? ""}
-              onChange={(e) => setPreferences("remote", e.target.value)}
-              className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-              placeholder="Remote, hybrid, onsite"
-            />
-          </div>
-          <ListEditor
-            label="Role types"
-            values={form.work_preferences.role_types}
-            placeholder="Full-time"
-            onChange={(values) => setPreferences("role_types", values)}
-          />
-          <ListEditor
-            label="Industries"
-            values={form.work_preferences.industries}
-            placeholder="Developer tools"
-            onChange={(values) => setPreferences("industries", values)}
-          />
         </Panel>
 
         <div className="flex flex-wrap items-center gap-3 rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm lg:col-span-12">
