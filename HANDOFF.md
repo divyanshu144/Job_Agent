@@ -1,11 +1,40 @@
 # Session Handoff
 
 **Updated:** 2026-06-21
-**Branch:** main — fully pushed (origin/main = HEAD = `eacd3d7`)
+**Branch:** main — docs synced + pushed (origin/main = `d646828`); now brainstorming a feature
 
 ---
 
-## Current State
+## Active work — auto-populate YAML profile from resume (brainstorming, no code yet)
+
+**Problem found:** the `match_scorer` (and `job_parser`) only see `build_compact_profile`
+= `yaml_data` + **first 500 chars of CV** (`profile_builder.py:164`). Uploading a resume
+keeps `yaml_data` at the empty starter (`profile.py:170`), so the score is computed
+against almost nothing → low score + false `missing_skills`. User chose option 3:
+auto-populate the structured profile at upload so all agents benefit.
+
+**Agreed design direction (in brainstorming skill):**
+- Auto-populate **`yaml_data`** (not `ProfileReviewData`) from `cv_text` at upload —
+  `yaml_data` is in the compact profile, so it directly fixes scoring.
+- Make YAML the **single editable surface in the UI for all users** (today `ProfileSetup.tsx`
+  shows it read-only); add a per-user YAML save endpoint.
+- Remove the structured review form (Projects/Skills, etc.) from the UI; leave the
+  `profile_review_data` backend column **dormant** (no migration, minimal blast radius) —
+  optional later cleanup.
+
+**Open decision before writing the spec:** extraction mechanism — LLM extractor agent
+(recommended: new `profile_extractor`, Haiku, structured YAML output) vs deterministic parser.
+
+**Gotcha noted:** discovery `search_profiles` reads the on-disk `data/candidate_profile.yaml`
+(`discovery.py:57`), not per-user `yaml_data` — per-user YAML editing won't change discovery
+keywords. Out of scope for the scoring fix; follow-up only.
+
+Next step: finish brainstorming Q (extraction mechanism) → write design doc under
+`docs/superpowers/specs/` → writing-plans.
+
+---
+
+## Current State (prior, shipped)
 
 The multi-tenant campaign feature and the FDE-readiness goal are complete (see
 git history through `87117f2`). Since that baseline, work has been **deployment
