@@ -58,6 +58,56 @@ flowchart TD
 
 The provided GitHub Actions workflow uses OIDC and an IAM role. It does not use long-lived AWS access keys.
 
+## Deploy Triggers and Service Deployment Configuration
+
+> **Important:** the settings in this section live on the **ECS services** (and the
+> deploy workflow trigger), **not** in `infra/aws/task-definitions/*.json`. Registering
+> a new task definition or deploying does **not** reset them — but recreating a service
+> from scratch does. Re-apply them with the CLI commands below if a service is rebuilt.
+
+### Deploy triggers (`.github/workflows/deploy-aws.yml`)
+
+- Deploys run **only on `v*` git tags** or manual `workflow_dispatch` — not on every push
+  to `main`. Release with `git tag vX.Y.Z && git push origin vX.Y.Z`.
+- A `concurrency: { group: deploy-aws-ecs, cancel-in-progress: false }` guard **serializes**
+  deploys. Rationale: ECS runs one deployment per service, so overlapping runs supersede each
+  other and the older run fails `wait-for-service-stability` with "deployment not found".
+
+### Deployment circuit breaker (all four services)
+
+All services run the **ECS rolling** controller with the deployment circuit breaker
+**enabled and set to roll back**, so a deploy whose new tasks never stabilize auto-reverts
+to the last-good task definition instead of getting stuck:
+
+```bash
+for s in api worker frontend; do
+  aws ecs update-service --cluster jobfit-cluster --service "jobfit-$s-service" \
+    --deployment-configuration "deploymentCircuitBreaker={enable=true,rollback=true},minimumHealthyPercent=100,maximumPercent=200"
+done
+```
+
+### Beat must be a singleton (`jobfit-beat-service`)
+
+`beat` is the Celery scheduler and **must never run two tasks at once** (duplicate tasks would
+be enqueued). With the default `minimumHealthyPercent=100 / maximumPercent=200`, a rolling
+deploy briefly runs two beat tasks. So beat uses **stop-old-then-start-new** (`min 0 / max 100`).
+That requires **Availability Zone Rebalancing disabled** (AZ rebalancing forbids `maximumPercent <= 100`);
+this is fine for a single-task service. Tradeoff: a brief no-scheduler gap during a deploy,
+which is acceptable for a cron-style scheduler.
+
+```bash
+aws ecs update-service --cluster jobfit-cluster --service jobfit-beat-service \
+  --availability-zone-rebalancing DISABLED \
+  --deployment-configuration "deploymentCircuitBreaker={enable=true,rollback=true},minimumHealthyPercent=0,maximumPercent=100"
+```
+
+| Service | min% | max% | AZ rebalancing | Circuit breaker + rollback |
+| --- | --- | --- | --- | --- |
+| `jobfit-api-service` | 100 | 200 | enabled | yes |
+| `jobfit-worker-service` | 100 | 200 | enabled | yes |
+| `jobfit-frontend-service` | 100 | 200 | enabled | yes |
+| `jobfit-beat-service` | 0 | 100 | **disabled** | yes |
+
 ## Required AWS Resources
 
 Create these before running the deployment workflow:
