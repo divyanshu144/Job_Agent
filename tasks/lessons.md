@@ -301,3 +301,19 @@ add_exception_handler signature (`# type: ignore[arg-type]`) and
 `@limiter.exempt` is untyped (`# type: ignore[misc]`) — same pattern as the
 celery decorators. Also: SDK wraps httpx timeouts in anthropic.APITimeoutError,
 so a tenacity predicate matching only httpx.TimeoutException is dead code.
+
+## 2026-06-22 — "worker failed to stabilize" was actually overlapping deploys
+Pattern: `deploy-aws.yml` triggered on every push to `main`. Three pushes in
+~10 min each kicked off a deploy; ECS runs ONE deployment per service, so each
+new update-service superseded the prior in-flight one. The older run's
+`wait-for-service-stability` then failed with "Deployment ecs-svc/… not found
+after stabilization … rolled back by the deployment circuit breaker" — which
+reads like a worker crash but isn't. CloudWatch confirmed the worker booted
+cleanly every time (celery ready + graceful Warm shutdown), no exit/OOM.
+Fix: tag-based deploys (`on: push: tags: ["v*"]` + workflow_dispatch) so prod
+ships deliberately, plus a `concurrency: {group, cancel-in-progress: false}`
+guard to serialize any remaining overlap.
+Avoid: don't read an ECS "deployment not found / circuit breaker" stabilization
+error as a container fault before checking the task's CloudWatch logs and
+whether a newer deployment superseded it. Don't leave a prod deploy on a bare
+`push: branches: [main]` trigger — docs commits and rapid pushes both deploy.
