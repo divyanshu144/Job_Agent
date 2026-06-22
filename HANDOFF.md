@@ -1,35 +1,47 @@
 # Session Handoff
 
 **Updated:** 2026-06-22
-**Branch:** `main` — clean, pushed (`4b79da1`). Nothing in flight.
+**Branch:** `main` — clean, pushed (`e861af9`). Tag **`v1.0.0`** cut & deployed. Nothing in flight.
 
 ---
 
-## Recently shipped (this session, all on main)
+## State at session end
 
-- **Resume→YAML auto-populate** (`1d49904`) — merged, runtime-verified by running the app.
-- **Dockerfile texlive layer-order fix** (`dad30a3`) — texlive installs on a source-independent
-  `python-deps` layer; api/worker copy the app from `backend-base` via `COPY --from`. Backend
-  code changes no longer reinstall texlive (proven: rebuild after editing `backend/main.py`
-  showed the texlive layer `CACHED`). Dropped the redundant `chown -R /app`. `beat` still TeX-free.
-- **CORS cutover to `https://app.jobfitapp.uk`** (`fb63edc`) — domain fully wired (DNS→ALB,
-  ACM cert ISSUED, HTTPS:443 listener, frontend + API served at the domain). ECS deploy
-  **succeeded**; API now on `jobfit-api:27` with `CORS_ORIGINS=https://app.jobfitapp.uk`.
-  All services healthy (running=desired=1, COMPLETED).
-- **Tag-based deploys** (`4b79da1`) — `deploy-aws.yml` no longer deploys on push to `main`;
-  it triggers only on `v*` tags or manual `workflow_dispatch`. (Previously every push,
-  including docs, auto-deployed to prod.)
+**`v1.0.0` is released and live in production at `https://app.jobfitapp.uk`.** Production
+smoke-tested (non-destructive): frontend HTTPS 200, valid ACM cert, `GET /api/profile` → 401,
+released `PUT /api/profile/yaml` → 401 (feature live), CORS allows the domain & blocks others.
+The v1.0.0 deploy rolled the API to `jobfit-api:28` (COMPLETED, healthy); the run was still
+finishing the remaining services when the session ended — it self-heals via the circuit breaker.
+
+### Shipped this session (all on `main`)
+- **Resume→YAML auto-populate** (`1d49904`) — LLM `ProfileExtractorAgent` fills `yaml_data` on
+  CV upload (fail-open); `PUT /profile/yaml` editable YAML for all users; form trimmed to Links.
+  Runtime-verified locally. (Detail section below.)
+- **Dockerfile texlive layer-order fix** (`dad30a3`) — texlive on a source-independent
+  `python-deps` layer; backend edits no longer reinstall it (proven CACHED). `beat` still TeX-free.
+- **CORS cutover** (`fb63edc`) — API `CORS_ORIGINS=https://app.jobfitapp.uk`; domain fully wired.
+- **Deploy hardening:** tag-based trigger (`4b79da1`), concurrency guard (`46c88de`), ECS
+  **deployment circuit breaker + rollback on all 4 services**, and **beat pinned to a singleton**
+  (`min 0 / max 100`, AZ rebalancing disabled — never two schedulers). These service-level
+  settings are documented in `infra/aws/README.md` (`e861af9`) — they live on AWS, NOT in the
+  repo, so re-apply them (commands in that README) if a service is recreated.
 
 ### Deploy process now
-Release = explicit tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. Migrations are manual
-(`aws-migrate.yml`, workflow_dispatch). The local docker stack was rebuilt onto the merged code.
+Release = `git tag vX.Y.Z && git push origin vX.Y.Z` (only `v*` tags or manual dispatch deploy).
+Migrations are manual (`aws-migrate.yml`).
 
-### Notes / follow-ups
-- The worker service occasionally fails to stabilize within the deploy wait window (ECS
-  deployment circuit breaker rolls back to last-good → no outage, but the run shows failure).
-  Saw it once this session; the CORS deploy stabilized fine. Watch for recurrence.
-- Deferred: wire discovery `search_profiles` to per-user `yaml_data`; remove dormant non-`links`
-  `ProfileReviewData` fields.
+### Next action (cold-start)
+Nothing required. Optional: confirm the `v1.0.0` deploy run finished green
+(`gh run list --workflow=deploy-aws.yml`); if it didn't, the circuit breaker rolled back to
+last-good (no outage) — investigate that run's logs.
+
+### Open items / deferred
+- The **`infra/aws/task-definitions/*` files committed the new CORS** already (no stash left).
+- Deferred follow-ups: wire discovery `search_profiles` to per-user `yaml_data` (today reads
+  on-disk `data/candidate_profile.yaml`); remove the dormant non-`links` `ProfileReviewData` fields.
+- Resolved myth: the earlier "worker failed to stabilize" was **overlapping concurrent deploys**
+  (push-storm superseding each other's deployment), not a worker fault — fixed by tag-based +
+  concurrency guard. See `tasks/lessons.md` 2026-06-22.
 
 ---
 
