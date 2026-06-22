@@ -1,19 +1,35 @@
 # Session Handoff
 
 **Updated:** 2026-06-22
-**Branch:** `main` — resume→YAML feature MERGED & pushed (`1d49904`); now fixing the Dockerfile texlive layer-order regression (build in flight)
+**Branch:** `main` — clean, pushed (`4b79da1`). Nothing in flight.
 
 ---
 
-## In flight — Dockerfile texlive layer-order fix
+## Recently shipped (this session, all on main)
 
-Restructured `Dockerfile`: texlive now installs on a source-independent `python-deps`
-layer (api/worker copy the assembled app from `backend-base` via `COPY --from`), so backend
-code changes no longer reinstall texlive. Also dropped the redundant `chown -R /app`.
-`beat` still has NO TeX (smoke test invariant preserved). **Dockerfile change is uncommitted**
-pending a verification build (`docker compose build api worker beat`, running) + checks:
-pdflatex present in api/worker, absent in beat, and a code-change rebuild leaves texlive CACHED.
-Commit the Dockerfile once verified.
+- **Resume→YAML auto-populate** (`1d49904`) — merged, runtime-verified by running the app.
+- **Dockerfile texlive layer-order fix** (`dad30a3`) — texlive installs on a source-independent
+  `python-deps` layer; api/worker copy the app from `backend-base` via `COPY --from`. Backend
+  code changes no longer reinstall texlive (proven: rebuild after editing `backend/main.py`
+  showed the texlive layer `CACHED`). Dropped the redundant `chown -R /app`. `beat` still TeX-free.
+- **CORS cutover to `https://app.jobfitapp.uk`** (`fb63edc`) — domain fully wired (DNS→ALB,
+  ACM cert ISSUED, HTTPS:443 listener, frontend + API served at the domain). ECS deploy
+  **succeeded**; API now on `jobfit-api:27` with `CORS_ORIGINS=https://app.jobfitapp.uk`.
+  All services healthy (running=desired=1, COMPLETED).
+- **Tag-based deploys** (`4b79da1`) — `deploy-aws.yml` no longer deploys on push to `main`;
+  it triggers only on `v*` tags or manual `workflow_dispatch`. (Previously every push,
+  including docs, auto-deployed to prod.)
+
+### Deploy process now
+Release = explicit tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. Migrations are manual
+(`aws-migrate.yml`, workflow_dispatch). The local docker stack was rebuilt onto the merged code.
+
+### Notes / follow-ups
+- The worker service occasionally fails to stabilize within the deploy wait window (ECS
+  deployment circuit breaker rolls back to last-good → no outage, but the run shows failure).
+  Saw it once this session; the CORS deploy stabilized fine. Watch for recurrence.
+- Deferred: wire discovery `search_profiles` to per-user `yaml_data`; remove dormant non-`links`
+  `ProfileReviewData` fields.
 
 ---
 
