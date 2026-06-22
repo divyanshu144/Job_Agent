@@ -1,11 +1,23 @@
 # Session Handoff
 
-**Updated:** 2026-06-21
-**Branch:** `feat/resume-yaml-autopopulate` — feature COMPLETE, all 7 tasks green, NOT yet merged/pushed
+**Updated:** 2026-06-22
+**Branch:** `main` — resume→YAML feature MERGED & pushed (`1d49904`); now fixing the Dockerfile texlive layer-order regression (build in flight)
 
 ---
 
-## Active work — auto-populate YAML profile from resume (COMPLETE, awaiting merge)
+## In flight — Dockerfile texlive layer-order fix
+
+Restructured `Dockerfile`: texlive now installs on a source-independent `python-deps`
+layer (api/worker copy the assembled app from `backend-base` via `COPY --from`), so backend
+code changes no longer reinstall texlive. Also dropped the redundant `chown -R /app`.
+`beat` still has NO TeX (smoke test invariant preserved). **Dockerfile change is uncommitted**
+pending a verification build (`docker compose build api worker beat`, running) + checks:
+pdflatex present in api/worker, absent in beat, and a code-change rebuild leaves texlive CACHED.
+Commit the Dockerfile once verified.
+
+---
+
+## Done — auto-populate YAML profile from resume (MERGED to main, verified via running app)
 
 **Problem fixed:** the `match_scorer`/`job_parser` only see `build_compact_profile`
 = `yaml_data` + first 500 chars of CV; uploading a resume left `yaml_data` empty, so the
@@ -22,7 +34,7 @@ Each task passed a two-stage subagent review (spec compliance + code quality).
 
 **Verification baseline:** `make check` → 561 passed, 1 deselected, 83.18% coverage, ruff/mypy/schema-drift clean. `cd frontend && npm run build` → clean (tsc + vite).
 
-**Next action:** final whole-implementation review, then merge `feat/resume-yaml-autopopulate` → `main` (or open a PR) via finishing-a-development-branch.
+**Status:** merged to `main` (`1d49904`, fast-forward), pushed. Final whole-feature review = READY TO MERGE. Runtime-verified by running the app: upload → live extractor populated `yaml_data`; `PUT /profile/yaml` persisted; 422 on bad YAML; 401 unauth; 400 empty file. The running docker `api`/`worker`/`beat` were rebuilt onto the merged code.
 
 **Follow-ups (out of scope, deferred):** wire discovery `search_profiles` to per-user `yaml_data` (today reads on-disk `data/candidate_profile.yaml`, `discovery.py:57`); remove the now-dormant non-`links` `ProfileReviewData` fields. Also still pending: the stashed `infra/aws/task-definitions/*` CORS cutover decision (`stash@{0}`).
 
