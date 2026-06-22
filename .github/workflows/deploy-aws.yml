@@ -5,6 +5,13 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# Only one ECS deploy at a time. ECS runs a single deployment per service, so
+# overlapping runs supersede each other's deployment and the older run's
+# wait-for-service-stability fails with "deployment not found". Queue instead.
+concurrency:
+  group: deploy-aws-ecs
+  cancel-in-progress: false
+
 permissions:
   id-token: write
   contents: read
