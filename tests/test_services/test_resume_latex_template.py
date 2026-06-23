@@ -3,16 +3,64 @@ from __future__ import annotations
 import pytest
 
 from backend.schemas import (
+    ProfileReviewLink,
     ResumeEducationItem,
     ResumeExperienceItem,
+    ResumeIdentity,
     ResumeProjectItem,
     ResumeTailorerOutput,
 )
 from backend.services.resume_latex_template import (
     _limit_words,
     escape_latex,
+    load_latex_format,
     render_resume_latex,
 )
+
+
+def test_latex_format_template_has_no_hardcoded_identity() -> None:
+    """The shipped template must not bake in one person's name/contact — every user's
+    resume header is filled from their own profile."""
+    src = load_latex_format()
+    assert "DIVYANSHU" not in src.upper()
+    assert "divyanshucharak" not in src.lower()
+    assert "%%JOBFIT_HEADER%%" in src
+
+
+def test_render_resume_latex_header_uses_user_identity() -> None:
+    identity = ResumeIdentity(
+        name="Ada Lovelace",
+        location="London, UK",
+        email="ada@example.com",
+        phone="+44 7000 000000",
+        links=[ProfileReviewLink(label="GitHub", url="https://github.com/ada")],
+    )
+
+    tex = render_resume_latex(
+        ResumeTailorerOutput(summary="Builds systems."),
+        identity=identity,
+        template="%%JOBFIT_HEADER%%\n%%JOBFIT_SUMMARY%%",
+    )
+
+    assert "Ada Lovelace" in tex
+    assert "ada@example.com" in tex
+    assert "github.com/ada" in tex
+    assert "+44 7000 000000" in tex
+    assert "DIVYANSHU" not in tex.upper()
+
+
+def test_render_resume_latex_header_omits_empty_fields() -> None:
+    identity = ResumeIdentity(name="Ada Lovelace", email="ada@example.com")
+
+    tex = render_resume_latex(
+        ResumeTailorerOutput(summary="x"),
+        identity=identity,
+        template="%%JOBFIT_HEADER%%\n%%JOBFIT_SUMMARY%%",
+    )
+
+    assert "Ada Lovelace" in tex
+    # no stray separators for absent phone/location/links
+    assert "$\\cdot$ $\\cdot$" not in tex
 
 
 def test_escape_latex_escapes_user_and_model_text() -> None:

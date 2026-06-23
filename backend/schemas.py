@@ -145,6 +145,17 @@ class ProfileReviewLink(BaseModel):
     url: str = ""
 
 
+class ResumeIdentity(BaseModel):
+    """Per-user header data for a rendered resume — keeps one person's name/contact
+    out of every other user's PDF. Built from the user's profile + account email."""
+
+    name: str = ""
+    location: str = ""
+    email: str = ""
+    phone: str = ""
+    links: list[ProfileReviewLink] = Field(default_factory=list)
+
+
 class ProfileWorkPreferences(BaseModel):
     locations: list[str] = Field(default_factory=list)
     remote: str | None = None
@@ -166,6 +177,7 @@ class ExtractedIdentity(BaseModel):
     name: str = ""
     headline: str = ""
     location: str = ""
+    phone: str = ""
 
 
 class ExtractedSkills(BaseModel):

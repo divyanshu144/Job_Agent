@@ -12,7 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
 from backend.models import Profile, User
-from backend.schemas import ExtractedProfile, ProfileReviewData, ProfileReviewEducation
+from backend.schemas import (
+    ExtractedProfile,
+    ProfileReviewData,
+    ProfileReviewEducation,
+    ResumeIdentity,
+)
 from backend.services.cv_parser import extract_text_from_file
 
 logger = logging.getLogger(__name__)
@@ -189,6 +194,7 @@ def extracted_profile_to_yaml(profile: ExtractedProfile) -> str:
             "name": profile.identity.name,
             "headline": profile.identity.headline,
             "location": profile.identity.location,
+            "phone": profile.identity.phone,
         },
         "core_skills": {
             "languages": list(profile.core_skills.languages),
@@ -218,6 +224,32 @@ def extracted_profile_to_yaml(profile: ExtractedProfile) -> str:
         ],
     }
     return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+
+
+def resume_identity_from_profile(profile: Profile | None, email: str) -> ResumeIdentity:
+    """Build the per-user resume header from the user's profile + account email.
+
+    Name/location/phone come from the YAML `identity` block; links from the saved
+    Profile Review; email is the authoritative account email. Everything degrades to
+    empty so a sparse profile still renders a valid (if minimal) header.
+    """
+    identity = ResumeIdentity(email=email)
+    if profile is None:
+        return identity
+
+    try:
+        data = yaml.safe_load(profile.yaml_data) or {}
+        block = data.get("identity", {}) if isinstance(data, dict) else {}
+        if isinstance(block, dict):
+            identity.name = str(block.get("name") or "").strip()
+            identity.location = str(block.get("location") or "").strip()
+            identity.phone = str(block.get("phone") or "").strip()
+    except yaml.YAMLError:
+        pass
+
+    review = parse_profile_review_data(profile.profile_review_data)
+    identity.links = [link for link in review.links if link.url.strip()]
+    return identity
 
 
 def review_seed_from_extracted(

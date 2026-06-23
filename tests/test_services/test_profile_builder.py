@@ -203,6 +203,43 @@ def test_review_seed_from_extracted_fills_empty_skills_and_education():
     assert seed.education[0].field_of_study == "CS"
 
 
+def test_resume_identity_from_profile_pulls_identity_links_and_account_email():
+    import json
+
+    from backend.models import Profile
+    from backend.services.profile_builder import resume_identity_from_profile
+
+    profile = Profile(
+        yaml_data=(
+            "identity:\n  name: Ada Lovelace\n  location: London\n  phone: '+44 7000 000000'\n"
+        ),
+        cv_text="",
+        profile_review_data=json.dumps(
+            {"links": [{"label": "GitHub", "url": "https://github.com/ada"}]}
+        ),
+        merged_profile="",
+    )
+
+    ident = resume_identity_from_profile(profile, "ada@account.com")
+
+    assert ident.name == "Ada Lovelace"
+    assert ident.location == "London"
+    assert ident.phone == "+44 7000 000000"
+    assert ident.email == "ada@account.com"
+    assert ident.links[0].label == "GitHub"
+    assert ident.links[0].url == "https://github.com/ada"
+
+
+def test_resume_identity_from_profile_handles_missing_profile():
+    from backend.services.profile_builder import resume_identity_from_profile
+
+    ident = resume_identity_from_profile(None, "solo@account.com")
+
+    assert ident.email == "solo@account.com"
+    assert ident.name == ""
+    assert ident.links == []
+
+
 def test_review_seed_from_extracted_is_non_destructive():
     """Re-uploading a CV must not clobber skills/education the user already saved."""
     from backend.services.profile_builder import review_seed_from_extracted
