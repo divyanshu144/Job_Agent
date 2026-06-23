@@ -201,7 +201,30 @@ function Shell({ children }: { children: ReactNode }) {
               <X className="size-4" />
             </button>
           </div>
-          <div className="p-4">{nav}</div>
+          <div className="flex h-[calc(100%-4.5rem)] flex-col">
+            <div className="flex-1 overflow-y-auto p-4">{nav}</div>
+            <div className="border-t border-[rgba(255,255,255,0.07)] p-4">
+              <div className="mb-3 flex items-center gap-3">
+                <div className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-[#5b5bd6] to-[#9333ea] text-xs font-semibold text-white">
+                  {initials}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm leading-tight text-[#e8e8ef]">{user.email}</p>
+                  <p className="truncate text-xs text-[#4a4a5a]">{user.is_admin ? "admin" : "client"}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setMobileOpen(false);
+                  handleLogout();
+                }}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[rgba(255,255,255,0.08)] px-3 py-2.5 text-sm font-medium text-[#9898a8] transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-white"
+              >
+                <LogOut className="size-4" />
+                Sign out
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
