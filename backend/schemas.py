@@ -133,6 +133,13 @@ class ProfileReviewExperience(BaseModel):
     highlights: list[str] = Field(default_factory=list)
 
 
+class ProfileReviewEducation(BaseModel):
+    institution: str = ""
+    degree: str = ""
+    field_of_study: str = ""
+    dates: str = ""
+
+
 class ProfileReviewLink(BaseModel):
     label: str = ""
     url: str = ""
@@ -150,6 +157,7 @@ class ProfileReviewData(BaseModel):
     key_skills: list[str] = Field(default_factory=list)
     projects: list[ProfileReviewProject] = Field(default_factory=list)
     experience: list[ProfileReviewExperience] = Field(default_factory=list)
+    education: list[ProfileReviewEducation] = Field(default_factory=list)
     links: list[ProfileReviewLink] = Field(default_factory=list)
     work_preferences: ProfileWorkPreferences = Field(default_factory=ProfileWorkPreferences)
 
@@ -178,6 +186,13 @@ class ExtractedProject(BaseModel):
     themes: list[str] = Field(default_factory=list)
 
 
+class ExtractedEducation(BaseModel):
+    institution: str = ""
+    degree: str = ""
+    field_of_study: str = ""
+    dates: str = ""
+
+
 class ExtractedProfile(BaseModel):
     """Structured candidate profile extracted from resume text by profile_extractor.
     Serialized to YAML (extracted_profile_to_yaml) to populate Profile.yaml_data."""
@@ -186,6 +201,7 @@ class ExtractedProfile(BaseModel):
     core_skills: ExtractedSkills = Field(default_factory=ExtractedSkills)
     experience: list[ExtractedExperience] = Field(default_factory=list)
     featured_projects: list[ExtractedProject] = Field(default_factory=list)
+    education: list[ExtractedEducation] = Field(default_factory=list)
 
 
 class PriorOutputs(BaseModel):

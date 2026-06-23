@@ -317,3 +317,32 @@ Avoid: don't read an ECS "deployment not found / circuit breaker" stabilization
 error as a container fault before checking the task's CloudWatch logs and
 whether a newer deployment superseded it. Don't leave a prod deploy on a bare
 `push: branches: [main]` trigger — docs commits and rapid pushes both deploy.
+
+## 2026-06-23 — enforce layout limits by dropping whole units, never by cutting prose
+
+Pattern: `resume_latex_template._limit_words` forced a one-page resume by keeping the first
+N words of every field and appending a period — producing "giving the team better." across
+every bullet. The user saw a "complete" resume (all sections present) that was actually
+amputated mid-sentence everywhere. The output-token cap was NOT the cause (output was not
+end-clipped); a code-side word trimmer was.
+
+Root cause: a presentation constraint (one page) implemented by clipping content at an
+arbitrary word boundary. Compounding multipliers: the compact-mode fallback (18-word
+bullets) and a validator that deleted user-entered skills/degree (only the CV blob counted
+as evidence).
+
+Fix: clip at sentence boundaries — drop whole trailing sentences; if even the first sentence
+exceeds budget, keep it whole rather than amputate. Page fit is owned by the bullet/entry
+COUNT caps + compact + overflow fallbacks in render_resume_pdf, not by cutting prose. Never
+bolt a fake "." onto a non-terminal word.
+
+Also: `MAX_TOKENS` was one global output cap (4096) shared by tiny structured agents and the
+two whole-document emitters (resume JSON, full .tex), where a rich resume exceeds 4096 output
+tokens. Fix: per-agent `max_output_tokens` (BaseAgent default 4096; resume_tailorer and
+_ResumeLatexAgent -> 8192). It is a cap not a target, so raising it adds no cost unless the
+output is genuinely that long.
+
+Avoid: implementing layout/length limits by trimming inside a sentence. Avoid one global
+output-token cap for agents whose output sizes differ by ~10x.
+
+See: backend/services/resume_latex_template.py _limit_words, backend/agents/base.py max_output_tokens

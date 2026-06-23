@@ -45,6 +45,9 @@ class ResumeCompileError(RuntimeError):
 class _ResumeLatexAgent(BaseAgent):
     # LaTeX editing must keep structure valid → use the stronger model.
     model = SONNET
+    # Re-emits the ENTIRE .tex (preamble + macros + all content); 4096 output tokens
+    # truncates a real one-page resume, so pdflatex fails or renders a cut-off PDF.
+    max_output_tokens = 8192
 
     async def run(self, system: str, user: str) -> str:
         return await self._call(system, user)

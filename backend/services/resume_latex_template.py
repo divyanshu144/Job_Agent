@@ -77,10 +77,29 @@ def _clean(value: str | None) -> str:
 
 
 def _limit_words(value: str, max_words: int) -> str:
-    words = _clean(value).split()
+    """Trim text toward a word budget WITHOUT ever cutting a sentence in half.
+
+    Over budget, drop whole trailing sentences. If even the first sentence exceeds
+    the budget, keep it whole rather than amputate it mid-clause and bolt on a fake
+    period (the "giving the team better." defect). One-page fit is handled by the
+    bullet/entry caps and the compact + overflow fallbacks in render_resume_pdf, not
+    by mutilating prose.
+    """
+    cleaned = _clean(value)
+    words = cleaned.split()
     if len(words) <= max_words:
-        return " ".join(words)
-    return " ".join(words[:max_words]).rstrip(".,;:") + "."
+        return cleaned
+
+    sentences = re.split(r"(?<=[.!?])\s+", cleaned)
+    kept: list[str] = []
+    count = 0
+    for sentence in sentences:
+        sentence_words = len(sentence.split())
+        if kept and count + sentence_words > max_words:
+            break
+        kept.append(sentence)
+        count += sentence_words
+    return " ".join(kept) if kept else cleaned
 
 
 def _bullet_list(items: list[str], *, limit: int, max_words: int = 24) -> str:

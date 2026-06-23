@@ -1,5 +1,42 @@
 # TODO
 
+## ACTIVE: CV-autofilled, user-confirmed education + skills (authoritative)
+
+Goal: upload CV -> extractor fills education + skills -> draft pre-fills the UI form ->
+user edits/confirms -> confirmed data is authoritative for the resume (no more nulled
+degree / over-pruned skills). Supersedes the "remove dormant ProfileReviewData fields"
+candidate below — we revive key_skills and add education.
+
+### Backend
+- [x] schemas.py: ProfileReviewEducation + education on ProfileReviewData; ExtractedEducation + education on ExtractedProfile
+- [x] prompts/profile_extractor.md: extract education; update output JSON schema
+- [x] profile_builder.py: extracted_profile_to_yaml emits education
+- [x] profile_builder.py: build_profile_review_text renders Education section
+- [x] profile_builder.py: ExtractedProfile -> review-seed mapper (key_skills flattened, education), non-destructive
+- [x] routes/profile.py upload_cv: seed profile_review_data (draft) from extraction
+- [x] evals/validators.py: skills + degree validate against whole profile (YAML + Review + CV), not just ## CV Text
+- [x] prompts/resume_tailorer.md: education from structured profile; broad skills with floor
+- [x] data/candidate_profile.yaml: add education block (admin parity) — DEGREES GUESSED, user to confirm
+
+### Frontend (frontend-design skill)
+- [x] types/index.ts: mirror ProfileReviewEducation + education (schema-drift)
+- [x] ProfileSetup.tsx: Skills chip input + Education cards + "autofilled, review & save" draft banner
+
+### Verification (Definition of Done)
+- [x] Tests: extractor education; review-seed mapper; build_profile_review_text education; validator keeps review-backed degree/skill; PUT /profile/review + upload_cv round-trip education
+- [x] make check green (fmt + lint + schema-drift + tests) — 567 passed, 83% cov
+- [x] Update HANDOFF.md
+- [ ] Manual: render ProfileSetup in browser to confirm new sections look right (not automated)
+- [x] BUG: resume_latex_template.py _limit_words chopped bullets mid-sentence — now clips at sentence boundaries
+- [x] BUG (latent): global MAX_TOKENS=4096 truncated big resumes — per-agent max_output_tokens (resume agents -> 8192)
+
+### Decisions locked
+- Education fields: institution, degree, field_of_study, dates
+- Skills autofill: flatten extractor skill buckets into key_skills; non-destructive on re-upload
+- Validator: trust user-entered (Profile Review) data as evidence; still block pure inventions
+
+---
+
 > Snapshot reset 2026-06-21. The FDE-readiness goal (5 tasks) and the multi-tenant
 > campaign feature are complete and shipped (history through `87117f2`); the prior
 > detailed checklist is preserved in git history. Deployment/infra work since then

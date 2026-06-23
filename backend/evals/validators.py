@@ -107,13 +107,17 @@ def _skill_present(text: str, skill: str) -> bool:
     return any(_literal_present(text, alias) for alias in _aliases_for_skill(skill))
 
 
-def _extract_cv_text(profile_text: str | None) -> str:
-    if not profile_text:
-        return ""
-    marker = "## CV Text"
-    if marker in profile_text:
-        return profile_text.split(marker, 1)[1]
-    return profile_text
+def _evidence_text(profile_text: str | None) -> str:
+    """Evidence for factual checks = the whole candidate profile the resume was built
+    from (YAML core_skills + Profile Review + CV Text), not just the CV blob.
+
+    User-curated structured data (skills entered in the form, education the user
+    confirmed) is authoritative; the pypdf-extracted CV text is only one source and is
+    often lossy (degree lines split across columns, etc.). Validating against the full
+    profile stops legitimate, user-entered facts from being silently deleted, while
+    still blocking claims that appear in none of the candidate's materials.
+    """
+    return profile_text or ""
 
 
 def _append_omission(output: ResumeTailorerOutput, field: str, value: str, reason: str) -> None:
@@ -282,7 +286,7 @@ def validate_resume_tailorer(
                 severity="error",
             )
         )
-    cv_text = _extract_cv_text(source_text)
+    cv_text = _evidence_text(source_text)
     if cv_text:
         supported_skills: list[str] = []
         for skill in output.skills:

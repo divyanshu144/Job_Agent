@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, FileUp, Link2, RefreshCw, ShieldCheck, Sparkles, UserRound } from "lucide-react";
+import { CheckCircle2, FileUp, GraduationCap, Link2, RefreshCw, ShieldCheck, Sparkles, Tags, UserRound, X } from "lucide-react";
 import { api, errorMessage } from "../api/client";
 import { PageHeader, PageShell, Panel, PrimaryButton, SectionHeader, StatusPill } from "../components/portal";
 import { useAuth } from "../context/AuthContext";
 import type {
   ProfileResponse,
   ProfileReviewData,
+  ProfileReviewEducation,
   ProfileReviewLink,
   ProfileReviewResponse,
 } from "../types";
@@ -16,6 +17,7 @@ const emptyReviewData = (): ProfileReviewData => ({
   key_skills: [],
   projects: [],
   experience: [],
+  education: [],
   links: [],
   work_preferences: {
     locations: [],
@@ -28,6 +30,13 @@ const emptyReviewData = (): ProfileReviewData => ({
 const emptyLink = (): ProfileReviewLink => ({
   label: "",
   url: "",
+});
+
+const emptyEducation = (): ProfileReviewEducation => ({
+  institution: "",
+  degree: "",
+  field_of_study: "",
+  dates: "",
 });
 
 function parseReviewData(raw: string | undefined): ProfileReviewData {
@@ -325,6 +334,7 @@ export function ProfileSetup() {
   const [success, setSuccess] = useState<string | null>(null);
   const [yamlData, setYamlData] = useState("");
   const [savingYaml, setSavingYaml] = useState(false);
+  const [skillDraft, setSkillDraft] = useState("");
 
   const loadReview = async () => {
     setLoading(true);
@@ -372,6 +382,28 @@ export function ProfileSetup() {
   const updateLink = (index: number, updater: (link: ProfileReviewLink) => ProfileReviewLink) => {
     setField("links", form.links.map((link, i) => (i === index ? updater(link) : link)));
   };
+
+  const addSkill = (raw: string) => {
+    const value = raw.trim();
+    if (!value) return;
+    const exists = form.key_skills.some((skill) => skill.toLowerCase() === value.toLowerCase());
+    if (!exists) setField("key_skills", [...form.key_skills, value]);
+    setSkillDraft("");
+  };
+
+  const removeSkill = (index: number) => {
+    setField("key_skills", form.key_skills.filter((_, i) => i !== index));
+  };
+
+  const updateEducation = (
+    index: number,
+    updater: (item: ProfileReviewEducation) => ProfileReviewEducation,
+  ) => {
+    setField("education", form.education.map((item, i) => (i === index ? updater(item) : item)));
+  };
+
+  const autofilledFromCv =
+    review?.review_status === "draft" && (form.key_skills.length > 0 || form.education.length > 0);
 
   const upload = async (file: File) => {
     setUploading(true);
@@ -506,10 +538,130 @@ export function ProfileSetup() {
         </Panel>
       </section>
 
+      {autofilledFromCv && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <Sparkles className="mt-0.5 size-5 shrink-0 text-amber-600" />
+          <div>
+            <p className="text-sm font-semibold text-amber-900">Autofilled from your resume</p>
+            <p className="mt-0.5 text-xs leading-5 text-amber-700">
+              Check the skills and education below, fix anything that looks off, then save to
+              confirm. We use this to tailor every resume and cover letter.
+            </p>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={save} className="grid gap-4 lg:grid-cols-12">
         <div className="lg:col-span-12">
           <YamlEditor value={yamlData} onSave={saveYaml} saving={savingYaml} />
         </div>
+
+        <Panel className="space-y-4 lg:col-span-12">
+          <div className="flex items-center gap-2">
+            <Tags className="size-4 text-zinc-500" />
+            <h2 className="text-lg font-semibold text-zinc-950">Skills</h2>
+          </div>
+          <p className="-mt-2 text-sm text-zinc-500">
+            The skills we lead with when tailoring. Add the tools and technologies you want
+            employers to see first.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {form.key_skills.length === 0 && (
+              <p className="text-sm text-zinc-400">No skills yet. Add your first below.</p>
+            )}
+            {form.key_skills.map((skill, index) => (
+              <span
+                key={`${skill}-${index}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 py-1 pl-3 pr-1.5 text-sm font-medium text-blue-700"
+              >
+                {skill}
+                <button
+                  type="button"
+                  onClick={() => removeSkill(index)}
+                  aria-label={`Remove ${skill}`}
+                  className="grid size-5 place-items-center rounded-full text-blue-500 transition-colors hover:bg-blue-100 hover:text-blue-700"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+          <input
+            value={skillDraft}
+            onChange={(e) => setSkillDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                addSkill(skillDraft);
+              } else if (e.key === "Backspace" && !skillDraft && form.key_skills.length > 0) {
+                removeSkill(form.key_skills.length - 1);
+              }
+            }}
+            onBlur={() => addSkill(skillDraft)}
+            className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+            placeholder="Add a skill and press Enter"
+          />
+        </Panel>
+
+        <Panel className="space-y-4 lg:col-span-12">
+          <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2">
+              <GraduationCap className="size-4 text-zinc-500" />
+              <h2 className="text-lg font-semibold text-zinc-950">Education</h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => setField("education", [...form.education, emptyEducation()])}
+              className="text-sm font-medium text-blue-700 hover:text-blue-600"
+            >
+              Add education
+            </button>
+          </div>
+          {form.education.length === 0 && (
+            <p className="text-sm text-zinc-400">No education added.</p>
+          )}
+          <div className="space-y-3">
+            {form.education.map((item, index) => (
+              <div key={index} className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input
+                    value={item.institution}
+                    onChange={(e) => updateEducation(index, (edu) => ({ ...edu, institution: e.target.value }))}
+                    className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                    placeholder="Institution"
+                  />
+                  <input
+                    value={item.dates}
+                    onChange={(e) => updateEducation(index, (edu) => ({ ...edu, dates: e.target.value }))}
+                    className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                    placeholder="Dates (e.g. 2021-2025)"
+                  />
+                  <input
+                    value={item.degree}
+                    onChange={(e) => updateEducation(index, (edu) => ({ ...edu, degree: e.target.value }))}
+                    className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                    placeholder="Degree (e.g. MSc)"
+                  />
+                  <input
+                    value={item.field_of_study}
+                    onChange={(e) => updateEducation(index, (edu) => ({ ...edu, field_of_study: e.target.value }))}
+                    className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
+                    placeholder="Field of study"
+                  />
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setField("education", form.education.filter((_, i) => i !== index))}
+                    className="text-sm font-medium text-zinc-500 hover:text-rose-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
 
         <Panel className="space-y-4 lg:col-span-12">
           <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">

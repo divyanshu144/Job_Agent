@@ -82,6 +82,10 @@ def _parse_json(raw: str) -> dict[str, object]:
 
 class BaseAgent:
     model: str = SONNET
+    # Output-token cap per call. Small structured agents are fine on the default;
+    # whole-document emitters (resume JSON, full .tex) override this — a rich resume
+    # overflows 4096 output tokens and gets truncated mid-document otherwise.
+    max_output_tokens: int = MAX_TOKENS
 
     def __init__(self) -> None:
         self._client = anthropic.AsyncAnthropic(
@@ -150,7 +154,7 @@ class BaseAgent:
                 prompt_version=self._prompt_version.prompt_version
                 if self._prompt_version is not None
                 else None,
-                max_tokens=MAX_TOKENS,
+                max_tokens=self.max_output_tokens,
                 # No prompt caching: each pipeline call's system prompt is unique per request
                 # (profile + JD + prior outputs injected), so cached blocks are never read back —
                 # only the 1.25x write premium was incurred. See tasks/observability-audit.md.

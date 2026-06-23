@@ -13,6 +13,7 @@ from backend.agents.profile_extractor import ProfileExtractorAgent
 from backend.database import get_db
 from backend.models import Profile, User
 from backend.schemas import (
+    ExtractedProfile,
     ProfileResponse,
     ProfileReviewResponse,
     ProfileReviewUpdate,
@@ -26,6 +27,7 @@ from backend.services.profile_builder import (
     default_profile_yaml,
     extracted_profile_to_yaml,
     parse_profile_review_data,
+    review_seed_from_extracted,
 )
 
 logger = logging.getLogger(__name__)
@@ -180,15 +182,18 @@ async def refresh_profile(
     return _profile_response(profile)
 
 
-async def _yaml_from_resume(cv_text: str, fallback_yaml: str) -> str:
-    """Extract structured YAML from resume text. On any extractor failure, keep the
-    user's existing YAML so an upload never fails because of the LLM."""
+async def _extract_resume(cv_text: str, fallback_yaml: str) -> tuple[str, ExtractedProfile | None]:
+    """Extract structured profile from resume text, returning (yaml, extracted).
+
+    On any extractor failure, keep the user's existing YAML and return None for the
+    extracted profile so an upload never fails because of the LLM (and nothing is
+    seeded into the review form)."""
     try:
         extracted = await ProfileExtractorAgent().run(cv_text)
-        return extracted_profile_to_yaml(extracted)
+        return extracted_profile_to_yaml(extracted), extracted
     except Exception:
         logger.warning("profile extraction failed; preserving existing YAML", exc_info=True)
-        return fallback_yaml
+        return fallback_yaml, None
 
 
 @router.post("/profile/cv", response_model=ProfileResponse)
@@ -217,15 +222,38 @@ async def upload_cv(
         )
     existing = await _latest_user_profile(db, current_user.id)
     fallback_yaml = existing.yaml_data if existing is not None else default_profile_yaml()
-    yaml_text = await _yaml_from_resume(cv_text, fallback_yaml)
+    yaml_text, extracted = await _extract_resume(cv_text, fallback_yaml)
+
+    # Autofill the review form (skills + education) from the extraction, non-destructively,
+    # so the user reviews and confirms a draft rather than starting from scratch. Only touch
+    # the stored review when the seed actually adds something (keeps a blank profile blank).
+    existing_review = (
+        parse_profile_review_data(existing.profile_review_data)
+        if existing is not None
+        else parse_profile_review_data("{}")
+    )
+    seeded_review = (
+        review_seed_from_extracted(extracted, existing_review)
+        if extracted is not None
+        else existing_review
+    )
+    if seeded_review != existing_review:
+        review_data_arg: object = seeded_review
+        review_status = "draft"
+        reviewed_at = None
+    else:
+        review_data_arg = existing.profile_review_data if existing is not None else "{}"
+        review_status = existing.review_status if existing is not None else "draft"
+        reviewed_at = existing.reviewed_at if existing is not None else None
+
     profile = await build_profile_from_text(
         db,
         yaml_text=yaml_text,
         cv_text=cv_text,
         user_id=current_user.id,
-        profile_review_data=existing.profile_review_data if existing is not None else "{}",
-        review_status=existing.review_status if existing is not None else "draft",
-        reviewed_at=existing.reviewed_at if existing is not None else None,
+        profile_review_data=review_data_arg,  # type: ignore[arg-type]
+        review_status=review_status,
+        reviewed_at=reviewed_at,
     )
     await db.commit()
     await db.refresh(profile)

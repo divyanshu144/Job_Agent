@@ -1,11 +1,59 @@
 # Session Handoff
 
-**Updated:** 2026-06-22
-**Branch:** `main` — clean, pushed (`e861af9`). Tag **`v1.0.0`** cut & deployed. Nothing in flight.
+**Updated:** 2026-06-23
+**Branch:** `main` — **UNCOMMITTED** working-tree changes (resume completeness fix). `make check`
+green (567 passed, 83% cov). Not yet committed/pushed.
 
 ---
 
-## State at session end
+## In flight (this session): resume "not complete" fix — education + skills authoritative
+
+**Problem diagnosed:** generated resume dropped the education degree and showed only ~5 skills.
+Root causes (verified): (1) `resume_latex_template.py` `_limit_words` chops every bullet mid-sentence
+to force one page [SEPARATE, not yet fixed]; (2) `validators.py` only accepted the lossy `## CV Text`
+blob as evidence, so it deleted the user's real degree and over-pruned skills; (3) education had no
+first-class home in the profile schema.
+
+**What this change does (all on disk, uncommitted):** make user-entered/CV-extracted education +
+skills authoritative.
+- Schema: `ProfileReviewEducation` + `education` on `ProfileReviewData`; `ExtractedEducation` +
+  `education` on `ExtractedProfile`.
+- Extractor (`prompts/profile_extractor.md`) now pulls education.
+- `profile_builder.py`: YAML emits education; `build_profile_review_text` renders an Education
+  section; new `review_seed_from_extracted` (flatten skills + education, **non-destructive**).
+- `routes/profile.py` `upload_cv`: seeds the review form (draft) from the extraction → autofill.
+- **Trust fix** (`validators.py`): skills + degree now validate against the whole profile (YAML +
+  Profile Review + CV), not just the CV blob. `_extract_cv_text` → `_evidence_text`.
+- `prompts/resume_tailorer.md`: take education from structured profile; broad skills with a floor
+  (≥6, aim ≥10); stop collapsing to JD keywords.
+- Frontend `ProfileSetup.tsx`: Skills chip input + Education cards + amber "autofilled, review &
+  save" draft banner. `types/index.ts` mirrored (schema-drift green).
+- `data/candidate_profile.yaml`: added education block — **degrees (MSc/BTech CS) are GUESSED;
+  user must confirm/correct** the real degrees.
+
+**Also fixed this session (resume completeness, cause #1 + latent):**
+- `resume_latex_template._limit_words` now clips at **sentence boundaries** (drops whole trailing
+  sentences; keeps a single over-long sentence whole) — no more "giving the team better." mid-clause.
+- `MAX_TOKENS` was one global 4096 output cap; added per-agent `max_output_tokens` (BaseAgent
+  default 4096; `ResumeTailorerAgent` + `_ResumeLatexAgent` -> 8192) so rich resumes aren't
+  truncated mid-document.
+
+**Next action (cold-start):** (1) user confirms the guessed degrees in `data/candidate_profile.yaml`
+and via the new UI; (2) render `ProfileSetup` in a browser to eyeball the new sections (not
+automated); (3) commit on a branch + PR.
+
+**Known issues NOT fixed (deliberate — not defects to patch blind):**
+- `discovery.py:11` reads the admin's on-disk `candidate_profile.yaml` `search_profiles` for ALL
+  users — multi-tenant gap, but needs a decision on whether discovery is per-user or global first.
+- Deferred features: `GET/PATCH /api/campaign/settings`, per-run cost on `CampaignRunResponse`.
+- Scaling: rate limiter uses in-memory storage (per-worker limits when multi-worker — needs Redis
+  `storage_uri`).
+- `ExtractedSkills` has no `ai_llm`/`retrieval` buckets (extractor under-captures AI skills vs the
+  hand YAML) — quality gap, not a defect; skills still land under frameworks/tools.
+
+---
+
+## Previous state (v1.0.0 release)
 
 **`v1.0.0` is released and live in production at `https://app.jobfitapp.uk`.** Production
 smoke-tested (non-destructive): frontend HTTPS 200, valid ACM cert, `GET /api/profile` → 401,

@@ -1,7 +1,9 @@
 from unittest.mock import AsyncMock, patch
 
 from backend.schemas import (
+    ExtractedProfile,
     ProfileReviewData,
+    ProfileReviewEducation,
     ProfileReviewExperience,
     ProfileReviewLink,
     ProfileReviewProject,
@@ -147,6 +149,80 @@ def test_build_profile_review_text_renders_all_review_sections():
     assert "Remote: Hybrid" in rendered
     assert "Role types: Full-time" in rendered
     assert "Industries: AI" in rendered
+
+
+def test_build_profile_review_text_renders_education():
+    from backend.services.profile_builder import build_profile_review_text
+
+    data = ProfileReviewData(
+        education=[
+            ProfileReviewEducation(
+                institution="University of Exeter",
+                degree="MSc",
+                field_of_study="Computer Science",
+                dates="Jan 2026",
+            )
+        ]
+    )
+
+    rendered = build_profile_review_text(data)
+
+    assert "Education" in rendered
+    assert "University of Exeter" in rendered
+    assert "MSc" in rendered
+    assert "Computer Science" in rendered
+    assert "Jan 2026" in rendered
+
+
+def test_review_seed_from_extracted_fills_empty_skills_and_education():
+    from backend.services.profile_builder import review_seed_from_extracted
+
+    extracted = ExtractedProfile.model_validate(
+        {
+            "core_skills": {
+                "languages": ["Python"],
+                "frameworks": ["FastAPI"],
+                "tools": ["Docker"],
+            },
+            "education": [
+                {
+                    "institution": "Uni",
+                    "degree": "BSc",
+                    "field_of_study": "CS",
+                    "dates": "2021",
+                }
+            ],
+        }
+    )
+
+    seed = review_seed_from_extracted(extracted, ProfileReviewData())
+
+    assert seed.key_skills == ["Python", "FastAPI", "Docker"]
+    assert seed.education[0].institution == "Uni"
+    assert seed.education[0].degree == "BSc"
+    assert seed.education[0].field_of_study == "CS"
+
+
+def test_review_seed_from_extracted_is_non_destructive():
+    """Re-uploading a CV must not clobber skills/education the user already saved."""
+    from backend.services.profile_builder import review_seed_from_extracted
+
+    extracted = ExtractedProfile.model_validate(
+        {
+            "core_skills": {"languages": ["Python"]},
+            "education": [{"institution": "New Uni", "degree": "BSc"}],
+        }
+    )
+    existing = ProfileReviewData(
+        key_skills=["Rust"],
+        education=[ProfileReviewEducation(institution="Old Uni", degree="PhD")],
+    )
+
+    seed = review_seed_from_extracted(extracted, existing)
+
+    assert seed.key_skills == ["Rust"]
+    assert seed.education[0].institution == "Old Uni"
+    assert seed.education[0].degree == "PhD"
 
 
 async def test_build_profile_from_text_includes_review_data_and_cv_text(session):
