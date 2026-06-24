@@ -12,7 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
 from backend.models import Profile, User
-from backend.schemas import ExtractedProfile, ProfileReviewData
+from backend.schemas import (
+    ExtractedProfile,
+    ProfileReviewData,
+    ProfileReviewEducation,
+    ResumeIdentity,
+)
 from backend.services.cv_parser import extract_text_from_file
 
 logger = logging.getLogger(__name__)
@@ -107,6 +112,21 @@ def build_profile_review_text(review_data: ProfileReviewData) -> str:
     if experience_items:
         sections.append("Experience\n" + "\n\n".join(experience_items))
 
+    education_items: list[str] = []
+    for edu in review_data.education:
+        degree_line = " - ".join(
+            part for part in [edu.degree.strip(), edu.field_of_study.strip()] if part
+        )
+        lines = [edu.institution.strip()] if edu.institution.strip() else []
+        if degree_line:
+            lines.append(degree_line)
+        if edu.dates.strip():
+            lines.append(edu.dates.strip())
+        if lines:
+            education_items.append("\n".join(lines))
+    if education_items:
+        sections.append("Education\n" + "\n\n".join(education_items))
+
     links: list[str] = []
     for link in review_data.links:
         label = link.label.strip()
@@ -174,6 +194,7 @@ def extracted_profile_to_yaml(profile: ExtractedProfile) -> str:
             "name": profile.identity.name,
             "headline": profile.identity.headline,
             "location": profile.identity.location,
+            "phone": profile.identity.phone,
         },
         "core_skills": {
             "languages": list(profile.core_skills.languages),
@@ -192,8 +213,84 @@ def extracted_profile_to_yaml(profile: ExtractedProfile) -> str:
         "featured_projects": [
             {"name": p.name, "themes": list(p.themes)} for p in profile.featured_projects
         ],
+        "education": [
+            {
+                "institution": e.institution,
+                "degree": e.degree,
+                "field_of_study": e.field_of_study,
+                "dates": e.dates,
+            }
+            for e in profile.education
+        ],
     }
     return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+
+
+def resume_identity_from_profile(profile: Profile | None, email: str) -> ResumeIdentity:
+    """Build the per-user resume header from the user's profile + account email.
+
+    Name/location/phone come from the YAML `identity` block; links from the saved
+    Profile Review; email is the authoritative account email. Everything degrades to
+    empty so a sparse profile still renders a valid (if minimal) header.
+    """
+    identity = ResumeIdentity(email=email)
+    if profile is None:
+        return identity
+
+    try:
+        data = yaml.safe_load(profile.yaml_data) or {}
+        block = data.get("identity", {}) if isinstance(data, dict) else {}
+        if isinstance(block, dict):
+            identity.name = str(block.get("name") or "").strip()
+            identity.location = str(block.get("location") or "").strip()
+            identity.phone = str(block.get("phone") or "").strip()
+    except yaml.YAMLError:
+        pass
+
+    review = parse_profile_review_data(profile.profile_review_data)
+    identity.links = [link for link in review.links if link.url.strip()]
+    return identity
+
+
+def review_seed_from_extracted(
+    extracted: ExtractedProfile, existing: ProfileReviewData
+) -> ProfileReviewData:
+    """Seed the user-editable review form from a freshly extracted CV, without
+    clobbering data the user has already entered.
+
+    Only fills `key_skills` / `education` when the user's current review has none,
+    so re-uploading a CV never overwrites confirmed edits. Skills are flattened from
+    the extractor's buckets (languages + frameworks + tools), de-duplicated in order.
+    """
+    seed = existing.model_copy(deep=True)
+
+    if not seed.key_skills:
+        skills = (
+            list(extracted.core_skills.languages)
+            + list(extracted.core_skills.frameworks)
+            + list(extracted.core_skills.tools)
+        )
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for skill in skills:
+            cleaned = skill.strip()
+            if cleaned and cleaned.lower() not in seen:
+                seen.add(cleaned.lower())
+                deduped.append(cleaned)
+        seed.key_skills = deduped
+
+    if not seed.education:
+        seed.education = [
+            ProfileReviewEducation(
+                institution=e.institution,
+                degree=e.degree,
+                field_of_study=e.field_of_study,
+                dates=e.dates,
+            )
+            for e in extracted.education
+        ]
+
+    return seed
 
 
 def _read_yaml(yaml_path: str) -> str:

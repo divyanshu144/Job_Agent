@@ -50,6 +50,13 @@ export interface ProfileReviewExperience {
   highlights: string[];
 }
 
+export interface ProfileReviewEducation {
+  institution: string;
+  degree: string;
+  field_of_study: string;
+  dates: string;
+}
+
 export interface ProfileReviewLink {
   label: string;
   url: string;
@@ -67,6 +74,7 @@ export interface ProfileReviewData {
   key_skills: string[];
   projects: ProfileReviewProject[];
   experience: ProfileReviewExperience[];
+  education: ProfileReviewEducation[];
   links: ProfileReviewLink[];
   work_preferences: ProfileWorkPreferences;
 }

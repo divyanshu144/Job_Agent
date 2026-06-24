@@ -18,6 +18,7 @@ from backend.schemas import (
     UpdateStatusRequest,
 )
 from backend.services.auth_service import get_current_user
+from backend.services.profile_builder import get_owned_profile, resume_identity_from_profile
 from backend.services.resume_docx import render_resume_docx
 from backend.services.resume_latex_template import ResumeTemplateError, render_resume_pdf
 
@@ -213,8 +214,10 @@ async def download_resume_pdf(
         raise HTTPException(status_code=404, detail="Tailored resume is not available")
 
     output = ResumeTailorerOutput.model_validate(json.loads(result.output_json))
+    profile = await get_owned_profile(db, current_user.id)
+    identity = resume_identity_from_profile(profile, current_user.email)
     try:
-        body = await render_resume_pdf(output)
+        body = await render_resume_pdf(output, identity)
     except ResumeTemplateError as exc:
         raise HTTPException(
             status_code=503,

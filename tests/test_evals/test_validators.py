@@ -352,6 +352,47 @@ def test_resume_tailorer_skill_aliases_are_supported():
     assert out.omitted_items == []
 
 
+def test_resume_tailorer_keeps_degree_present_in_profile_review():
+    """A degree the user entered in Profile Review is authoritative even when the
+    pypdf-extracted CV blob does not contain it (the line is often garbled)."""
+    out = _rt(
+        education=[
+            ResumeEducationItem(degree="MSc Computer Science", institution="University of Exeter")
+        ],
+    )
+
+    validate_resume_tailorer(
+        out,
+        EMPTY_PRIOR,
+        source_text=(
+            "## Profile Review\nEducation\nUniversity of Exeter\nMSc Computer Science\n"
+            "\n\n---\n\n"
+            "## CV Text\nUniversity of Exeter. Jan 2026."
+        ),
+    )
+
+    assert out.education[0].degree == "MSc Computer Science"
+
+
+def test_resume_tailorer_keeps_skill_present_in_structured_profile():
+    """Skills present in the structured profile (YAML core_skills) survive even
+    when absent from the CV blob — the curated profile is valid evidence."""
+    out = _rt(summary="AI engineer", skills=["LangGraph"])
+
+    validate_resume_tailorer(
+        out,
+        EMPTY_PRIOR,
+        source_text=(
+            "## Candidate Profile (YAML)\ncore_skills:\n  ai_llm:\n    - LangGraph\n"
+            "\n\n---\n\n"
+            "## CV Text\nBuilt retrieval systems."
+        ),
+    )
+
+    assert out.skills == ["LangGraph"]
+    assert out.omitted_items == []
+
+
 # ---------------------------------------------------------------------------
 # resume_tailorer — bullet_too_similar
 # ---------------------------------------------------------------------------

@@ -30,6 +30,14 @@ def _review_payload() -> dict:
                     "highlights": ["Shipped production APIs"],
                 }
             ],
+            "education": [
+                {
+                    "institution": "University of Exeter",
+                    "degree": "MSc",
+                    "field_of_study": "Computer Science",
+                    "dates": "Jan 2026",
+                }
+            ],
             "links": [{"label": "GitHub", "url": "https://github.com/example"}],
             "work_preferences": {
                 "locations": ["London"],
@@ -136,6 +144,7 @@ async def test_get_profile_review_creates_default_without_reading_global_cv(app_
         "key_skills": [],
         "projects": [],
         "experience": [],
+        "education": [],
         "links": [],
         "work_preferences": {
             "locations": [],
@@ -406,6 +415,60 @@ async def test_cv_upload_populates_yaml_from_extractor(app_client):
     assert "Ada Lovelace" in yaml_data
     assert "Python" in yaml_data
     assert "FastAPI" in yaml_data
+
+
+async def test_cv_upload_seeds_review_skills_and_education(app_client):
+    """A successful CV extraction pre-fills the review form (skills + education) as a
+    draft the user then confirms — the autofill-from-CV path."""
+    from unittest.mock import AsyncMock, patch
+
+    from backend.schemas import ExtractedProfile
+
+    extracted = ExtractedProfile.model_validate(
+        {
+            "core_skills": {
+                "languages": ["Python"],
+                "frameworks": ["FastAPI"],
+                "tools": ["Docker"],
+            },
+            "education": [
+                {
+                    "institution": "University of Exeter",
+                    "degree": "MSc",
+                    "field_of_study": "Computer Science",
+                    "dates": "Jan 2026",
+                }
+            ],
+        }
+    )
+
+    with (
+        patch(
+            "backend.routes.profile.extract_text_from_pdf_bytes",
+            new_callable=AsyncMock,
+            return_value="AI engineer with Python and FastAPI. MSc, University of Exeter.",
+        ),
+        patch(
+            "backend.routes.profile.ProfileExtractorAgent.run",
+            new_callable=AsyncMock,
+            return_value=extracted,
+        ),
+    ):
+        resp = await app_client.post(
+            "/api/profile/cv",
+            files={"file": ("cv.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["review_status"] == "draft"
+
+    review_resp = await app_client.get("/api/profile/review")
+    review_data = review_resp.json()["review_data"]
+    assert "Python" in review_data["key_skills"]
+    assert "FastAPI" in review_data["key_skills"]
+    assert review_data["education"][0]["institution"] == "University of Exeter"
+    assert review_data["education"][0]["degree"] == "MSc"
+    assert review_data["education"][0]["field_of_study"] == "Computer Science"
 
 
 async def test_cv_upload_preserves_yaml_when_extractor_fails(app_client, db_session):

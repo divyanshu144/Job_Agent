@@ -12,6 +12,7 @@ from pypdf import PdfReader
 from backend.schemas import (
     ResumeEducationItem,
     ResumeExperienceItem,
+    ResumeIdentity,
     ResumeProjectItem,
     ResumeTailorerOutput,
 )
@@ -77,10 +78,29 @@ def _clean(value: str | None) -> str:
 
 
 def _limit_words(value: str, max_words: int) -> str:
-    words = _clean(value).split()
+    """Trim text toward a word budget WITHOUT ever cutting a sentence in half.
+
+    Over budget, drop whole trailing sentences. If even the first sentence exceeds
+    the budget, keep it whole rather than amputate it mid-clause and bolt on a fake
+    period (the "giving the team better." defect). One-page fit is handled by the
+    bullet/entry caps and the compact + overflow fallbacks in render_resume_pdf, not
+    by mutilating prose.
+    """
+    cleaned = _clean(value)
+    words = cleaned.split()
     if len(words) <= max_words:
-        return " ".join(words)
-    return " ".join(words[:max_words]).rstrip(".,;:") + "."
+        return cleaned
+
+    sentences = re.split(r"(?<=[.!?])\s+", cleaned)
+    kept: list[str] = []
+    count = 0
+    for sentence in sentences:
+        sentence_words = len(sentence.split())
+        if kept and count + sentence_words > max_words:
+            break
+        kept.append(sentence)
+        count += sentence_words
+    return " ".join(kept) if kept else cleaned
 
 
 def _bullet_list(items: list[str], *, limit: int, max_words: int = 24) -> str:
@@ -160,20 +180,60 @@ def _render_education(items: list[ResumeEducationItem]) -> str:
     return "\n\n".join(item for item in rendered if item)
 
 
+def _render_header(identity: ResumeIdentity) -> str:
+    """Build the centered name + contact + links block from the user's own identity.
+
+    Each piece is optional and omitted cleanly (no dangling separators) so a sparse
+    profile still produces a valid header — and never another user's details.
+    """
+    sep = r" $\cdot$ "
+    name = escape_latex(_clean(identity.name))
+
+    contact: list[str] = []
+    if identity.location.strip():
+        contact.append(escape_latex(_clean(identity.location)))
+    if identity.email.strip():
+        email = escape_latex(_clean(identity.email))
+        contact.append(rf"\href{{mailto:{email}}}{{{email}}}")
+    if identity.phone.strip():
+        contact.append(escape_latex(_clean(identity.phone)))
+
+    links: list[str] = []
+    for link in identity.links:
+        url = _clean(link.url)
+        if not url:
+            continue
+        label = escape_latex(_clean(link.label) or url)
+        links.append(rf"\href{{{escape_latex(url)}}}{{{label}}}")
+
+    lines: list[str] = []
+    if name:
+        lines.append(rf"    {{\LARGE \textbf{{{name}}}}} \\[3pt]")
+    if contact:
+        lines.append(rf"    \small {sep.join(contact)} \\[2pt]")
+    if links:
+        lines.append("    " + sep.join(links))
+    if not lines:
+        return ""
+    return "\\begin{center}\n" + "\n".join(lines) + "\n\\end{center}"
+
+
 def render_resume_latex(
     output: ResumeTailorerOutput,
     template: str | None = None,
     *,
+    identity: ResumeIdentity | None = None,
     compact: bool = False,
 ) -> str:
     """Render structured resume output into the fixed LaTeX format.
 
     The model controls content only. This renderer owns the LaTeX structure,
-    escaping, and one-page-oriented content caps.
+    escaping, the per-user header, and one-page-oriented content caps.
     """
     source = template if template is not None else load_latex_format()
     summary = escape_latex(_limit_words(output.summary or output.headline, 36 if compact else 52))
     replacements = {
+        "%%JOBFIT_HEADER%%": _render_header(identity or ResumeIdentity()),
         "%%JOBFIT_SUMMARY%%": summary or "Tailored summary available in the application package.",
         "%%JOBFIT_EXPERIENCE%%": _render_experience(output.experience, compact=compact),
         "%%JOBFIT_PROJECTS%%": _render_projects(output.projects, compact=compact),
@@ -229,14 +289,18 @@ async def compile_latex_to_pdf(tex: str, *, require_one_page: bool = True) -> by
     return pdf
 
 
-async def render_resume_pdf(output: ResumeTailorerOutput) -> bytes:
+async def render_resume_pdf(
+    output: ResumeTailorerOutput, identity: ResumeIdentity | None = None
+) -> bytes:
     try:
-        return await compile_latex_to_pdf(render_resume_latex(output), require_one_page=True)
+        return await compile_latex_to_pdf(
+            render_resume_latex(output, identity=identity), require_one_page=True
+        )
     except ResumeTemplateError as exc:
         if "exceeded one page" not in str(exc):
             raise
 
-    compact_tex = render_resume_latex(output, compact=True)
+    compact_tex = render_resume_latex(output, identity=identity, compact=True)
     try:
         return await compile_latex_to_pdf(compact_tex, require_one_page=True)
     except ResumeTemplateError as exc:
