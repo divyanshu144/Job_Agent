@@ -29,6 +29,10 @@ candidate below — we revive key_skills and add education.
 - [ ] Manual: render ProfileSetup in browser to confirm new sections look right (not automated)
 - [x] BUG: resume_latex_template.py _limit_words chopped bullets mid-sentence — now clips at sentence boundaries
 - [x] BUG (latent): global MAX_TOKENS=4096 truncated big resumes — per-agent max_output_tokens (resume agents -> 8192)
+- [x] BUG: resume PDF header hardcoded admin identity (latex-format.tex) — now per-user via %%JOBFIT_HEADER%% + ResumeIdentity
+- [x] BUG: mobile menu had no Sign out (only desktop sidebar) — added to mobile overlay
+- [ ] DEFERRED (campaigns not user-available): route campaign resume gen through the structured
+      template instead of static assets/resume.tex (currently the admin's whole resume)
 
 ### Decisions locked
 - Education fields: institution, degree, field_of_study, dates

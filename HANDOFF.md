@@ -61,7 +61,10 @@ also fixing the campaign `resume.tex` path first; (4) drop the local `jobfit` PG
 
 **Known issues NOT fixed (deliberate — not defects to patch blind):**
 - `campaign_orchestrator._resume_tailor` → static `assets/resume.tex` is the admin's whole resume
-  for every user's campaign (see above).
+  for every user's campaign. **DEFERRED (safe): campaigns are not user-available**, so this path
+  isn't reachable by real users today — not a live leak. Fix before campaigns are exposed: route
+  campaign resume generation through the structured template (`render_resume_pdf` + per-user
+  `ResumeIdentity`) instead of editing the static `resume.tex`.
 - `discovery.py:11` reads the admin's on-disk `candidate_profile.yaml` `search_profiles` for ALL
   users — multi-tenant gap, but needs a decision on whether discovery is per-user or global first.
 - Deferred features: `GET/PATCH /api/campaign/settings`, per-run cost on `CampaignRunResponse`.
