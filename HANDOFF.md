@@ -1,8 +1,11 @@
 # Session Handoff
 
-**Updated:** 2026-06-23
-**Branch:** `main` — **UNCOMMITTED** working-tree changes (resume completeness fix). `make check`
-green (567 passed, 83% cov). Not yet committed/pushed.
+**Updated:** 2026-06-24
+**Branch:** `main` — clean. **`v1.1.0` released & LIVE in production** (deploy run 28087960400,
+conclusion success, ~16.5 min). Prod smoke-tested non-destructively: frontend 200, `/health` 200,
+`/api/profile` 401 (auth gate live). `make check` green on main (578 passed, 83% cov). No DB
+migration was needed. Merge commit `a7dec74`; feature branch `fix/resume-completeness-education-skills`
+merged (can be deleted).
 
 ---
 
