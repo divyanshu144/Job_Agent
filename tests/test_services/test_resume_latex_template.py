@@ -18,6 +18,16 @@ from backend.services.resume_latex_template import (
 )
 
 
+def test_latex_format_template_has_ats_text_layer_directives() -> None:
+    """The PDF text layer must extract cleanly for ATS parsers — guard the directives
+    that fix f-ligature drop ('fixed'->'xed', 'flagged'->'agged'). Removing any of
+    these regresses ATS-readability, which is invisible in the rendered image."""
+    src = load_latex_format()
+    assert "\\input{glyphtounicode}" in src
+    assert "\\pdfgentounicode=1" in src
+    assert "\\DisableLigatures" in src
+
+
 def test_latex_format_template_has_no_hardcoded_identity() -> None:
     """The shipped template must not bake in one person's name/contact — every user's
     resume header is filled from their own profile."""

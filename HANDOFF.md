@@ -1,11 +1,35 @@
 # Session Handoff
 
 **Updated:** 2026-06-24
-**Branch:** `main` — clean. **`v1.1.0` released & LIVE in production** (deploy run 28087960400,
-conclusion success, ~16.5 min). Prod smoke-tested non-destructively: frontend 200, `/health` 200,
-`/api/profile` 401 (auth gate live). `make check` green on main (578 passed, 83% cov). No DB
-migration was needed. Merge commit `a7dec74`; feature branch `fix/resume-completeness-education-skills`
-merged (can be deleted).
+**`v1.1.0` is LIVE in production** (deploy run 28087960400, success). BUT a newly-found
+**ATS-critical resume bug is fixed on branch `fix/resume-ats-ligatures`, NOT yet in prod** —
+needs a `v1.1.1` deploy.
+
+## In flight: ATS ligature fix (branch `fix/resume-ats-ligatures`)
+**Found by actually rendering a resume + extracting its text** (we'd been fixing blind all
+session). The PDF *image* was perfect, but the **text layer garbled f-ligatures** —
+`fixed`->`xed`, `flagged`->`agged`, `MLflow`->`MLow`. ATS parsers read the text layer, so they
+saw garbage. This is exactly what the user pasted in the very first message (misread then as
+truncation). Fix in `assets/latex-format.tex`: `\usepackage{lmodern}` + `\usepackage{microtype}`
++ `\input{glyphtounicode}` + `\pdfgentounicode=1` + `\DisableLigatures`. Verified end-to-end
+(rendered rich resume, extracted text — all words clean, 1 page, all content present). Deploy
+packages confirmed: microtype ∈ texlive-latex-recommended, lmodern ∈ texlive-fonts-recommended
+(both in the Dockerfile backend-tex stage). Guard test added. `make check` green (579 passed).
+Repro/verify script: `/tmp/render_sample_resume.py` (PYTHONPATH=. python ...).
+
+**Next action:** merge `fix/resume-ats-ligatures` -> main, tag **`v1.1.1`**, deploy (this is the
+deploy that actually fixes real users' resumes). No DB migration.
+
+**Open discussion (not a bug):** user asked whether to use Opus for resume tailoring. Recommended
+NO — the resume problems were code/template bugs, not model IQ; Sonnet suits the constrained
+tailoring task and matches the user's own routing rule; Opus is ~5x cost on every analysis. If
+validating, flip `ResumeTailorerAgent.model = OPUS` and A/B via evals.
+
+---
+
+## Previously this session — v1.1.0 (LIVE)
+Prod smoke-tested: frontend 200, `/health` 200, `/api/profile` 401. Merge commit `a7dec74`.
+Branch `fix/resume-completeness-education-skills` merged (can be deleted).
 
 ---
 

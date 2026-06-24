@@ -5,7 +5,19 @@
 \usepackage{hyperref}
 \usepackage{xcolor}
 \usepackage[T1]{fontenc}
+\usepackage{lmodern}
 \usepackage{textcomp}
+\usepackage{microtype}
+
+% ATS safety: the PDF text layer must extract as real characters, because ATS
+% parsers read the text layer, not the image. Two measures together:
+%   1) glyphtounicode + pdfgentounicode emit a ToUnicode map.
+%   2) DisableLigatures removes f-ligatures (fi, fl, ffi, ffl) so there is no
+%      ligature glyph to drop on extraction ("fixed" -> "xed", "flagged" -> "agged").
+% Verified: every f-ligature word extracts correctly with this combination.
+\input{glyphtounicode}
+\pdfgentounicode=1
+\DisableLigatures{encoding = *, family = * }
 
 \definecolor{accent}{HTML}{1A1A2E}
 
