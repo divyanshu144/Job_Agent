@@ -38,11 +38,30 @@ skills authoritative.
   default 4096; `ResumeTailorerAgent` + `_ResumeLatexAgent` -> 8192) so rich resumes aren't
   truncated mid-document.
 
-**Next action (cold-start):** (1) user confirms the guessed degrees in `data/candidate_profile.yaml`
-and via the new UI; (2) render `ProfileSetup` in a browser to eyeball the new sections (not
-automated); (3) commit on a branch + PR.
+**Header generalization (DONE this session):** `assets/latex-format.tex` hardcoded the admin's
+name/contact/links in every user's resume PDF. Replaced with a `%%JOBFIT_HEADER%%` marker built
+per-user from `ResumeIdentity` (`resume_identity_from_profile`: YAML identity + review links +
+account email; `phone` added to `ExtractedIdentity`/extractor/YAML). `download_resume_pdf` now
+passes the user's identity. **Still open:** `campaign_orchestrator._resume_tailor` uses the static
+`assets/resume.tex` (the admin's WHOLE resume) via `tailor_resume_pdf` — that path must be routed
+through the structured template too (bigger refactor, not just a header).
+
+**Mobile sign-out (DONE this session):** Sign out lived only in the desktop sidebar
+(`hidden lg:flex`); the mobile overlay had no logout. Added a user block + Sign out to the mobile
+menu (`App.tsx`).
+
+**Branch:** `fix/resume-completeness-education-skills` — pushed (3 commits: education/skills +
+truncation fixes, header generalization, mobile sign-out). `make check` green (578 passed).
+
+**Next action (cold-start):** (1) user confirms the guessed degrees in `data/candidate_profile.yaml`;
+(2) eyeball ProfileSetup + the mobile menu in a browser (not automated here — env can't host the
+app: native PG on :5432 shadows docker + no pgvector); (3) decide deploy (merge to main + tag) vs.
+also fixing the campaign `resume.tex` path first; (4) drop the local `jobfit` PG role I created:
+`psql -h 127.0.0.1 -U divyanshu -d postgres -c "DROP DATABASE IF EXISTS jobfit; DROP ROLE IF EXISTS jobfit;"`
 
 **Known issues NOT fixed (deliberate — not defects to patch blind):**
+- `campaign_orchestrator._resume_tailor` → static `assets/resume.tex` is the admin's whole resume
+  for every user's campaign (see above).
 - `discovery.py:11` reads the admin's on-disk `candidate_profile.yaml` `search_profiles` for ALL
   users — multi-tenant gap, but needs a decision on whether discovery is per-user or global first.
 - Deferred features: `GET/PATCH /api/campaign/settings`, per-run cost on `CampaignRunResponse`.
