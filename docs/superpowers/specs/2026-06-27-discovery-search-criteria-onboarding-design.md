@@ -1,8 +1,11 @@
-# Design: Guided job-search onboarding + per-user discovery criteria (Phase 1)
+# Design: Admin job-search criteria for discovery (Phase 1)
 
 **Date:** 2026-06-27
 **Status:** Approved design, pre-implementation
 **Author:** pairing session (Divyanshu + Claude)
+**Scope decision:** **Admin-only for now.** Discovery is already gated `require_admin` on
+every route (`routes/discovery.py`), so criteria come from the **admin's** profile and only
+the admin sees the setup. No multi-user onboarding, no per-user feed isolation in this phase.
 
 ## Problem
 
@@ -36,20 +39,22 @@ criteria.
 
 ## Scope
 
-**In scope (Phase 1)**
-- New required search criteria (target roles + locations) collected via a guided step.
-- Persist on the existing per-user `ProfileReviewData` (reuse `work_preferences.locations`;
+**In scope (Phase 1, admin-only)**
+- Required search criteria (target roles + locations) set by the **admin**.
+- Persist on the admin's existing `ProfileReviewData` (reuse `work_preferences.locations`;
   add a clean `target_roles` field).
-- Discovery builds its `SearchProfile` from the triggering user's DB profile, not the file.
-- Discovery scoped to the triggering user.
-- Clear "set up your job search" gate/empty state on Discover when criteria are missing.
+- Discovery builds its `SearchProfile` from the **admin's** DB profile, not the on-disk file.
+  (The discovery routes' `current_user` is always the admin, since they are `require_admin`.)
+- Clear "set up your search" gate/empty state on the Discover page when the admin's criteria
+  are missing (replacing the un-actionable "edit data/candidate_profile.yaml" hint).
 
 **Out of scope (later)**
 - Phase 2 semantic Stage-1 matching (separate spec).
-- Per-user feed isolation (jobs table stays global; `relevance_score` stays single-valued,
-  scored against the triggering user — acceptable while discovery is admin/operator-driven).
-- Campaign enablement (campaigns are not user-available today). Campaign will read the same
-  criteria source when it is exposed; no campaign UI work here.
+- Any non-admin / multi-user experience: per-user onboarding, per-user criteria, and per-user
+  feed isolation are all deferred. Discovery stays admin-only as it is today; jobs table and
+  single-valued `relevance_score` are unchanged.
+- Campaign enablement (campaigns are not user-available). It can read the same criteria source
+  when exposed; no campaign work here.
 
 ## Data model
 
@@ -86,28 +91,33 @@ discovery path.
 
 ## Backend wiring
 
-- `routes/discovery.py` (`POST /discovery/run`, `/run/all`) already has `current_user`.
-  - Load the user's owned profile (`get_owned_profile`).
+- `routes/discovery.py` (`POST /discovery/run`, `/run/all`, batch variants) already has
+  `current_user` via `require_admin` — that is the admin.
+  - Load the admin's owned profile (`get_owned_profile`).
   - Build criteria via the helper.
-  - If criteria are empty → **return a clear 4xx** (`{"detail": "Set up your job search
-    first — add target roles and locations."}`) instead of starting a run that scores 0.
+  - If criteria are empty → **return a clear 4xx** (`{"detail": "Set up your search first —
+    add target roles and locations."}`) instead of starting a run that scores 0.
   - Otherwise pass the criteria into the discovery run.
-- `services/discovery.py`: thread `criteria: list[SearchProfile]` (and `user_id`) through
-  `run_discovery`, `_run_discovery_task`, `_run_source_task`, `_process_job`, and the batch
-  path, replacing every `_load_search_profiles()` call. `_stage1_pass`, `_location_allowed`,
-  `_match_profiles` already take `profiles` — pass the per-user list.
+- `services/discovery.py`: thread `criteria: list[SearchProfile]` through `run_discovery`,
+  `_run_discovery_task`, `_run_source_task`, `_process_job`, and the batch path, replacing
+  every `_load_search_profiles()` call. `_stage1_pass`, `_location_allowed`,
+  `_match_profiles` already take `profiles` — pass the admin's list.
 - `Job.matched_profiles` stores the synthesized profile name(s) as today.
 
-## Frontend
+## Frontend (admin-only; lives on the Discover page)
 
-- **Onboarding step** ("Set up your job search"): one short screen.
+Since only the admin uses discovery, the "guided step" is an inline setup on the Discover
+page rather than a separate first-run flow for all users.
+
+- **Search setup panel** ("Set up your search") on the Discover page:
   - Target roles — chip input, **≥1 required**.
   - Locations — chip input with a "Remote" chip, **≥1 required**.
-  - Optional: remote-only toggle, seniority (deferred if it adds noise).
+  - Optional: remote-only toggle (seniority deferred to avoid noise).
   - Saves via existing `PUT /profile/review` (now including `target_roles`).
-- **Gate / empty states:** Discover (and Campaign, read-only note) detect missing criteria
-  and render a "Tell us what you're looking for → Set up your search" CTA routing to the
-  step. Replaces the current `0`-with-"edit data/candidate_profile.yaml" message.
+- **Empty-state gate:** when the admin's criteria are missing, the Discover page renders this
+  setup panel (a "tell us what you're looking for to start" prompt) instead of the current
+  `0`-with-"edit data/candidate_profile.yaml" message. Once set, the panel collapses to a
+  small "editing your search" affordance and the Fetch/Batch actions are enabled.
 - Reuse the existing chip-input pattern from the skills/education work for consistency.
 
 ## Validation & errors
@@ -132,12 +142,16 @@ discovery path.
 ## Rollout
 
 - No DB migration (JSON field).
-- After deploy, existing users will see the "set up your job search" gate until they fill it
-  — expected and correct (they currently have no criteria).
+- After deploy, the **admin** sees the "set up your search" panel until they fill roles +
+  locations — expected and correct (no criteria exist today). Non-admins are unaffected
+  (they have no discovery access).
 - Ships as its own tag (e.g. `v1.2.0`).
 
 ## Open questions (resolved)
 
 - Field vs reuse → **add `target_roles`** (avoid `role_types` ambiguity). ✅
 - Slicing → **Phase 1 (this spec) first**, semantic matching as a separate spec. ✅
-- Onboarding form vs settings panel → **guided step**, with roles + locations **required**. ✅
+- Audience → **admin-only for now** (discovery is already `require_admin`); multi-user
+  onboarding deferred. ✅
+- Setup placement → **inline setup panel on the Discover page**, roles + locations
+  **required**. ✅
