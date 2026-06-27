@@ -48,13 +48,12 @@ criteria.
 - Clear "set up your search" gate/empty state on the Discover page when the admin's criteria
   are missing (replacing the un-actionable "edit data/candidate_profile.yaml" hint).
 
-**Out of scope (later)**
-- Phase 2 semantic Stage-1 matching (separate spec).
-- Any non-admin / multi-user experience: per-user onboarding, per-user criteria, and per-user
-  feed isolation are all deferred. Discovery stays admin-only as it is today; jobs table and
-  single-valued `relevance_score` are unchanged.
-- Campaign enablement (campaigns are not user-available). It can read the same criteria source
-  when exposed; no campaign work here.
+**Out of scope (deferred — see "Future work" below, tracked not dropped)**
+- Phase 2 semantic Stage-1 matching.
+- Non-admin / multi-user experience: multi-user discovery, per-user onboarding, per-user feed
+  isolation. Discovery stays admin-only as today; jobs table and single-valued
+  `relevance_score` unchanged.
+- Campaign enablement.
 
 ## Data model
 
@@ -146,6 +145,25 @@ page rather than a separate first-run flow for all users.
   locations — expected and correct (no criteria exist today). Non-admins are unaffected
   (they have no discovery access).
 - Ships as its own tag (e.g. `v1.2.0`).
+
+## Future work (deferred and tracked — NOT dropped)
+
+These are intentionally out of this phase but planned. Each becomes its own spec when picked
+up. Phase 1 is built so these extend it rather than require a rewrite (criteria already live
+on per-user `ProfileReviewData`; the discovery criteria builder already takes a profile).
+
+1. **Multi-user discovery** — open discovery to non-admin users (remove `require_admin` on
+   the relevant routes), each scored against their own criteria.
+2. **Per-user onboarding** — promote the admin Discover-page setup into a guided first-run
+   step for every user (gate discovery until roles + locations are set).
+3. **Per-user criteria** — already stored per-user (`ProfileReviewData`); this item is just
+   surfacing/validating it for all users, not the admin alone.
+4. **Per-user feed isolation** — jobs table is global with a single `relevance_score` today;
+   multi-user needs per-(user, job) relevance so each user sees their own ranked feed.
+5. **Semantic Stage-1 matching** — Phase 2 recall upgrade (embed profile ↔ job), separate
+   spec already discussed.
+6. **Campaign enablement** — when campaigns go user-available, point them at the same
+   criteria source.
 
 ## Open questions (resolved)
 

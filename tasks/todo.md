@@ -64,10 +64,26 @@ candidate below — we revive key_skills and add education.
       beat singleton (min 0/max 100, AZ rebalancing off); documented in `infra/aws/README.md`
 - [x] **Cut `v1.0.0` release tag + deploy** — live, prod smoke-tested at `app.jobfitapp.uk`
 
+## ACTIVE spec: Admin job-search criteria for discovery (Phase 1)
+Spec: `docs/superpowers/specs/2026-06-27-discovery-search-criteria-onboarding-design.md`
+Fixes prod outage: discovery returns 0 for everyone (no search criteria source exists —
+on-disk yaml not in image; no DB profile has search_profiles). Admin-only for now.
+- [ ] Add `target_roles` to `ProfileReviewData` (+ TS mirror)
+- [ ] Discovery reads criteria from admin's DB profile (drop on-disk file dependency); gate with 4xx when missing
+- [ ] Discover-page "Set up your search" panel (roles + locations required) + empty-state gate
+- [ ] Tests + make check; ship as `v1.2.0`
+
+### Deferred & TRACKED (not dropped) — future discovery phases
+- [ ] Phase 2: semantic Stage-1 matching (embed profile <-> job for recall)
+- [ ] Multi-user discovery (open beyond admin; remove require_admin where appropriate)
+- [ ] Per-user onboarding (guided first-run step gating discovery until roles+locations set)
+- [ ] Per-user feed isolation (per-(user,job) relevance; jobs table currently global, single relevance_score)
+- [ ] Campaign: point at the same criteria source when campaigns go user-available
+
 ## Open / candidate (not committed to)
 
 - [ ] Wire discovery `search_profiles` to per-user `yaml_data` (today reads on-disk
-      `data/candidate_profile.yaml`, `discovery.py:57`)
+      `data/candidate_profile.yaml`, `discovery.py:57`)  ← SUPERSEDED by the ACTIVE spec above
 - [ ] Remove the dormant non-`links` `ProfileReviewData` fields (kept `links`)
 - [ ] `GET/PATCH /api/campaign/settings` route pair (enabled toggle + caps display)
 - [ ] Per-run cost on `CampaignRunResponse`
