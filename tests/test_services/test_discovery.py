@@ -1,6 +1,7 @@
 # tests/test_services/test_discovery.py
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
@@ -353,3 +354,33 @@ async def test_update_source_status_writes_error_field(Session):
 
     assert statuses["reed"]["status"] == "failed"
     assert statuses["reed"]["error"] == "401 Unauthorized"
+
+
+def _profile(target_roles, locations):
+    return Profile(
+        yaml_data="identity:\n  name: Admin\n",
+        cv_text="",
+        merged_profile="",
+        profile_review_data=json.dumps(
+            {"target_roles": target_roles, "work_preferences": {"locations": locations}}
+        ),
+    )
+
+
+def test_search_profiles_for_profile_builds_from_roles_and_locations():
+    from backend.services.discovery import DISCOVERY_DEFAULT_MIN_SCORE, search_profiles_for_profile
+
+    profs = search_profiles_for_profile(_profile(["AI Engineer"], ["London", "Remote"]))
+
+    assert len(profs) == 1
+    assert profs[0].target_roles == ["AI Engineer"]
+    assert profs[0].allowed_locations == ["London", "Remote"]
+    assert profs[0].min_score == DISCOVERY_DEFAULT_MIN_SCORE
+
+
+def test_search_profiles_for_profile_empty_when_roles_or_locations_missing():
+    from backend.services.discovery import search_profiles_for_profile
+
+    assert search_profiles_for_profile(_profile([], ["London"])) == []
+    assert search_profiles_for_profile(_profile(["AI Engineer"], [])) == []
+    assert search_profiles_for_profile(None) == []

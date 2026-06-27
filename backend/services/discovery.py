@@ -21,7 +21,11 @@ from backend.services.adzuna_client import fetch_adzuna_jobs
 from backend.services.hn_client import RawJob, fetch_hn_jobs
 from backend.services.instrumentation import log_event, new_trace_id, span, tracked_call
 from backend.services.orchestrator import _run_phase1
-from backend.services.profile_builder import build_compact_profile, get_or_build_profile
+from backend.services.profile_builder import (
+    build_compact_profile,
+    get_or_build_profile,
+    parse_profile_review_data,
+)
 from backend.services.reed_client import fetch_reed_jobs
 from backend.services.remotive_client import fetch_remotive_jobs
 from backend.services.stage2 import (
@@ -52,6 +56,30 @@ class SearchProfile:
     target_roles: list[str]
     allowed_locations: list[str]
     min_score: int
+
+
+DISCOVERY_DEFAULT_MIN_SCORE = 60
+
+
+def search_profiles_for_profile(profile: Any) -> list[SearchProfile]:
+    """Build discovery criteria from a user's saved Profile Review (target roles +
+    locations). Returns [] when either required field is empty — callers treat that
+    as 'search not configured'."""
+    if profile is None:
+        return []
+    review = parse_profile_review_data(profile.profile_review_data)
+    roles = [r.strip() for r in review.target_roles if r.strip()]
+    locations = [loc.strip() for loc in review.work_preferences.locations if loc.strip()]
+    if not roles or not locations:
+        return []
+    return [
+        SearchProfile(
+            name="my-search",
+            target_roles=roles,
+            allowed_locations=locations,
+            min_score=DISCOVERY_DEFAULT_MIN_SCORE,
+        )
+    ]
 
 
 def _load_search_profiles() -> list[SearchProfile]:
