@@ -71,6 +71,7 @@ export interface ProfileWorkPreferences {
 
 export interface ProfileReviewData {
   target_role: string;
+  target_roles: string[];
   key_skills: string[];
   projects: ProfileReviewProject[];
   experience: ProfileReviewExperience[];

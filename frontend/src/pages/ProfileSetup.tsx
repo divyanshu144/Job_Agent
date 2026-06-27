@@ -14,6 +14,7 @@ import type {
 
 const emptyReviewData = (): ProfileReviewData => ({
   target_role: "",
+  target_roles: [],
   key_skills: [],
   projects: [],
   experience: [],
