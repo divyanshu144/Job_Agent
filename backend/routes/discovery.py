@@ -92,7 +92,7 @@ async def trigger_discovery(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     _validate_discovery_source(source)
-    run_id = await run_discovery(source, db)
+    run_id = await run_discovery(source, db, current_user.id)
     return {"run_id": run_id}
 
 
@@ -102,7 +102,7 @@ async def trigger_all_discovery(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """Start a background run that fetches from all configured sources concurrently."""
-    run_id = await run_all_discovery(db)
+    run_id = await run_all_discovery(db, current_user.id)
     return {"run_id": run_id}
 
 
@@ -118,7 +118,7 @@ async def trigger_batch_discovery(
     (typically 1–60 minutes). Poll /discovery/runs/{run_id} for status.
     """
     _validate_discovery_source(source)
-    run_id = await run_batch_discovery(source, db)
+    run_id = await run_batch_discovery(source, db, current_user.id)
     return BatchDiscoveryResponse(run_id=run_id)
 
 
@@ -128,7 +128,7 @@ async def trigger_batch_all_discovery(
     db: AsyncSession = Depends(get_db),
 ) -> BatchDiscoveryResponse:
     """Submit a Batch API run across ALL configured sources in one batch (50% discount)."""
-    run_id = await run_batch_discovery("all", db)
+    run_id = await run_batch_discovery("all", db, current_user.id)
     return BatchDiscoveryResponse(run_id=run_id)
 
 

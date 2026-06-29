@@ -5,11 +5,9 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 import anthropic
-import yaml
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -80,24 +78,6 @@ def search_profiles_for_profile(profile: Any) -> list[SearchProfile]:
             min_score=DISCOVERY_DEFAULT_MIN_SCORE,
         )
     ]
-
-
-def _load_search_profiles() -> list[SearchProfile]:
-    """Read search_profiles from candidate_profile.yaml. Returns [] if missing."""
-    try:
-        text = Path(settings.profile_yaml_path).read_text()
-        data = yaml.safe_load(text)
-        return [
-            SearchProfile(
-                name=p["name"],
-                target_roles=p["target_roles"],
-                allowed_locations=p.get("allowed_locations", []),
-                min_score=p["min_score"],
-            )
-            for p in data.get("search_profiles", [])
-        ]
-    except Exception:
-        return []
 
 
 def _location_allowed(location: str | None, profiles: list[SearchProfile]) -> bool:
@@ -279,7 +259,7 @@ async def _process_job(
 _DISCOVERY_CONCURRENCY = 5
 
 
-async def _run_discovery_task(run_id: str, source: str) -> None:
+async def _run_discovery_task(run_id: str, source: str, user_id: str) -> None:
     # Background task — must own its own session (cannot receive FastAPI DI)
     new_trace_id()  # run-level trace for setup/fetch; each job gets its own later
     # Phase 1: setup — load profiles, build compact profile, fetch jobs
@@ -291,8 +271,8 @@ async def _run_discovery_task(run_id: str, source: str) -> None:
             await db.commit()
 
             # Load search profiles first so Reed/Adzuna can use target_roles as keywords
-            profiles = _load_search_profiles()
-            profile = await get_or_build_profile(db)
+            profile = await get_or_build_profile(db, user_id=user_id)
+            profiles = search_profiles_for_profile(profile)
             compact = build_compact_profile(profile.yaml_data, profile.cv_text)
 
             # Derive keyword string and primary location from configured search profiles
@@ -360,7 +340,7 @@ async def _run_discovery_task(run_id: str, source: str) -> None:
         await db.commit()
 
 
-async def run_discovery(source: str, db: AsyncSession) -> str:
+async def run_discovery(source: str, db: AsyncSession, user_id: str) -> str:
     """Public entry point. Creates DiscoveryRun, fires background task, returns run_id."""
     run = DiscoveryRun(
         source=source,
@@ -370,7 +350,7 @@ async def run_discovery(source: str, db: AsyncSession) -> str:
     )
     db.add(run)
     await db.commit()
-    task = asyncio.create_task(_run_discovery_task(run.id, source))
+    task = asyncio.create_task(_run_discovery_task(run.id, source, user_id))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
     return run.id
@@ -435,7 +415,7 @@ async def _update_source_status(run_id: str, source: str, **fields: Any) -> None
             await db.commit()
 
 
-async def _run_source_task(run_id: str, source: str) -> None:
+async def _run_source_task(run_id: str, source: str, user_id: str) -> None:
     """Fetch and process jobs from one source; update source_statuses[source] throughout."""
     new_trace_id()  # run-level trace for this source's setup/fetch
     await _update_source_status(run_id, source, status="running")
@@ -443,8 +423,8 @@ async def _run_source_task(run_id: str, source: str) -> None:
     # ── Setup: load profile + fetch raw jobs ──────────────────────────────
     try:
         async with SessionLocal() as db:
-            profiles = _load_search_profiles()
-            profile = await get_or_build_profile(db)
+            profile = await get_or_build_profile(db, user_id=user_id)
+            profiles = search_profiles_for_profile(profile)
             compact = build_compact_profile(profile.yaml_data, profile.cv_text)
 
             all_roles = [r for p in profiles for r in p.target_roles]
@@ -516,7 +496,7 @@ async def _run_source_task(run_id: str, source: str) -> None:
     await _update_source_status(run_id, source, status="done", jobs_scored=jobs_scored)
 
 
-async def _run_all_discovery_task(run_id: str, sources: list[str]) -> None:
+async def _run_all_discovery_task(run_id: str, sources: list[str], user_id: str) -> None:
     """Background task: run all configured sources concurrently, then set final run status."""
     async with SessionLocal() as db:
         await db.execute(
@@ -524,7 +504,9 @@ async def _run_all_discovery_task(run_id: str, sources: list[str]) -> None:
         )
         await db.commit()
 
-    await asyncio.gather(*[_run_source_task(run_id, s) for s in sources], return_exceptions=True)
+    await asyncio.gather(
+        *[_run_source_task(run_id, s, user_id) for s in sources], return_exceptions=True
+    )
 
     # Derive overall status: failed only if ALL sources failed, else complete.
     async with SessionLocal() as db:
@@ -542,7 +524,7 @@ async def _run_all_discovery_task(run_id: str, sources: list[str]) -> None:
     _source_status_locks.pop(run_id, None)
 
 
-async def run_all_discovery(db: AsyncSession) -> str:
+async def run_all_discovery(db: AsyncSession, user_id: str) -> str:
     """Create a combined DiscoveryRun for all configured sources; return run_id immediately."""
     sources = _get_configured_sources()
     initial_statuses = {
@@ -557,7 +539,7 @@ async def run_all_discovery(db: AsyncSession) -> str:
     )
     db.add(run)
     await db.commit()
-    task = asyncio.create_task(_run_all_discovery_task(run.id, sources))
+    task = asyncio.create_task(_run_all_discovery_task(run.id, sources, user_id))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
     return run.id
@@ -568,7 +550,7 @@ async def run_all_discovery(db: AsyncSession) -> str:
 # ---------------------------------------------------------------------------
 
 
-async def run_batch_discovery(source: str, db: AsyncSession) -> str:
+async def run_batch_discovery(source: str, db: AsyncSession, user_id: str) -> str:
     """Create a DiscoveryRun for a Batch API run; fire background task; return run_id."""
     run = DiscoveryRun(
         source=source,
@@ -578,13 +560,13 @@ async def run_batch_discovery(source: str, db: AsyncSession) -> str:
     )
     db.add(run)
     await db.commit()
-    task = asyncio.create_task(_run_batch_discovery_task(run.id, source))
+    task = asyncio.create_task(_run_batch_discovery_task(run.id, source, user_id))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
     return run.id
 
 
-async def _run_batch_discovery_task(run_id: str, source: str) -> None:
+async def _run_batch_discovery_task(run_id: str, source: str, user_id: str) -> None:
     """Background task: fetch → stage1 filter → batch submit → poll → process results."""
     import anthropic as _anthropic
 
@@ -605,8 +587,8 @@ async def _run_batch_discovery_task(run_id: str, source: str) -> None:
             )
             await db.commit()
 
-            profiles = _load_search_profiles()
-            profile = await get_or_build_profile(db)
+            profile = await get_or_build_profile(db, user_id=user_id)
+            profiles = search_profiles_for_profile(profile)
             compact = build_compact_profile(profile.yaml_data, profile.cv_text)
 
             all_roles = [r for p in profiles for r in p.target_roles]
