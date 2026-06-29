@@ -14,7 +14,7 @@ async def test_run_batch_discovery_creates_run_with_batch_trigger(session):
     from backend.services.discovery import run_batch_discovery
 
     with patch("backend.services.discovery.asyncio.create_task") as mock_create_task:
-        run_id = await run_batch_discovery("hn", session)
+        run_id = await run_batch_discovery("hn", session, "user-1")
 
     assert run_id is not None
 
@@ -44,6 +44,6 @@ async def test_run_batch_discovery_fires_background_task(session):
         return MagicMock()
 
     with patch("backend.services.discovery.asyncio.create_task", side_effect=capture_task):
-        await run_batch_discovery("hn", session)
+        await run_batch_discovery("hn", session, "user-1")
 
     assert len(task_args) == 1

@@ -14,6 +14,7 @@ def _review_payload() -> dict:
     return {
         "review_data": {
             "target_role": "Backend Platform Engineer",
+            "target_roles": ["Backend Engineer", "Platform Engineer"],
             "key_skills": ["Python", "PostgreSQL", "FastAPI"],
             "projects": [
                 {
@@ -141,6 +142,7 @@ async def test_get_profile_review_creates_default_without_reading_global_cv(app_
     data = resp.json()
     assert data["review_data"] == {
         "target_role": "",
+        "target_roles": [],
         "key_skills": [],
         "projects": [],
         "experience": [],
