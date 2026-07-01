@@ -25,8 +25,10 @@ from backend.services.discovery import (
     run_all_discovery,
     run_batch_discovery,
     run_discovery,
+    search_profiles_for_profile,
 )
 from backend.services.job_shortlist import get_job_shortlist
+from backend.services.profile_builder import get_owned_profile
 
 router = APIRouter(tags=["discovery"])
 
@@ -43,6 +45,15 @@ def _validate_discovery_source(source: str) -> None:
         raise HTTPException(
             status_code=422,
             detail="WorkAtAStartup discovery is disabled. Set ENABLE_WORKATASTARTUP_SOURCE=true.",
+        )
+
+
+async def _require_search_criteria(db: AsyncSession, user_id: str) -> None:
+    profile = await get_owned_profile(db, user_id)
+    if not search_profiles_for_profile(profile):
+        raise HTTPException(
+            status_code=422,
+            detail="Set up your search first — add target roles and locations.",
         )
 
 
@@ -92,7 +103,8 @@ async def trigger_discovery(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     _validate_discovery_source(source)
-    run_id = await run_discovery(source, db)
+    await _require_search_criteria(db, current_user.id)
+    run_id = await run_discovery(source, db, current_user.id)
     return {"run_id": run_id}
 
 
@@ -102,7 +114,8 @@ async def trigger_all_discovery(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """Start a background run that fetches from all configured sources concurrently."""
-    run_id = await run_all_discovery(db)
+    await _require_search_criteria(db, current_user.id)
+    run_id = await run_all_discovery(db, current_user.id)
     return {"run_id": run_id}
 
 
@@ -118,7 +131,8 @@ async def trigger_batch_discovery(
     (typically 1–60 minutes). Poll /discovery/runs/{run_id} for status.
     """
     _validate_discovery_source(source)
-    run_id = await run_batch_discovery(source, db)
+    await _require_search_criteria(db, current_user.id)
+    run_id = await run_batch_discovery(source, db, current_user.id)
     return BatchDiscoveryResponse(run_id=run_id)
 
 
@@ -128,7 +142,8 @@ async def trigger_batch_all_discovery(
     db: AsyncSession = Depends(get_db),
 ) -> BatchDiscoveryResponse:
     """Submit a Batch API run across ALL configured sources in one batch (50% discount)."""
-    run_id = await run_batch_discovery("all", db)
+    await _require_search_criteria(db, current_user.id)
+    run_id = await run_batch_discovery("all", db, current_user.id)
     return BatchDiscoveryResponse(run_id=run_id)
 
 

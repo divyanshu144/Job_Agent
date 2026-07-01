@@ -108,6 +108,18 @@ def test_profile_review_data_serializes_round_trip():
     assert parse_profile_review_data(raw).key_skills == ["Python"]
 
 
+def test_profile_review_data_round_trips_target_roles():
+    from backend.services.profile_builder import (
+        parse_profile_review_data,
+        serialize_profile_review_data,
+    )
+
+    data = ProfileReviewData(target_roles=["AI Engineer", "Backend Engineer"])
+    raw = serialize_profile_review_data(data)
+
+    assert parse_profile_review_data(raw).target_roles == ["AI Engineer", "Backend Engineer"]
+
+
 def test_build_profile_review_text_renders_all_review_sections():
     from backend.services.profile_builder import build_profile_review_text
 

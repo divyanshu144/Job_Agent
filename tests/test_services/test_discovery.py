@@ -1,6 +1,8 @@
 # tests/test_services/test_discovery.py
 from __future__ import annotations
 
+import inspect
+import json
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
@@ -306,7 +308,7 @@ async def test_run_all_discovery_creates_run_with_pending_statuses(session):
         patch("backend.services.discovery._get_configured_sources", return_value=["hn", "reed"]),
         patch("backend.services.discovery.asyncio.create_task"),
     ):
-        run_id = await run_all_discovery(session)
+        run_id = await run_all_discovery(session, "user-1")
 
     run = (
         await session.execute(select(DiscoveryRun).where(DiscoveryRun.id == run_id))
@@ -353,3 +355,74 @@ async def test_update_source_status_writes_error_field(Session):
 
     assert statuses["reed"]["status"] == "failed"
     assert statuses["reed"]["error"] == "401 Unauthorized"
+
+
+def _profile(target_roles, locations):
+    return Profile(
+        yaml_data="identity:\n  name: Admin\n",
+        cv_text="",
+        merged_profile="",
+        profile_review_data=json.dumps(
+            {"target_roles": target_roles, "work_preferences": {"locations": locations}}
+        ),
+    )
+
+
+def test_search_profiles_for_profile_builds_from_roles_and_locations():
+    from backend.services.discovery import DISCOVERY_DEFAULT_MIN_SCORE, search_profiles_for_profile
+
+    profs = search_profiles_for_profile(_profile(["AI Engineer"], ["London", "Remote"]))
+
+    assert len(profs) == 1
+    assert profs[0].target_roles == ["AI Engineer"]
+    assert profs[0].allowed_locations == ["London", "Remote"]
+    assert profs[0].min_score == DISCOVERY_DEFAULT_MIN_SCORE
+
+
+def test_search_profiles_for_profile_adds_remote_when_flag_set():
+    from backend.services.discovery import search_profiles_for_profile
+
+    p = Profile(
+        yaml_data="identity:\n  name: Admin\n",
+        cv_text="",
+        merged_profile="",
+        profile_review_data=json.dumps(
+            {"target_roles": ["AI Engineer"], "work_preferences": {"locations": [], "remote": "yes"}}
+        ),
+    )
+
+    profs = search_profiles_for_profile(p)
+
+    # remote flag satisfies the location requirement and adds a "Remote" allowance
+    assert len(profs) == 1
+    assert profs[0].allowed_locations == ["Remote"]
+
+
+def test_search_profiles_for_profile_empty_when_roles_or_locations_missing():
+    from backend.services.discovery import search_profiles_for_profile
+
+    assert search_profiles_for_profile(_profile([], ["London"])) == []
+    assert search_profiles_for_profile(_profile(["AI Engineer"], [])) == []
+    assert search_profiles_for_profile(None) == []
+
+
+def test_run_entrypoints_accept_user_id():
+    from backend.services import discovery
+
+    for name in ("run_discovery", "run_all_discovery", "run_batch_discovery"):
+        params = inspect.signature(getattr(discovery, name)).parameters
+        assert "user_id" in params, f"{name} must take user_id"
+
+
+def test_discovery_does_not_read_profile_yaml_file(monkeypatch):
+    """The on-disk search-profiles file path must no longer be referenced by the run
+    path — criteria come from the DB profile."""
+    import backend.services.discovery as d
+
+    src = (
+        inspect.getsource(d._run_discovery_task)
+        + inspect.getsource(d._run_source_task)
+        + inspect.getsource(d._run_batch_discovery_task)
+    )
+    assert "_load_search_profiles(" not in src
+    assert "search_profiles_for_profile(" in src

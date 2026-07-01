@@ -165,6 +165,7 @@ class ProfileWorkPreferences(BaseModel):
 
 class ProfileReviewData(BaseModel):
     target_role: str = ""
+    target_roles: list[str] = Field(default_factory=list)
     key_skills: list[str] = Field(default_factory=list)
     projects: list[ProfileReviewProject] = Field(default_factory=list)
     experience: list[ProfileReviewExperience] = Field(default_factory=list)

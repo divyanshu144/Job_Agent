@@ -1,9 +1,28 @@
 # Session Handoff
 
-**Updated:** 2026-06-24
-**`v1.1.0` is LIVE in production** (deploy run 28087960400, success). BUT a newly-found
-**ATS-critical resume bug is fixed on branch `fix/resume-ats-ligatures`, NOT yet in prod** —
-needs a `v1.1.1` deploy.
+**Updated:** 2026-07-01
+**`v1.1.1` is LIVE in production** (ATS ligature fix shipped). Newer work below.
+
+## In flight: Discovery search-criteria Phase 1 (branch `feat/discovery-search-onboarding`)
+Fixes the prod outage where discovery returned 0 jobs for everyone (verified: no user had
+`search_profiles`; the on-disk `data/candidate_profile.yaml` isn't deployed; keyword Stage-1
+rejected all jobs). Admin-only for now. **All 6 plan tasks done, `make check` green (586 passed,
+83% cov). NOT yet merged/deployed.**
+- Spec: `docs/superpowers/specs/2026-06-27-discovery-search-criteria-onboarding-design.md`
+- Plan: `docs/superpowers/plans/2026-06-27-discovery-search-criteria.md`
+- SDD ledger: `.superpowers/sdd/progress.md`
+- Commits: a0d4c2c (target_roles field) · 34c5ff4 (criteria builder) · 41f448d (user_id threading,
+  dropped on-disk file reader) · f498b17 (route 422 gate) · e047d9c (fixed cross-file test
+  regressions from the field+signature changes) · 20d1b1e (Discover setup panel + gate)
+- **Next action:** optional final whole-branch review; then merge `feat/discovery-search-onboarding`
+  -> main + tag `v1.2.0` to deploy. No DB migration (JSON field).
+- Deferred & tracked (future phases): semantic Stage-1 matching; multi-user discovery; per-user
+  onboarding + feed isolation; campaign wiring. See spec "Future work" + todo.md.
+- Minor findings parked for final review are listed in the SDD ledger.
+
+## Previously this session
+**`v1.1.1`** shipped the ATS ligature fix (PDF text layer garbled f-ligatures — `fixed`->`xed`;
+fixed via glyphtounicode + DisableLigatures in `assets/latex-format.tex`).
 
 ## In flight: ATS ligature fix (branch `fix/resume-ats-ligatures`)
 **Found by actually rendering a resume + extracting its text** (we'd been fixing blind all
