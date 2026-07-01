@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { api } from "../api/client";
-import type { DiscoveryRun, DiscoveryFeedItem, DiscoverySources, FunnelMetrics, SourceStatusItem } from "../types";
+import { useState, useEffect, useRef, useCallback, type KeyboardEvent } from "react";
+import { api, errorMessage, ApiError } from "../api/client";
+import type { DiscoveryRun, DiscoveryFeedItem, DiscoverySources, FunnelMetrics, SourceStatusItem, ProfileReviewResponse } from "../types";
 import { JobCard } from "../components/JobCard";
+import { X } from "lucide-react";
 
 const FUNNEL_STEPS: { key: keyof FunnelMetrics; label: string; bar: string }[] = [
   { key: "jobs_found",    label: "Found",    bar: "bg-slate-300"   },
@@ -152,6 +153,209 @@ function FunnelBar({ run, configured, allSources }: { run: DiscoveryRun; configu
   );
 }
 
+// Reusable chip-input, matches the skills chip pattern from ProfileSetup
+function ChipInput({
+  chips,
+  draft,
+  placeholder,
+  onDraftChange,
+  onAdd,
+  onRemove,
+  chipColor = "indigo",
+}: {
+  chips: string[];
+  draft: string;
+  placeholder: string;
+  onDraftChange: (v: string) => void;
+  onAdd: (v: string) => void;
+  onRemove: (i: number) => void;
+  chipColor?: "indigo" | "violet";
+}) {
+  const colorMap = {
+    indigo: {
+      chip: "border-indigo-200 bg-indigo-50 text-indigo-700",
+      btn: "text-indigo-500 hover:bg-indigo-100 hover:text-indigo-700",
+    },
+    violet: {
+      chip: "border-violet-200 bg-violet-50 text-violet-700",
+      btn: "text-violet-500 hover:bg-violet-100 hover:text-violet-700",
+    },
+  };
+  const c = colorMap[chipColor];
+
+  const handleKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      onAdd(draft);
+    } else if (e.key === "Backspace" && !draft && chips.length > 0) {
+      onRemove(chips.length - 1);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2 min-h-[2rem]">
+        {chips.map((chip, i) => (
+          <span
+            key={`${chip}-${i}`}
+            className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-3 pr-1.5 text-sm font-medium ${c.chip}`}
+          >
+            {chip}
+            <button
+              type="button"
+              onClick={() => onRemove(i)}
+              aria-label={`Remove ${chip}`}
+              className={`grid size-5 place-items-center rounded-full transition-colors ${c.btn}`}
+            >
+              <X className="size-3.5" />
+            </button>
+          </span>
+        ))}
+        {chips.length === 0 && (
+          <span className="text-sm text-slate-400 self-center">None yet</span>
+        )}
+      </div>
+      <input
+        value={draft}
+        onChange={(e) => onDraftChange(e.target.value)}
+        onKeyDown={handleKey}
+        onBlur={() => onAdd(draft)}
+        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300/50"
+        placeholder={placeholder}
+      />
+    </div>
+  );
+}
+
+// Panel shown when search criteria (target_roles + locations) are not yet configured
+function SearchSetupPanel({
+  review,
+  onSaved,
+}: {
+  review: ProfileReviewResponse;
+  onSaved: () => void;
+}) {
+  const rd = review.review_data;
+  const [roles, setRoles] = useState<string[]>(rd.target_roles ?? []);
+  const [locations, setLocations] = useState<string[]>(rd.work_preferences?.locations ?? []);
+  const [roleDraft, setRoleDraft] = useState("");
+  const [locationDraft, setLocationDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const addRole = (v: string) => {
+    const val = v.trim();
+    if (!val) return;
+    const already = roles.some((r) => r.toLowerCase() === val.toLowerCase());
+    if (!already) setRoles((prev) => [...prev, val]);
+    setRoleDraft("");
+  };
+
+  const addLocation = (v: string) => {
+    const val = v.trim();
+    if (!val) return;
+    const already = locations.some((l) => l.toLowerCase() === val.toLowerCase());
+    if (!already) setLocations((prev) => [...prev, val]);
+    setLocationDraft("");
+  };
+
+  const addRemote = () => addLocation("Remote");
+
+  const handleSave = async () => {
+    if (roles.length === 0 || locations.length === 0) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await api.saveProfileReview({
+        ...rd,
+        target_roles: roles,
+        work_preferences: {
+          ...(rd.work_preferences ?? { remote: "", role_types: [], industries: [] }),
+          locations,
+        },
+      });
+      onSaved();
+    } catch (err) {
+      setSaveError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const canSave = roles.length > 0 && locations.length > 0;
+
+  return (
+    <div className="rounded-xl border border-indigo-100 bg-white shadow-sm overflow-hidden">
+      <div className="border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-violet-50 px-6 py-5">
+        <h2 className="text-base font-semibold text-slate-900">Set up your search</h2>
+        <p className="mt-0.5 text-sm text-slate-500">
+          Tell us what roles and locations to scan so the discovery pipeline knows what to surface for you.
+        </p>
+      </div>
+
+      <div className="space-y-6 px-6 py-5">
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-slate-700">
+            Target roles
+            <span className="ml-1 text-xs font-normal text-slate-400">(at least one required)</span>
+          </label>
+          <ChipInput
+            chips={roles}
+            draft={roleDraft}
+            placeholder="e.g. Software Engineer, Product Manager — press Enter to add"
+            onDraftChange={setRoleDraft}
+            onAdd={addRole}
+            onRemove={(i) => setRoles((prev) => prev.filter((_, idx) => idx !== i))}
+            chipColor="indigo"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <label className="block text-sm font-medium text-slate-700">
+              Preferred locations
+              <span className="ml-1 text-xs font-normal text-slate-400">(at least one required)</span>
+            </label>
+            {!locations.some((l) => l.toLowerCase() === "remote") && (
+              <button
+                type="button"
+                onClick={addRemote}
+                className="text-xs font-medium text-indigo-600 hover:text-indigo-500 underline underline-offset-2"
+              >
+                + Add Remote
+              </button>
+            )}
+          </div>
+          <ChipInput
+            chips={locations}
+            draft={locationDraft}
+            placeholder="e.g. London, New York — press Enter to add"
+            onDraftChange={setLocationDraft}
+            onAdd={addLocation}
+            onRemove={(i) => setLocations((prev) => prev.filter((_, idx) => idx !== i))}
+            chipColor="violet"
+          />
+        </div>
+
+        {saveError && (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {saveError}
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!canSave || saving}
+          className="rounded-lg bg-indigo-950 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-900 disabled:opacity-40"
+        >
+          {saving ? "Saving…" : "Save search criteria"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const ALL_SOURCES = ["hn", "reed", "adzuna"];
 
 export function Discover() {
@@ -173,8 +377,20 @@ export function Discover() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
   const [timedOutRunId, setTimedOutRunId] = useState<string | null>(null);
+  // Search criteria state
+  const [reviewData, setReviewData] = useState<ProfileReviewResponse | null>(null);
+  const [hasCriteria, setHasCriteria] = useState(true); // optimistic until loaded
+  const [showSetup, setShowSetup] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const attemptsRef = useRef(0);
+
+  const deriveCriteria = (r: ProfileReviewResponse) => {
+    const rd = r.review_data;
+    return (
+      Array.isArray(rd.target_roles) && rd.target_roles.length > 0 &&
+      Array.isArray(rd.work_preferences?.locations) && rd.work_preferences.locations.length > 0
+    );
+  };
 
   const loadFeed = useCallback(async (profile?: string, location?: string) => {
     try {
@@ -218,9 +434,18 @@ export function Discover() {
     }
   };
 
+  // Load profile review + discovery runs in parallel on mount
   useEffect(() => {
-    // Load configured sources and prior runs in parallel
     Promise.all([
+      api.getProfileReview().then((r) => {
+        setReviewData(r);
+        const ok = deriveCriteria(r);
+        setHasCriteria(ok);
+        if (!ok) setShowSetup(true);
+      }).catch(() => {
+        // If the review endpoint is unavailable, don't block discovery
+        setHasCriteria(true);
+      }),
       api.getDiscoverySources().then((r: DiscoverySources) => setConfiguredSources(r.sources)).catch(() => {}),
       api.getDiscoveryRuns().then((runs) => {
         if (runs.length > 0) {
@@ -284,7 +509,13 @@ export function Discover() {
       setActiveRunId(run_id);
     } catch (err) {
       setFetching(false);
-      setFetchError(err instanceof Error ? err.message : "Failed to start discovery");
+      // If backend says criteria are missing (422), show the setup panel
+      if (err instanceof ApiError && err.status === 422) {
+        setShowSetup(true);
+        setFetchError(err.message);
+      } else {
+        setFetchError(err instanceof Error ? err.message : "Failed to start discovery");
+      }
     }
   }
   const triggerFetch = () => startRun(api.triggerAllDiscovery);
@@ -304,6 +535,25 @@ export function Discover() {
     setFeed((prev) => prev.map((j) => (j.id === id ? { ...j, saved } : j)));
   }
 
+  // Called after the setup panel saves successfully — re-derive criteria
+  const handleCriteriaSaved = async () => {
+    try {
+      const r = await api.getProfileReview();
+      setReviewData(r);
+      const ok = deriveCriteria(r);
+      setHasCriteria(ok);
+      if (ok) {
+        setShowSetup(false);
+        setFetchError(null);
+      }
+    } catch {
+      // best-effort: just hide the panel and let the user try
+      setHasCriteria(true);
+      setShowSetup(false);
+      setFetchError(null);
+    }
+  };
+
   const displayRun = activeRun || lastRun;
   const allProfiles = Array.from(new Set(feed.flatMap((j) => j.matched_profiles)));
 
@@ -321,21 +571,27 @@ export function Discover() {
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
           <button
             onClick={triggerFetch}
-            disabled={fetching}
+            disabled={fetching || !hasCriteria}
+            title={!hasCriteria ? "Set up your search criteria first" : undefined}
             className="rounded-lg bg-indigo-950 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-900 disabled:opacity-50"
           >
             {fetching ? "Fetching…" : "Fetch All Jobs"}
           </button>
           <button
             onClick={triggerBatch}
-            disabled={fetching}
-            title="Uses Anthropic Batch API — results arrive asynchronously, funnel will update as batches complete"
+            disabled={fetching || !hasCriteria}
+            title={!hasCriteria ? "Set up your search criteria first" : "Uses Anthropic Batch API — results arrive asynchronously, funnel will update as batches complete"}
             className="rounded-lg border border-indigo-300 px-4 py-2 text-sm font-semibold text-indigo-800 transition-colors hover:bg-indigo-50 disabled:opacity-50"
           >
             Batch mode (50% cheaper)
           </button>
         </div>
       </div>
+
+      {/* Setup panel — shown when criteria are missing or after a 422 */}
+      {showSetup && reviewData && (
+        <SearchSetupPanel review={reviewData} onSaved={handleCriteriaSaved} />
+      )}
 
       {fetchError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -410,22 +666,27 @@ export function Discover() {
         </div>
       )}
 
-      {feed.length === 0 && lastRun?.status === "complete" && (
+      {feed.length === 0 && lastRun?.status === "complete" && !showSetup && (
         <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-xl">
           <p className="text-slate-500">No matched jobs found.</p>
           <p className="text-xs text-slate-400 mt-1">
-            Adjust <code className="bg-slate-100 px-1 py-0.5 rounded">search_profiles</code> in{" "}
-            <code className="bg-slate-100 px-1 py-0.5 rounded">data/candidate_profile.yaml</code>
+            Try adjusting your target roles or locations in the search setup above.
           </p>
         </div>
       )}
 
-      {!displayRun && (
+      {!displayRun && !showSetup && (
         <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-xl">
           <p className="text-slate-600 font-medium">No runs yet</p>
           <p className="text-sm text-slate-400 mt-1">
             Fetch jobs from all configured sources
           </p>
+        </div>
+      )}
+
+      {!displayRun && showSetup && (
+        <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl">
+          <p className="text-slate-500 text-sm">Set up your search to start discovering jobs</p>
         </div>
       )}
     </div>
