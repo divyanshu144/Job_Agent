@@ -429,3 +429,13 @@ def test_discovery_does_not_read_profile_yaml_file(monkeypatch):
     )
     assert "_load_search_profiles(" not in src
     assert "search_profiles_for_profile(" in src
+
+
+def test_job_model_has_embedding_columns():
+    from backend.models import Job
+
+    j = Job(raw_text="x", dedup_hash="h", discovery_run_id="r")
+    assert j.embedding_json is None
+    assert j.embedding_model is None
+
+
