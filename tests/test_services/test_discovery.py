@@ -439,3 +439,29 @@ def test_job_model_has_embedding_columns():
     assert j.embedding_model is None
 
 
+def test_build_intent_text_combines_roles_skills_headline():
+    from backend.services.discovery import build_intent_text
+
+    p = Profile(
+        yaml_data="identity:\n  headline: AI engineer building LLM systems\n",
+        cv_text="",
+        merged_profile="",
+        profile_review_data=json.dumps(
+            {"target_roles": ["AI Engineer"], "key_skills": ["Python", "RAG"]}
+        ),
+    )
+    text = build_intent_text(p)
+    assert "AI Engineer" in text and "Python" in text and "LLM systems" in text
+
+
+def test_semantic_stage1_threshold_and_fallback_signal():
+    from backend.services.discovery import semantic_stage1
+
+    near = [1.0, 0.0, 0.0]
+    same = [1.0, 0.0, 0.0]
+    far = [0.0, 1.0, 0.0]
+    assert semantic_stage1(same, near, 0.5) is True
+    assert semantic_stage1(far, near, 0.5) is False
+    assert semantic_stage1(None, near, 0.5) is None
+    assert semantic_stage1(same, None, 0.5) is None
+

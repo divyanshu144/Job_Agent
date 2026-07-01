@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import anthropic
+import yaml
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +19,7 @@ from backend.models import DiscoveryBatch, DiscoveryRun, Job
 from backend.services.adzuna_client import fetch_adzuna_jobs
 from backend.services.hn_client import RawJob, fetch_hn_jobs
 from backend.services.instrumentation import log_event, new_trace_id, span, tracked_call
+from backend.services.memory import dense_cosine_similarity, embed_texts  # noqa: F401
 from backend.services.orchestrator import _run_phase1
 from backend.services.profile_builder import (
     build_compact_profile,
@@ -81,6 +83,37 @@ def search_profiles_for_profile(profile: Any) -> list[SearchProfile]:
             min_score=DISCOVERY_DEFAULT_MIN_SCORE,
         )
     ]
+
+
+def build_intent_text(profile: Any) -> str:
+    """Compact 'what the candidate wants + is' string for embedding: target roles +
+    key skills + identity headline."""
+    if profile is None:
+        return ""
+    review = parse_profile_review_data(profile.profile_review_data)
+    parts: list[str] = list(review.target_roles) + list(review.key_skills)
+    try:
+        data = yaml.safe_load(profile.yaml_data) or {}
+        headline = (
+            ((data.get("identity") or {}).get("headline") or "") if isinstance(data, dict) else ""
+        )
+        if headline.strip():
+            parts.append(headline.strip())
+    except yaml.YAMLError:
+        pass
+    return ", ".join(p for p in parts if p and p.strip())
+
+
+def semantic_stage1(
+    job_embedding: list[float] | None,
+    intent_embedding: list[float] | None,
+    threshold: float,
+) -> bool | None:
+    """Semantic Stage-1 gate. Returns True/False by cosine threshold when both embeddings
+    exist; None to signal 'embeddings unavailable' so the caller falls back to keyword."""
+    if not job_embedding or not intent_embedding:
+        return None
+    return dense_cosine_similarity(job_embedding, intent_embedding) >= threshold
 
 
 def _location_allowed(location: str | None, profiles: list[SearchProfile]) -> bool:

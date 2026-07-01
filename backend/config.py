@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     embedding_dimensions: int = 1536
     pgvector_enabled: bool = True
+    discovery_semantic_threshold: float = 0.30
     app_env: str = "development"
     # Postgres via the asyncpg driver. Local default matches docker-compose.
     database_url: str = "postgresql+asyncpg://jobfit:jobfit@localhost:5432/jobfit"
