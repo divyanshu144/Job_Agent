@@ -76,9 +76,7 @@ async def test_trigger_batch_all_discovery_returns_run_id(admin_client):
     data = resp.json()
     assert data["run_id"] == "batch-all-id-1"
     assert data["mode"] == "batch"
-    mock_run.assert_called_once_with(
-        "all", mock_run.call_args.args[1], mock_run.call_args.args[2]
-    )
+    mock_run.assert_called_once_with("all", mock_run.call_args.args[1], mock_run.call_args.args[2])
 
 
 async def test_trigger_batch_all_discovery_requires_auth(unauthenticated_client):
