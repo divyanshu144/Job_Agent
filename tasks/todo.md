@@ -68,10 +68,11 @@ candidate below — we revive key_skills and add education.
 Spec: `docs/superpowers/specs/2026-06-27-discovery-search-criteria-onboarding-design.md`
 Fixes prod outage: discovery returns 0 for everyone (no search criteria source exists —
 on-disk yaml not in image; no DB profile has search_profiles). Admin-only for now.
-- [ ] Add `target_roles` to `ProfileReviewData` (+ TS mirror)
-- [ ] Discovery reads criteria from admin's DB profile (drop on-disk file dependency); gate with 4xx when missing
-- [ ] Discover-page "Set up your search" panel (roles + locations required) + empty-state gate
-- [ ] Tests + make check; ship as `v1.2.0`
+- [x] Add `target_roles` to `ProfileReviewData` (+ TS mirror) — a0d4c2c
+- [x] Discovery reads criteria from admin's DB profile (dropped on-disk file dependency); gate with 422 when missing — 34c5ff4, 41f448d, f498b17
+- [x] Discover-page "Set up your search" panel (roles + locations required) + empty-state gate — 20d1b1e
+- [x] Tests + make check green (586 passed, 83% cov) — e047d9c fixed cross-file regressions
+- [ ] Ship as `v1.2.0` (merge feat/discovery-search-onboarding -> main + tag)
 
 ### Deferred & TRACKED (not dropped) — future discovery phases
 - [ ] Phase 2: semantic Stage-1 matching (embed profile <-> job for recall)

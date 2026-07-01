@@ -400,7 +400,10 @@ def test_discovery_does_not_read_profile_yaml_file(monkeypatch):
     path — criteria come from the DB profile."""
     import backend.services.discovery as d
 
-    src = inspect.getsource(d._run_discovery_task) + inspect.getsource(d._run_source_task) \
+    src = (
+        inspect.getsource(d._run_discovery_task)
+        + inspect.getsource(d._run_source_task)
         + inspect.getsource(d._run_batch_discovery_task)
+    )
     assert "_load_search_profiles(" not in src
     assert "search_profiles_for_profile(" in src
