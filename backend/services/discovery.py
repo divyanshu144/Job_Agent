@@ -768,6 +768,10 @@ async def _run_batch_discovery_task(run_id: str, source: str, user_id: str) -> N
             db.add(job)
             await db.flush()
 
+            job_emb = job_embs.get(raw.dedup_hash)
+            if job_emb:
+                await _store_job_embedding(db, job.id, job_emb)
+
             if state == "discovered":
                 stage1_jobs.append((job.id, raw.raw_text))
                 stage1_raw[job.id] = raw.raw_text
