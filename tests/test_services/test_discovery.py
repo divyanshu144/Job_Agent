@@ -387,7 +387,10 @@ def test_search_profiles_for_profile_adds_remote_when_flag_set():
         cv_text="",
         merged_profile="",
         profile_review_data=json.dumps(
-            {"target_roles": ["AI Engineer"], "work_preferences": {"locations": [], "remote": "yes"}}
+            {
+                "target_roles": ["AI Engineer"],
+                "work_preferences": {"locations": [], "remote": "yes"},
+            }
         ),
     )
 
