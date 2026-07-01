@@ -379,6 +379,25 @@ def test_search_profiles_for_profile_builds_from_roles_and_locations():
     assert profs[0].min_score == DISCOVERY_DEFAULT_MIN_SCORE
 
 
+def test_search_profiles_for_profile_adds_remote_when_flag_set():
+    from backend.services.discovery import search_profiles_for_profile
+
+    p = Profile(
+        yaml_data="identity:\n  name: Admin\n",
+        cv_text="",
+        merged_profile="",
+        profile_review_data=json.dumps(
+            {"target_roles": ["AI Engineer"], "work_preferences": {"locations": [], "remote": "yes"}}
+        ),
+    )
+
+    profs = search_profiles_for_profile(p)
+
+    # remote flag satisfies the location requirement and adds a "Remote" allowance
+    assert len(profs) == 1
+    assert profs[0].allowed_locations == ["Remote"]
+
+
 def test_search_profiles_for_profile_empty_when_roles_or_locations_missing():
     from backend.services.discovery import search_profiles_for_profile
 

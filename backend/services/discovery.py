@@ -68,6 +68,9 @@ def search_profiles_for_profile(profile: Any) -> list[SearchProfile]:
     review = parse_profile_review_data(profile.profile_review_data)
     roles = [r.strip() for r in review.target_roles if r.strip()]
     locations = [loc.strip() for loc in review.work_preferences.locations if loc.strip()]
+    remote = (review.work_preferences.remote or "").strip()
+    if remote and not any(loc.lower() == "remote" for loc in locations):
+        locations.append("Remote")
     if not roles or not locations:
         return []
     return [
