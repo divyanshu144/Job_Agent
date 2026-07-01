@@ -9,7 +9,7 @@ from typing import Any
 
 import anthropic
 import yaml
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents.base import HAIKU
@@ -19,7 +19,12 @@ from backend.models import DiscoveryBatch, DiscoveryRun, Job
 from backend.services.adzuna_client import fetch_adzuna_jobs
 from backend.services.hn_client import RawJob, fetch_hn_jobs
 from backend.services.instrumentation import log_event, new_trace_id, span, tracked_call
-from backend.services.memory import dense_cosine_similarity, embed_texts  # noqa: F401
+from backend.services.memory import (
+    _pgvector_available,
+    _vector_literal,
+    dense_cosine_similarity,
+    embed_texts,
+)
 from backend.services.orchestrator import _run_phase1
 from backend.services.profile_builder import (
     build_compact_profile,
@@ -173,6 +178,21 @@ def _match_profiles(score: int, profiles: list[SearchProfile]) -> list[str]:
     return [p.name for p in profiles if score >= p.min_score]
 
 
+async def _store_job_embedding(db: AsyncSession, job_id: str, embedding: list[float]) -> None:
+    await db.execute(
+        update(Job)
+        .where(Job.id == job_id)
+        .values(embedding_json=json.dumps(embedding), embedding_model=settings.embedding_model)
+    )
+    await db.commit()
+    if await _pgvector_available(db):
+        await db.execute(
+            text("UPDATE jobs SET embedding_vector = CAST(:v AS vector) WHERE id = :id"),
+            {"id": job_id, "v": _vector_literal(embedding)},
+        )
+        await db.commit()
+
+
 async def _process_job(
     db: AsyncSession,
     run_id: str,
@@ -181,6 +201,8 @@ async def _process_job(
     profile: Any,
     compact: str,
     source_tag: str = "hn",
+    job_embedding: list[float] | None = None,
+    intent_embedding: list[float] | None = None,
 ) -> None:
     new_trace_id()  # one trace per job: groups its stage2 + phase1 spans/events
     existing = (
@@ -210,7 +232,13 @@ async def _process_job(
     await db.flush()
     await db.commit()
 
-    if not _stage1_pass(raw.raw_text, profiles):
+    if job_embedding:
+        await _store_job_embedding(db, job.id, job_embedding)
+
+    passed = semantic_stage1(job_embedding, intent_embedding, settings.discovery_semantic_threshold)
+    if passed is None:
+        passed = _stage1_pass(raw.raw_text, profiles)
+    if not passed:
         await db.execute(update(Job).where(Job.id == job.id).values(state="filtered"))
         await db.commit()
         return
@@ -351,13 +379,26 @@ async def _run_discovery_task(run_id: str, source: str, user_id: str) -> None:
             await db.commit()
         return
 
-    # Phase 2: process jobs concurrently, each with its own session
+    # Phase 2: compute embeddings then process jobs concurrently, each with its own session
+    intent_emb_list = await embed_texts([build_intent_text(profile)])
+    intent_emb = intent_emb_list[0] if intent_emb_list else None
+    job_emb_list = (
+        await embed_texts([r.raw_text[:2000] for r in raw_jobs]) if raw_jobs else None
+    )
+    job_embs = {
+        r.dedup_hash: (job_emb_list[i] if job_emb_list else None)
+        for i, r in enumerate(raw_jobs)
+    }
+
     sem = asyncio.Semaphore(_DISCOVERY_CONCURRENCY)
 
     async def _bounded(raw: RawJob) -> None:
         async with sem:
             async with SessionLocal() as db:
-                await _process_job(db, run_id, raw, profiles, profile, compact, source_tag=source)
+                await _process_job(
+                    db, run_id, raw, profiles, profile, compact, source_tag=source,
+                    job_embedding=job_embs.get(raw.dedup_hash), intent_embedding=intent_emb,
+                )
 
     results = await asyncio.gather(*[_bounded(raw) for raw in raw_jobs], return_exceptions=True)
     for exc in results:
@@ -497,13 +538,26 @@ async def _run_source_task(run_id: str, source: str, user_id: str) -> None:
 
     await _update_source_status(run_id, source, jobs_found=len(raw_jobs))
 
-    # ── Phase 2: process jobs concurrently ───────────────────────────────
+    # ── Phase 2: compute embeddings then process jobs concurrently ──────────
+    intent_emb_list = await embed_texts([build_intent_text(profile)])
+    intent_emb = intent_emb_list[0] if intent_emb_list else None
+    job_emb_list = (
+        await embed_texts([r.raw_text[:2000] for r in raw_jobs]) if raw_jobs else None
+    )
+    job_embs = {
+        r.dedup_hash: (job_emb_list[i] if job_emb_list else None)
+        for i, r in enumerate(raw_jobs)
+    }
+
     sem = asyncio.Semaphore(_DISCOVERY_CONCURRENCY)
 
     async def _bounded(raw: RawJob) -> None:
         async with sem:
             async with SessionLocal() as db:
-                await _process_job(db, run_id, raw, profiles, profile, compact, source_tag=source)
+                await _process_job(
+                    db, run_id, raw, profiles, profile, compact, source_tag=source,
+                    job_embedding=job_embs.get(raw.dedup_hash), intent_embedding=intent_emb,
+                )
 
     results = await asyncio.gather(*[_bounded(raw) for raw in raw_jobs], return_exceptions=True)
     for exc in results:
@@ -675,6 +729,18 @@ async def _run_batch_discovery_task(run_id: str, source: str, user_id: str) -> N
     stage1_jobs: list[tuple[str, str]] = []  # (job_id, raw_text) for batch submission
     stage1_raw: dict[str, str] = {}
 
+    # Compute embeddings for semantic Stage-1 gate (keyword fallback when unavailable)
+    intent_emb_list = await embed_texts([build_intent_text(profile)])
+    intent_emb = intent_emb_list[0] if intent_emb_list else None
+    all_raw_jobs = [raw for _src, raw in raw_by_source]
+    job_emb_list = (
+        await embed_texts([r.raw_text[:2000] for r in all_raw_jobs]) if all_raw_jobs else None
+    )
+    job_embs = {
+        r.dedup_hash: (job_emb_list[i] if job_emb_list else None)
+        for i, r in enumerate(all_raw_jobs)
+    }
+
     async with SessionLocal() as db:
         for src, raw in raw_by_source:
             # Skip duplicates
@@ -684,7 +750,12 @@ async def _run_batch_discovery_task(run_id: str, source: str, user_id: str) -> N
             if existing is not None:
                 continue
 
-            state = "discovered" if _stage1_pass(raw.raw_text, profiles) else "filtered"
+            passed = semantic_stage1(
+                job_embs.get(raw.dedup_hash), intent_emb, settings.discovery_semantic_threshold
+            )
+            if passed is None:
+                passed = _stage1_pass(raw.raw_text, profiles)
+            state = "discovered" if passed else "filtered"
             job = Job(
                 sources=json.dumps([src]),
                 source_id=raw.source_id,

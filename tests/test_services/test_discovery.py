@@ -465,3 +465,43 @@ def test_semantic_stage1_threshold_and_fallback_signal():
     assert semantic_stage1(None, near, 0.5) is None
     assert semantic_stage1(same, None, 0.5) is None
 
+
+async def test_process_job_semantic_gate_filters_distant_job(session):
+    from unittest.mock import patch
+
+    from backend.services.discovery import SearchProfile, _process_job
+    from backend.services.hn_client import RawJob
+
+    run = DiscoveryRun(source="hn", status="running", started_at=datetime.now(timezone.utc))
+    profile = Profile(id="ps1", yaml_data="x", cv_text="", merged_profile="m",
+                      last_refreshed_at=datetime.now(timezone.utc))
+    session.add_all([run, profile]); await session.commit()
+    raw = RawJob(source_id="s", source_url="u", raw_text="Backend Engineer role " * 5, dedup_hash="semantic-far")
+    profiles = [SearchProfile(name="p", target_roles=["Backend Engineer"], allowed_locations=[], min_score=65)]
+
+    # job embedding far from intent -> filtered by semantic gate (no keyword fallback since embeddings present)
+    with patch("backend.services.discovery.settings.discovery_semantic_threshold", 0.5):
+        await _process_job(session, run.id, raw, profiles, profile, "compact",
+                           job_embedding=[0.0, 1.0], intent_embedding=[1.0, 0.0])
+    job = (await session.execute(select(Job).where(Job.dedup_hash == "semantic-far"))).scalar_one()
+    assert job.state == "filtered"
+    assert job.embedding_json is not None  # embedding still stored
+
+
+async def test_process_job_falls_back_to_keyword_when_no_embeddings(session):
+    from backend.services.discovery import SearchProfile, _process_job
+    from backend.services.hn_client import RawJob
+
+    run = DiscoveryRun(source="hn", status="running", started_at=datetime.now(timezone.utc))
+    profile = Profile(id="ps2", yaml_data="x", cv_text="", merged_profile="m",
+                      last_refreshed_at=datetime.now(timezone.utc))
+    session.add_all([run, profile]); await session.commit()
+    # keyword does NOT match -> filtered (proves fallback path runs)
+    raw = RawJob(source_id="s", source_url="u", raw_text="Sales manager wanted " * 5, dedup_hash="kw-fallback")
+    profiles = [SearchProfile(name="p", target_roles=["Backend Engineer"], allowed_locations=[], min_score=65)]
+
+    await _process_job(session, run.id, raw, profiles, profile, "compact",
+                       job_embedding=None, intent_embedding=None)
+    job = (await session.execute(select(Job).where(Job.dedup_hash == "kw-fallback"))).scalar_one()
+    assert job.state == "filtered"
+
