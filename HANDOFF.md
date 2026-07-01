@@ -1,13 +1,15 @@
 # Session Handoff
 
 **Updated:** 2026-07-01
-**`v1.1.1` is LIVE in production** (ATS ligature fix shipped). Newer work below.
+**`v1.2.0` is LIVE in production** (deploy run 28523988832, success; smoke: frontend 200,
+/health 200, /api/discovery/feed 401). Ships the discovery search-criteria fix below.
 
-## In flight: Discovery search-criteria Phase 1 (branch `feat/discovery-search-onboarding`)
-Fixes the prod outage where discovery returned 0 jobs for everyone (verified: no user had
-`search_profiles`; the on-disk `data/candidate_profile.yaml` isn't deployed; keyword Stage-1
-rejected all jobs). Admin-only for now. **All 6 plan tasks done, `make check` green (586 passed,
-83% cov). NOT yet merged/deployed.**
+## Shipped: Discovery search-criteria Phase 1 (v1.2.0, merged `a4fca24`)
+Fixed the prod outage where discovery returned 0 jobs for everyone (no user had `search_profiles`;
+the on-disk `data/candidate_profile.yaml` isn't deployed; keyword Stage-1 rejected all jobs).
+Admin-only. All 6 plan tasks done + final Opus whole-branch review (READY, no Critical/Important).
+**NEXT VERIFY:** discovery still shows 0 until the admin enters roles+locations in the new
+Discover "Set up your search" panel, saves, then Fetch. Then confirm jobs actually score.
 - Spec: `docs/superpowers/specs/2026-06-27-discovery-search-criteria-onboarding-design.md`
 - Plan: `docs/superpowers/plans/2026-06-27-discovery-search-criteria.md`
 - SDD ledger: `.superpowers/sdd/progress.md`
