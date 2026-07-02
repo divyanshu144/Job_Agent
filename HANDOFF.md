@@ -1,8 +1,24 @@
 # Session Handoff
 
-**Updated:** 2026-07-01
-**`v1.2.0` is LIVE in production** (deploy run 28523988832, success; smoke: frontend 200,
-/health 200, /api/discovery/feed 401). Ships the discovery search-criteria fix below.
+**Updated:** 2026-07-02
+**`v1.2.0` is LIVE in production.** Phase 2 (semantic matching) is built on branch
+`feat/discovery-semantic-matching`, `make check` green (594) — NOT yet merged/deployed.
+
+## In flight: Discovery semantic matching Phase 2 (branch `feat/discovery-semantic-matching`)
+Replaces discovery's literal keyword Stage-1 with an embedding cosine gate (job vs. candidate
+intent), reusing the live text-embedding-3-small + pgvector infra; adds `POST /api/discovery/rescore`
+to re-evaluate the ~844 stuck `filtered` jobs. Verified in prod earlier that the Phase-1 pipeline
+scores a fresh relevant job (78) but re-running sources hits dedup — hence the rescore.
+- Spec: `docs/superpowers/specs/2026-07-01-discovery-semantic-matching-design.md`
+- Plan: `docs/superpowers/plans/2026-07-01-discovery-semantic-matching.md`
+- SDD ledger: `.superpowers/sdd/progress.md` (Tasks 1-5 done; Task 4 controller-implemented after
+  a subagent session-limit; one item flagged for final review: rescore dedup-hash-rename approach)
+- **This phase REQUIRES a DB migration** (0013, pgvector column on `jobs`).
+- **Next action:** final whole-branch review → merge → run `aws-migrate.yml` (0013) → tag `v1.3.0`
+  → deploy → `POST /api/discovery/rescore` and calibrate `DISCOVERY_SEMANTIC_THRESHOLD` (default 0.30).
+
+## Shipped: Discovery search-criteria Phase 1 (v1.2.0, merged `a4fca24`)
+Fixed the prod outage where discovery returned 0 jobs for everyone (no user had `search_profiles`;
 
 ## Shipped: Discovery search-criteria Phase 1 (v1.2.0, merged `a4fca24`)
 Fixed the prod outage where discovery returned 0 jobs for everyone (no user had `search_profiles`;
