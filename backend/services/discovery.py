@@ -382,12 +382,9 @@ async def _run_discovery_task(run_id: str, source: str, user_id: str) -> None:
     # Phase 2: compute embeddings then process jobs concurrently, each with its own session
     intent_emb_list = await embed_texts([build_intent_text(profile)])
     intent_emb = intent_emb_list[0] if intent_emb_list else None
-    job_emb_list = (
-        await embed_texts([r.raw_text[:2000] for r in raw_jobs]) if raw_jobs else None
-    )
+    job_emb_list = await embed_texts([r.raw_text[:2000] for r in raw_jobs]) if raw_jobs else None
     job_embs = {
-        r.dedup_hash: (job_emb_list[i] if job_emb_list else None)
-        for i, r in enumerate(raw_jobs)
+        r.dedup_hash: (job_emb_list[i] if job_emb_list else None) for i, r in enumerate(raw_jobs)
     }
 
     sem = asyncio.Semaphore(_DISCOVERY_CONCURRENCY)
@@ -396,8 +393,15 @@ async def _run_discovery_task(run_id: str, source: str, user_id: str) -> None:
         async with sem:
             async with SessionLocal() as db:
                 await _process_job(
-                    db, run_id, raw, profiles, profile, compact, source_tag=source,
-                    job_embedding=job_embs.get(raw.dedup_hash), intent_embedding=intent_emb,
+                    db,
+                    run_id,
+                    raw,
+                    profiles,
+                    profile,
+                    compact,
+                    source_tag=source,
+                    job_embedding=job_embs.get(raw.dedup_hash),
+                    intent_embedding=intent_emb,
                 )
 
     results = await asyncio.gather(*[_bounded(raw) for raw in raw_jobs], return_exceptions=True)
@@ -541,12 +545,9 @@ async def _run_source_task(run_id: str, source: str, user_id: str) -> None:
     # ── Phase 2: compute embeddings then process jobs concurrently ──────────
     intent_emb_list = await embed_texts([build_intent_text(profile)])
     intent_emb = intent_emb_list[0] if intent_emb_list else None
-    job_emb_list = (
-        await embed_texts([r.raw_text[:2000] for r in raw_jobs]) if raw_jobs else None
-    )
+    job_emb_list = await embed_texts([r.raw_text[:2000] for r in raw_jobs]) if raw_jobs else None
     job_embs = {
-        r.dedup_hash: (job_emb_list[i] if job_emb_list else None)
-        for i, r in enumerate(raw_jobs)
+        r.dedup_hash: (job_emb_list[i] if job_emb_list else None) for i, r in enumerate(raw_jobs)
     }
 
     sem = asyncio.Semaphore(_DISCOVERY_CONCURRENCY)
@@ -555,8 +556,15 @@ async def _run_source_task(run_id: str, source: str, user_id: str) -> None:
         async with sem:
             async with SessionLocal() as db:
                 await _process_job(
-                    db, run_id, raw, profiles, profile, compact, source_tag=source,
-                    job_embedding=job_embs.get(raw.dedup_hash), intent_embedding=intent_emb,
+                    db,
+                    run_id,
+                    raw,
+                    profiles,
+                    profile,
+                    compact,
+                    source_tag=source,
+                    job_embedding=job_embs.get(raw.dedup_hash),
+                    intent_embedding=intent_emb,
                 )
 
     results = await asyncio.gather(*[_bounded(raw) for raw in raw_jobs], return_exceptions=True)
@@ -950,3 +958,76 @@ async def _run_batch_discovery_task(run_id: str, source: str, user_id: str) -> N
         logger.info(
             "Batch run %s complete: stage2_passed=%d scored=%d", run_id, passed_stage2, scored
         )
+
+
+async def _run_rescore_task(run_id: str, user_id: str) -> None:
+    """Re-evaluate the backlog of `filtered` jobs against current criteria via the semantic
+    gate. Frees each stale row's dedup_hash so `_process_job` re-creates + re-scores it; the
+    orphaned `<hash>::rescore-old` row stays filtered and is ignored by the feed."""
+    async with SessionLocal() as db:
+        profile = await get_or_build_profile(db, user_id=user_id)
+        profiles = search_profiles_for_profile(profile)
+        compact = build_compact_profile(profile.yaml_data, profile.cv_text)
+        intent_list = await embed_texts([build_intent_text(profile)])
+        intent_emb = intent_list[0] if intent_list else None
+        filtered = (
+            (await db.execute(select(Job).where(Job.state == "filtered").limit(500)))
+            .scalars()
+            .all()
+        )
+        stale = [
+            (j.id, j.raw_text, j.dedup_hash, j.source_id, j.source_url)
+            for j in filtered
+            if not j.dedup_hash.endswith("::rescore-old")
+        ]
+
+    sem = asyncio.Semaphore(_DISCOVERY_CONCURRENCY)
+
+    async def _one(
+        job_id: str, raw_text: str, dedup_hash: str, source_id: str, source_url: str
+    ) -> None:
+        async with sem, SessionLocal() as db:
+            await db.execute(
+                update(Job).where(Job.id == job_id).values(dedup_hash=dedup_hash + "::rescore-old")
+            )
+            await db.commit()
+            raw = RawJob(
+                source_id=source_id, source_url=source_url, raw_text=raw_text, dedup_hash=dedup_hash
+            )
+            emb_list = await embed_texts([raw_text[:2000]])
+            await _process_job(
+                db,
+                run_id,
+                raw,
+                profiles,
+                profile,
+                compact,
+                source_tag="rescore",
+                job_embedding=(emb_list[0] if emb_list else None),
+                intent_embedding=intent_emb,
+            )
+
+    await asyncio.gather(*[_one(*row) for row in stale], return_exceptions=True)
+    async with SessionLocal() as db:
+        await db.execute(
+            update(DiscoveryRun)
+            .where(DiscoveryRun.id == run_id)
+            .values(status="complete", completed_at=datetime.now(timezone.utc))
+        )
+        await db.commit()
+
+
+async def run_rescore(db: AsyncSession, user_id: str) -> str:
+    """Create a rescore DiscoveryRun, fire the background task, return run_id immediately."""
+    run = DiscoveryRun(
+        source="rescore",
+        triggered_by="manual",
+        status="running",
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(run)
+    await db.commit()
+    task = asyncio.create_task(_run_rescore_task(run.id, user_id))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return run.id

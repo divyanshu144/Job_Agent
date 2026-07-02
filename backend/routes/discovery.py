@@ -25,6 +25,7 @@ from backend.services.discovery import (
     run_all_discovery,
     run_batch_discovery,
     run_discovery,
+    run_rescore,
     search_profiles_for_profile,
 )
 from backend.services.job_shortlist import get_job_shortlist
@@ -134,6 +135,17 @@ async def trigger_batch_discovery(
     await _require_search_criteria(db, current_user.id)
     run_id = await run_batch_discovery(source, db, current_user.id)
     return BatchDiscoveryResponse(run_id=run_id)
+
+
+@router.post("/discovery/rescore")
+async def trigger_rescore(
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Re-evaluate the backlog of filtered jobs against current criteria (semantic gate)."""
+    await _require_search_criteria(db, current_user.id)
+    run_id = await run_rescore(db, current_user.id)
+    return {"run_id": run_id}
 
 
 @router.post("/discovery/run/batch/all", response_model=BatchDiscoveryResponse)
