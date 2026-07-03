@@ -82,3 +82,50 @@ async def test_discovery_run_starts_when_criteria_present(app_client, db_session
     assert resp.json()["run_id"] == "run-123"
     called_user_id = run.await_args.kwargs.get("user_id")
     assert called_user_id == "test-user-id" or "test-user-id" in run.await_args.args
+
+
+async def test_rescore_requires_admin_and_criteria(app_client, db_session):
+    from datetime import datetime, timezone
+
+    from backend.models import Profile
+
+    db_session.add(
+        Profile(
+            yaml_data="identity:\n  name: A\n",
+            cv_text="",
+            merged_profile="",
+            last_refreshed_at=datetime.now(timezone.utc),
+            user_id="test-user-id",
+        )
+    )
+    await db_session.commit()
+    resp = await app_client.post("/api/discovery/rescore")
+    assert resp.status_code == 422  # no criteria
+
+
+async def test_rescore_starts_when_criteria_present(app_client, db_session):
+    import json
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, patch
+
+    from backend.models import Profile
+
+    db_session.add(
+        Profile(
+            yaml_data="identity:\n  name: A\n",
+            cv_text="",
+            merged_profile="",
+            profile_review_data=json.dumps(
+                {"target_roles": ["AI Engineer"], "work_preferences": {"locations": ["Remote"]}}
+            ),
+            last_refreshed_at=datetime.now(timezone.utc),
+            user_id="test-user-id",
+        )
+    )
+    await db_session.commit()
+    with patch(
+        "backend.routes.discovery.run_rescore", new_callable=AsyncMock, return_value="rescore-1"
+    ):
+        resp = await app_client.post("/api/discovery/rescore")
+    assert resp.status_code == 200
+    assert "run_id" in resp.json()

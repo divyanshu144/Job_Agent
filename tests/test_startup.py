@@ -18,7 +18,7 @@ from backend import models  # noqa: F401
 from backend.database import Base, _run_upgrade
 
 _REQUIRED = {"users", "alembic_version"}
-LATEST_REVISION = "0012_pgvector_embeddings"
+LATEST_REVISION = "0013_job_embeddings"
 
 
 def test_run_upgrade_brings_clean_db_to_head() -> None:

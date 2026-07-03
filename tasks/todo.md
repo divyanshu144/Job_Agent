@@ -89,3 +89,11 @@ on-disk yaml not in image; no DB profile has search_profiles). Admin-only for no
 - [ ] `GET/PATCH /api/campaign/settings` route pair (enabled toggle + caps display)
 - [ ] Per-run cost on `CampaignRunResponse`
 - [ ] Redis `storage_uri` for the rate limiter when going multi-worker
+
+## Phase 2: Semantic discovery matching (branch feat/discovery-semantic-matching) — DONE, unshipped
+- [x] Job embedding columns + migration 0013
+- [x] Semantic primitives (intent text, cosine gate, threshold config)
+- [x] Semantic Stage-1 gate wired into _process_job + all fetch/batch paths (keyword fallback)
+- [x] POST /discovery/rescore backlog re-score
+- [x] make check green (594)
+- [ ] Final whole-branch review → merge → migrate (0013) → tag v1.3.0 → rescore + calibrate threshold

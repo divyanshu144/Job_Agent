@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 import anthropic
-from sqlalchemy import select, update
+import yaml
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents.base import HAIKU
@@ -18,6 +19,12 @@ from backend.models import DiscoveryBatch, DiscoveryRun, Job
 from backend.services.adzuna_client import fetch_adzuna_jobs
 from backend.services.hn_client import RawJob, fetch_hn_jobs
 from backend.services.instrumentation import log_event, new_trace_id, span, tracked_call
+from backend.services.memory import (
+    _pgvector_available,
+    _vector_literal,
+    dense_cosine_similarity,
+    embed_texts,
+)
 from backend.services.orchestrator import _run_phase1
 from backend.services.profile_builder import (
     build_compact_profile,
@@ -83,6 +90,48 @@ def search_profiles_for_profile(profile: Any) -> list[SearchProfile]:
     ]
 
 
+def build_intent_text(profile: Any) -> str:
+    """Compact 'what the candidate wants + is' string for embedding: target roles +
+    key skills + identity headline."""
+    if profile is None:
+        return ""
+    review = parse_profile_review_data(profile.profile_review_data)
+    parts: list[str] = list(review.target_roles) + list(review.key_skills)
+    try:
+        data = yaml.safe_load(profile.yaml_data) or {}
+        headline = (
+            ((data.get("identity") or {}).get("headline") or "") if isinstance(data, dict) else ""
+        )
+        if headline.strip():
+            parts.append(headline.strip())
+    except yaml.YAMLError:
+        pass
+    return ", ".join(p for p in parts if p and p.strip())
+
+
+def semantic_stage1(
+    job_embedding: list[float] | None,
+    intent_embedding: list[float] | None,
+    threshold: float,
+) -> bool | None:
+    """Semantic Stage-1 gate. Returns True/False by cosine threshold when both embeddings
+    exist; None to signal 'embeddings unavailable' so the caller falls back to keyword."""
+    if not job_embedding or not intent_embedding:
+        return None
+    return dense_cosine_similarity(job_embedding, intent_embedding) >= threshold
+
+
+async def _safe_embed(texts: list[str]) -> list[list[float]] | None:
+    """embed_texts, but ANY failure (transient API error, rate limit, timeout) degrades to
+    None so callers fall back to the keyword gate instead of crashing the whole run.
+    embed_texts only returns None for the disabled/no-key cases; live-call errors raise."""
+    try:
+        return await embed_texts(texts)
+    except Exception as e:  # noqa: BLE001 — deliberate: never let embedding kill a run
+        logger.warning("embedding failed; falling back to keyword filter: %s", e)
+        return None
+
+
 def _location_allowed(location: str | None, profiles: list[SearchProfile]) -> bool:
     """Check if location matches any profile's allowed_locations. Remote always allowed."""
     if not location:
@@ -140,6 +189,21 @@ def _match_profiles(score: int, profiles: list[SearchProfile]) -> list[str]:
     return [p.name for p in profiles if score >= p.min_score]
 
 
+async def _store_job_embedding(db: AsyncSession, job_id: str, embedding: list[float]) -> None:
+    await db.execute(
+        update(Job)
+        .where(Job.id == job_id)
+        .values(embedding_json=json.dumps(embedding), embedding_model=settings.embedding_model)
+    )
+    await db.commit()
+    if await _pgvector_available(db):
+        await db.execute(
+            text("UPDATE jobs SET embedding_vector = CAST(:v AS vector) WHERE id = :id"),
+            {"id": job_id, "v": _vector_literal(embedding)},
+        )
+        await db.commit()
+
+
 async def _process_job(
     db: AsyncSession,
     run_id: str,
@@ -148,6 +212,8 @@ async def _process_job(
     profile: Any,
     compact: str,
     source_tag: str = "hn",
+    job_embedding: list[float] | None = None,
+    intent_embedding: list[float] | None = None,
 ) -> None:
     new_trace_id()  # one trace per job: groups its stage2 + phase1 spans/events
     existing = (
@@ -177,7 +243,13 @@ async def _process_job(
     await db.flush()
     await db.commit()
 
-    if not _stage1_pass(raw.raw_text, profiles):
+    if job_embedding:
+        await _store_job_embedding(db, job.id, job_embedding)
+
+    passed = semantic_stage1(job_embedding, intent_embedding, settings.discovery_semantic_threshold)
+    if passed is None:
+        passed = _stage1_pass(raw.raw_text, profiles)
+    if not passed:
         await db.execute(update(Job).where(Job.id == job.id).values(state="filtered"))
         await db.commit()
         return
@@ -318,13 +390,30 @@ async def _run_discovery_task(run_id: str, source: str, user_id: str) -> None:
             await db.commit()
         return
 
-    # Phase 2: process jobs concurrently, each with its own session
+    # Phase 2: compute embeddings then process jobs concurrently, each with its own session
+    intent_emb_list = await _safe_embed([build_intent_text(profile)])
+    intent_emb = intent_emb_list[0] if intent_emb_list else None
+    job_emb_list = await _safe_embed([r.raw_text[:2000] for r in raw_jobs]) if raw_jobs else None
+    job_embs = {
+        r.dedup_hash: (job_emb_list[i] if job_emb_list else None) for i, r in enumerate(raw_jobs)
+    }
+
     sem = asyncio.Semaphore(_DISCOVERY_CONCURRENCY)
 
     async def _bounded(raw: RawJob) -> None:
         async with sem:
             async with SessionLocal() as db:
-                await _process_job(db, run_id, raw, profiles, profile, compact, source_tag=source)
+                await _process_job(
+                    db,
+                    run_id,
+                    raw,
+                    profiles,
+                    profile,
+                    compact,
+                    source_tag=source,
+                    job_embedding=job_embs.get(raw.dedup_hash),
+                    intent_embedding=intent_emb,
+                )
 
     results = await asyncio.gather(*[_bounded(raw) for raw in raw_jobs], return_exceptions=True)
     for exc in results:
@@ -464,13 +553,30 @@ async def _run_source_task(run_id: str, source: str, user_id: str) -> None:
 
     await _update_source_status(run_id, source, jobs_found=len(raw_jobs))
 
-    # ── Phase 2: process jobs concurrently ───────────────────────────────
+    # ── Phase 2: compute embeddings then process jobs concurrently ──────────
+    intent_emb_list = await _safe_embed([build_intent_text(profile)])
+    intent_emb = intent_emb_list[0] if intent_emb_list else None
+    job_emb_list = await _safe_embed([r.raw_text[:2000] for r in raw_jobs]) if raw_jobs else None
+    job_embs = {
+        r.dedup_hash: (job_emb_list[i] if job_emb_list else None) for i, r in enumerate(raw_jobs)
+    }
+
     sem = asyncio.Semaphore(_DISCOVERY_CONCURRENCY)
 
     async def _bounded(raw: RawJob) -> None:
         async with sem:
             async with SessionLocal() as db:
-                await _process_job(db, run_id, raw, profiles, profile, compact, source_tag=source)
+                await _process_job(
+                    db,
+                    run_id,
+                    raw,
+                    profiles,
+                    profile,
+                    compact,
+                    source_tag=source,
+                    job_embedding=job_embs.get(raw.dedup_hash),
+                    intent_embedding=intent_emb,
+                )
 
     results = await asyncio.gather(*[_bounded(raw) for raw in raw_jobs], return_exceptions=True)
     for exc in results:
@@ -642,6 +748,18 @@ async def _run_batch_discovery_task(run_id: str, source: str, user_id: str) -> N
     stage1_jobs: list[tuple[str, str]] = []  # (job_id, raw_text) for batch submission
     stage1_raw: dict[str, str] = {}
 
+    # Compute embeddings for semantic Stage-1 gate (keyword fallback when unavailable)
+    intent_emb_list = await _safe_embed([build_intent_text(profile)])
+    intent_emb = intent_emb_list[0] if intent_emb_list else None
+    all_raw_jobs = [raw for _src, raw in raw_by_source]
+    job_emb_list = (
+        await _safe_embed([r.raw_text[:2000] for r in all_raw_jobs]) if all_raw_jobs else None
+    )
+    job_embs = {
+        r.dedup_hash: (job_emb_list[i] if job_emb_list else None)
+        for i, r in enumerate(all_raw_jobs)
+    }
+
     async with SessionLocal() as db:
         for src, raw in raw_by_source:
             # Skip duplicates
@@ -651,7 +769,12 @@ async def _run_batch_discovery_task(run_id: str, source: str, user_id: str) -> N
             if existing is not None:
                 continue
 
-            state = "discovered" if _stage1_pass(raw.raw_text, profiles) else "filtered"
+            passed = semantic_stage1(
+                job_embs.get(raw.dedup_hash), intent_emb, settings.discovery_semantic_threshold
+            )
+            if passed is None:
+                passed = _stage1_pass(raw.raw_text, profiles)
+            state = "discovered" if passed else "filtered"
             job = Job(
                 sources=json.dumps([src]),
                 source_id=raw.source_id,
@@ -663,6 +786,10 @@ async def _run_batch_discovery_task(run_id: str, source: str, user_id: str) -> N
             )
             db.add(job)
             await db.flush()
+
+            job_emb = job_embs.get(raw.dedup_hash)
+            if job_emb:
+                await _store_job_embedding(db, job.id, job_emb)
 
             if state == "discovered":
                 stage1_jobs.append((job.id, raw.raw_text))
@@ -842,3 +969,118 @@ async def _run_batch_discovery_task(run_id: str, source: str, user_id: str) -> N
         logger.info(
             "Batch run %s complete: stage2_passed=%d scored=%d", run_id, passed_stage2, scored
         )
+
+
+async def _rescore_job_in_place(
+    db: AsyncSession,
+    run_id: str,
+    job_id: str,
+    raw_text: str,
+    profiles: list[SearchProfile],
+    profile: Any,
+    compact: str,
+    job_embedding: list[float] | None,
+    intent_embedding: list[float] | None,
+) -> None:
+    """Re-evaluate ONE existing job row in place (no re-create, no dedup_hash change): store
+    embedding, semantic gate (keyword fallback), Stage-2, location filter, scoring. A failure at
+    any stage simply leaves the row 'filtered' — never orphaned, and safe to re-run."""
+    if job_embedding:
+        await _store_job_embedding(db, job_id, job_embedding)
+
+    passed = semantic_stage1(job_embedding, intent_embedding, settings.discovery_semantic_threshold)
+    if passed is None:
+        passed = _stage1_pass(raw_text, profiles)
+    if not passed:
+        return  # stays filtered
+
+    try:
+        s2 = await _stage2_check(raw_text, compact, db=db, run_id=run_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Rescore stage2 failed for job %s: %s", job_id, e)
+        return
+    if not s2.relevant or not _location_allowed(s2.location, profiles):
+        return
+
+    try:
+        result = await _run_phase1(raw_text, profile, db, job_id=job_id, run_id=run_id, model=HAIKU)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Rescore phase1 failed for job %s: %s", job_id, e)
+        return
+
+    matched = _match_profiles(result.score, profiles)
+    await db.execute(
+        update(Job)
+        .where(Job.id == job_id)
+        .values(
+            state="scored",
+            relevance_score=result.score,
+            title=s2.title,
+            company=s2.company,
+            location=s2.location,
+            matched_profiles=json.dumps(matched),
+        )
+    )
+    await db.commit()
+
+
+async def _run_rescore_task(run_id: str, user_id: str) -> None:
+    """Re-evaluate the backlog of `filtered` jobs against current criteria, IN PLACE (no row
+    re-create/rename). Idempotent and safe to re-run after a threshold change: passing jobs
+    become 'scored', the rest stay 'filtered'."""
+    async with SessionLocal() as db:
+        profile = await get_or_build_profile(db, user_id=user_id)
+        profiles = search_profiles_for_profile(profile)
+        compact = build_compact_profile(profile.yaml_data, profile.cv_text)
+        intent_list = await _safe_embed([build_intent_text(profile)])
+        intent_emb = intent_list[0] if intent_list else None
+        jobs = (
+            (await db.execute(select(Job).where(Job.state == "filtered").limit(500)))
+            .scalars()
+            .all()
+        )
+        job_data = [(j.id, j.raw_text) for j in jobs]
+
+    embs = await _safe_embed([rt[:2000] for _jid, rt in job_data]) if job_data else None
+    emb_by_id = {jid: (embs[i] if embs else None) for i, (jid, _rt) in enumerate(job_data)}
+
+    sem = asyncio.Semaphore(_DISCOVERY_CONCURRENCY)
+
+    async def _one(job_id: str, raw_text: str) -> None:
+        async with sem, SessionLocal() as db:
+            await _rescore_job_in_place(
+                db,
+                run_id,
+                job_id,
+                raw_text,
+                profiles,
+                profile,
+                compact,
+                job_embedding=emb_by_id.get(job_id),
+                intent_embedding=intent_emb,
+            )
+
+    await asyncio.gather(*[_one(jid, rt) for jid, rt in job_data], return_exceptions=True)
+    async with SessionLocal() as db:
+        await db.execute(
+            update(DiscoveryRun)
+            .where(DiscoveryRun.id == run_id)
+            .values(status="complete", completed_at=datetime.now(timezone.utc))
+        )
+        await db.commit()
+
+
+async def run_rescore(db: AsyncSession, user_id: str) -> str:
+    """Create a rescore DiscoveryRun, fire the background task, return run_id immediately."""
+    run = DiscoveryRun(
+        source="rescore",
+        triggered_by="manual",
+        status="running",
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(run)
+    await db.commit()
+    task = asyncio.create_task(_run_rescore_task(run.id, user_id))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return run.id

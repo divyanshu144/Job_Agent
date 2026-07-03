@@ -429,3 +429,202 @@ def test_discovery_does_not_read_profile_yaml_file(monkeypatch):
     )
     assert "_load_search_profiles(" not in src
     assert "search_profiles_for_profile(" in src
+
+
+def test_job_model_has_embedding_columns():
+    from backend.models import Job
+
+    j = Job(raw_text="x", dedup_hash="h", discovery_run_id="r")
+    assert j.embedding_json is None
+    assert j.embedding_model is None
+
+
+def test_build_intent_text_combines_roles_skills_headline():
+    from backend.services.discovery import build_intent_text
+
+    p = Profile(
+        yaml_data="identity:\n  headline: AI engineer building LLM systems\n",
+        cv_text="",
+        merged_profile="",
+        profile_review_data=json.dumps(
+            {"target_roles": ["AI Engineer"], "key_skills": ["Python", "RAG"]}
+        ),
+    )
+    text = build_intent_text(p)
+    assert "AI Engineer" in text and "Python" in text and "LLM systems" in text
+
+
+def test_semantic_stage1_threshold_and_fallback_signal():
+    from backend.services.discovery import semantic_stage1
+
+    near = [1.0, 0.0, 0.0]
+    same = [1.0, 0.0, 0.0]
+    far = [0.0, 1.0, 0.0]
+    assert semantic_stage1(same, near, 0.5) is True
+    assert semantic_stage1(far, near, 0.5) is False
+    assert semantic_stage1(None, near, 0.5) is None
+    assert semantic_stage1(same, None, 0.5) is None
+
+
+async def test_process_job_semantic_gate_filters_distant_job(session):
+    from unittest.mock import patch
+
+    from backend.services.discovery import SearchProfile, _process_job
+    from backend.services.hn_client import RawJob
+
+    run = DiscoveryRun(source="hn", status="running", started_at=datetime.now(timezone.utc))
+    profile = Profile(
+        id="ps1",
+        yaml_data="x",
+        cv_text="",
+        merged_profile="m",
+        last_refreshed_at=datetime.now(timezone.utc),
+    )
+    session.add_all([run, profile])
+    await session.commit()
+    raw = RawJob(
+        source_id="s",
+        source_url="u",
+        raw_text="Backend Engineer role " * 5,
+        dedup_hash="semantic-far",
+    )
+    profiles = [
+        SearchProfile(
+            name="p", target_roles=["Backend Engineer"], allowed_locations=[], min_score=65
+        )
+    ]
+
+    # job embedding far from intent -> filtered by the semantic gate (no keyword fallback)
+    with patch("backend.services.discovery.settings.discovery_semantic_threshold", 0.5):
+        await _process_job(
+            session,
+            run.id,
+            raw,
+            profiles,
+            profile,
+            "compact",
+            job_embedding=[0.0, 1.0],
+            intent_embedding=[1.0, 0.0],
+        )
+    job = (await session.execute(select(Job).where(Job.dedup_hash == "semantic-far"))).scalar_one()
+    assert job.state == "filtered"
+    assert job.embedding_json is not None  # embedding still stored
+
+
+async def test_process_job_falls_back_to_keyword_when_no_embeddings(session):
+    from backend.services.discovery import SearchProfile, _process_job
+    from backend.services.hn_client import RawJob
+
+    run = DiscoveryRun(source="hn", status="running", started_at=datetime.now(timezone.utc))
+    profile = Profile(
+        id="ps2",
+        yaml_data="x",
+        cv_text="",
+        merged_profile="m",
+        last_refreshed_at=datetime.now(timezone.utc),
+    )
+    session.add_all([run, profile])
+    await session.commit()
+    # keyword does NOT match -> filtered (proves fallback path runs)
+    raw = RawJob(
+        source_id="s",
+        source_url="u",
+        raw_text="Sales manager wanted " * 5,
+        dedup_hash="kw-fallback",
+    )
+    profiles = [
+        SearchProfile(
+            name="p", target_roles=["Backend Engineer"], allowed_locations=[], min_score=65
+        )
+    ]
+
+    await _process_job(
+        session,
+        run.id,
+        raw,
+        profiles,
+        profile,
+        "compact",
+        job_embedding=None,
+        intent_embedding=None,
+    )
+    job = (await session.execute(select(Job).where(Job.dedup_hash == "kw-fallback"))).scalar_one()
+    assert job.state == "filtered"
+
+
+async def test_rescore_job_in_place_scores_passing_job_without_recreating(session):
+    """In-place rescore moves a filtered job to scored on the SAME row (no rename/re-create,
+    so no orphaning) when it passes the semantic gate + stage2 + scoring."""
+    from unittest.mock import AsyncMock, patch
+
+    from backend.schemas import PriorOutputs
+    from backend.services.discovery import SearchProfile, Stage2Result, _rescore_job_in_place
+    from backend.services.orchestrator import Phase1Result
+
+    run = DiscoveryRun(source="rescore", status="running", started_at=datetime.now(timezone.utc))
+    profile = Profile(
+        id="rp1",
+        yaml_data="x",
+        cv_text="",
+        merged_profile="m",
+        last_refreshed_at=datetime.now(timezone.utc),
+    )
+    session.add_all([run, profile])
+    await session.commit()
+    job = Job(
+        source_id="s",
+        source_url="u",
+        raw_text="Backend Engineer Python FastAPI",
+        dedup_hash="resc-inplace-1",
+        state="filtered",
+        discovery_run_id=run.id,
+    )
+    session.add(job)
+    await session.commit()
+    job_id = job.id
+    profiles = [
+        SearchProfile(
+            name="p", target_roles=["Backend Engineer"], allowed_locations=[], min_score=65
+        )
+    ]
+    fake_s2 = Stage2Result(
+        relevant=True, reason="fit", title="Backend Engineer", company="Acme", location="Remote"
+    )
+    fake_p1 = Phase1Result(analysis_id="a1", score=80, partial=False, prior=PriorOutputs())
+
+    with (
+        patch(
+            "backend.services.discovery._stage2_check", new_callable=AsyncMock, return_value=fake_s2
+        ),
+        patch(
+            "backend.services.discovery._run_phase1", new_callable=AsyncMock, return_value=fake_p1
+        ),
+    ):
+        # job_embedding == intent_embedding -> cosine 1.0 -> passes the semantic gate
+        await _rescore_job_in_place(
+            session,
+            run.id,
+            job_id,
+            "Backend Engineer Python FastAPI",
+            profiles,
+            profile,
+            "compact",
+            job_embedding=[1.0, 0.0],
+            intent_embedding=[1.0, 0.0],
+        )
+
+    # SAME row, no new row created
+    rows = (
+        (
+            await session.execute(
+                select(Job).where(Job.raw_text == "Backend Engineer Python FastAPI")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].id == job_id
+    assert rows[0].state == "scored"
+    assert rows[0].relevance_score == 80
+    assert rows[0].embedding_json is not None

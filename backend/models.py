@@ -257,6 +257,8 @@ class Job(Base):
     state: Mapped[str] = mapped_column(String, default="discovered", index=True)
     relevance_score: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     matched_profiles: Mapped[str] = mapped_column(Text, default="[]")
+    embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    embedding_model: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
     discovery_run_id: Mapped[str] = mapped_column(String, ForeignKey("discovery_runs.id"))
     run: Mapped[DiscoveryRun] = relationship("DiscoveryRun", back_populates="jobs")
 
