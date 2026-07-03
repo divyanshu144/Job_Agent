@@ -121,6 +121,17 @@ def semantic_stage1(
     return dense_cosine_similarity(job_embedding, intent_embedding) >= threshold
 
 
+async def _safe_embed(texts: list[str]) -> list[list[float]] | None:
+    """embed_texts, but ANY failure (transient API error, rate limit, timeout) degrades to
+    None so callers fall back to the keyword gate instead of crashing the whole run.
+    embed_texts only returns None for the disabled/no-key cases; live-call errors raise."""
+    try:
+        return await embed_texts(texts)
+    except Exception as e:  # noqa: BLE001 — deliberate: never let embedding kill a run
+        logger.warning("embedding failed; falling back to keyword filter: %s", e)
+        return None
+
+
 def _location_allowed(location: str | None, profiles: list[SearchProfile]) -> bool:
     """Check if location matches any profile's allowed_locations. Remote always allowed."""
     if not location:
@@ -380,9 +391,9 @@ async def _run_discovery_task(run_id: str, source: str, user_id: str) -> None:
         return
 
     # Phase 2: compute embeddings then process jobs concurrently, each with its own session
-    intent_emb_list = await embed_texts([build_intent_text(profile)])
+    intent_emb_list = await _safe_embed([build_intent_text(profile)])
     intent_emb = intent_emb_list[0] if intent_emb_list else None
-    job_emb_list = await embed_texts([r.raw_text[:2000] for r in raw_jobs]) if raw_jobs else None
+    job_emb_list = await _safe_embed([r.raw_text[:2000] for r in raw_jobs]) if raw_jobs else None
     job_embs = {
         r.dedup_hash: (job_emb_list[i] if job_emb_list else None) for i, r in enumerate(raw_jobs)
     }
@@ -543,9 +554,9 @@ async def _run_source_task(run_id: str, source: str, user_id: str) -> None:
     await _update_source_status(run_id, source, jobs_found=len(raw_jobs))
 
     # ── Phase 2: compute embeddings then process jobs concurrently ──────────
-    intent_emb_list = await embed_texts([build_intent_text(profile)])
+    intent_emb_list = await _safe_embed([build_intent_text(profile)])
     intent_emb = intent_emb_list[0] if intent_emb_list else None
-    job_emb_list = await embed_texts([r.raw_text[:2000] for r in raw_jobs]) if raw_jobs else None
+    job_emb_list = await _safe_embed([r.raw_text[:2000] for r in raw_jobs]) if raw_jobs else None
     job_embs = {
         r.dedup_hash: (job_emb_list[i] if job_emb_list else None) for i, r in enumerate(raw_jobs)
     }
@@ -738,11 +749,11 @@ async def _run_batch_discovery_task(run_id: str, source: str, user_id: str) -> N
     stage1_raw: dict[str, str] = {}
 
     # Compute embeddings for semantic Stage-1 gate (keyword fallback when unavailable)
-    intent_emb_list = await embed_texts([build_intent_text(profile)])
+    intent_emb_list = await _safe_embed([build_intent_text(profile)])
     intent_emb = intent_emb_list[0] if intent_emb_list else None
     all_raw_jobs = [raw for _src, raw in raw_by_source]
     job_emb_list = (
-        await embed_texts([r.raw_text[:2000] for r in all_raw_jobs]) if all_raw_jobs else None
+        await _safe_embed([r.raw_text[:2000] for r in all_raw_jobs]) if all_raw_jobs else None
     )
     job_embs = {
         r.dedup_hash: (job_emb_list[i] if job_emb_list else None)
@@ -960,54 +971,96 @@ async def _run_batch_discovery_task(run_id: str, source: str, user_id: str) -> N
         )
 
 
+async def _rescore_job_in_place(
+    db: AsyncSession,
+    run_id: str,
+    job_id: str,
+    raw_text: str,
+    profiles: list[SearchProfile],
+    profile: Any,
+    compact: str,
+    job_embedding: list[float] | None,
+    intent_embedding: list[float] | None,
+) -> None:
+    """Re-evaluate ONE existing job row in place (no re-create, no dedup_hash change): store
+    embedding, semantic gate (keyword fallback), Stage-2, location filter, scoring. A failure at
+    any stage simply leaves the row 'filtered' — never orphaned, and safe to re-run."""
+    if job_embedding:
+        await _store_job_embedding(db, job_id, job_embedding)
+
+    passed = semantic_stage1(job_embedding, intent_embedding, settings.discovery_semantic_threshold)
+    if passed is None:
+        passed = _stage1_pass(raw_text, profiles)
+    if not passed:
+        return  # stays filtered
+
+    try:
+        s2 = await _stage2_check(raw_text, compact, db=db, run_id=run_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Rescore stage2 failed for job %s: %s", job_id, e)
+        return
+    if not s2.relevant or not _location_allowed(s2.location, profiles):
+        return
+
+    try:
+        result = await _run_phase1(raw_text, profile, db, job_id=job_id, run_id=run_id, model=HAIKU)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Rescore phase1 failed for job %s: %s", job_id, e)
+        return
+
+    matched = _match_profiles(result.score, profiles)
+    await db.execute(
+        update(Job)
+        .where(Job.id == job_id)
+        .values(
+            state="scored",
+            relevance_score=result.score,
+            title=s2.title,
+            company=s2.company,
+            location=s2.location,
+            matched_profiles=json.dumps(matched),
+        )
+    )
+    await db.commit()
+
+
 async def _run_rescore_task(run_id: str, user_id: str) -> None:
-    """Re-evaluate the backlog of `filtered` jobs against current criteria via the semantic
-    gate. Frees each stale row's dedup_hash so `_process_job` re-creates + re-scores it; the
-    orphaned `<hash>::rescore-old` row stays filtered and is ignored by the feed."""
+    """Re-evaluate the backlog of `filtered` jobs against current criteria, IN PLACE (no row
+    re-create/rename). Idempotent and safe to re-run after a threshold change: passing jobs
+    become 'scored', the rest stay 'filtered'."""
     async with SessionLocal() as db:
         profile = await get_or_build_profile(db, user_id=user_id)
         profiles = search_profiles_for_profile(profile)
         compact = build_compact_profile(profile.yaml_data, profile.cv_text)
-        intent_list = await embed_texts([build_intent_text(profile)])
+        intent_list = await _safe_embed([build_intent_text(profile)])
         intent_emb = intent_list[0] if intent_list else None
-        filtered = (
+        jobs = (
             (await db.execute(select(Job).where(Job.state == "filtered").limit(500)))
             .scalars()
             .all()
         )
-        stale = [
-            (j.id, j.raw_text, j.dedup_hash, j.source_id, j.source_url)
-            for j in filtered
-            if not j.dedup_hash.endswith("::rescore-old")
-        ]
+        job_data = [(j.id, j.raw_text) for j in jobs]
+
+    embs = await _safe_embed([rt[:2000] for _jid, rt in job_data]) if job_data else None
+    emb_by_id = {jid: (embs[i] if embs else None) for i, (jid, _rt) in enumerate(job_data)}
 
     sem = asyncio.Semaphore(_DISCOVERY_CONCURRENCY)
 
-    async def _one(
-        job_id: str, raw_text: str, dedup_hash: str, source_id: str, source_url: str
-    ) -> None:
+    async def _one(job_id: str, raw_text: str) -> None:
         async with sem, SessionLocal() as db:
-            await db.execute(
-                update(Job).where(Job.id == job_id).values(dedup_hash=dedup_hash + "::rescore-old")
-            )
-            await db.commit()
-            raw = RawJob(
-                source_id=source_id, source_url=source_url, raw_text=raw_text, dedup_hash=dedup_hash
-            )
-            emb_list = await embed_texts([raw_text[:2000]])
-            await _process_job(
+            await _rescore_job_in_place(
                 db,
                 run_id,
-                raw,
+                job_id,
+                raw_text,
                 profiles,
                 profile,
                 compact,
-                source_tag="rescore",
-                job_embedding=(emb_list[0] if emb_list else None),
+                job_embedding=emb_by_id.get(job_id),
                 intent_embedding=intent_emb,
             )
 
-    await asyncio.gather(*[_one(*row) for row in stale], return_exceptions=True)
+    await asyncio.gather(*[_one(jid, rt) for jid, rt in job_data], return_exceptions=True)
     async with SessionLocal() as db:
         await db.execute(
             update(DiscoveryRun)

@@ -550,3 +550,81 @@ async def test_process_job_falls_back_to_keyword_when_no_embeddings(session):
     )
     job = (await session.execute(select(Job).where(Job.dedup_hash == "kw-fallback"))).scalar_one()
     assert job.state == "filtered"
+
+
+async def test_rescore_job_in_place_scores_passing_job_without_recreating(session):
+    """In-place rescore moves a filtered job to scored on the SAME row (no rename/re-create,
+    so no orphaning) when it passes the semantic gate + stage2 + scoring."""
+    from unittest.mock import AsyncMock, patch
+
+    from backend.schemas import PriorOutputs
+    from backend.services.discovery import SearchProfile, Stage2Result, _rescore_job_in_place
+    from backend.services.orchestrator import Phase1Result
+
+    run = DiscoveryRun(source="rescore", status="running", started_at=datetime.now(timezone.utc))
+    profile = Profile(
+        id="rp1",
+        yaml_data="x",
+        cv_text="",
+        merged_profile="m",
+        last_refreshed_at=datetime.now(timezone.utc),
+    )
+    session.add_all([run, profile])
+    await session.commit()
+    job = Job(
+        source_id="s",
+        source_url="u",
+        raw_text="Backend Engineer Python FastAPI",
+        dedup_hash="resc-inplace-1",
+        state="filtered",
+        discovery_run_id=run.id,
+    )
+    session.add(job)
+    await session.commit()
+    job_id = job.id
+    profiles = [
+        SearchProfile(
+            name="p", target_roles=["Backend Engineer"], allowed_locations=[], min_score=65
+        )
+    ]
+    fake_s2 = Stage2Result(
+        relevant=True, reason="fit", title="Backend Engineer", company="Acme", location="Remote"
+    )
+    fake_p1 = Phase1Result(analysis_id="a1", score=80, partial=False, prior=PriorOutputs())
+
+    with (
+        patch(
+            "backend.services.discovery._stage2_check", new_callable=AsyncMock, return_value=fake_s2
+        ),
+        patch(
+            "backend.services.discovery._run_phase1", new_callable=AsyncMock, return_value=fake_p1
+        ),
+    ):
+        # job_embedding == intent_embedding -> cosine 1.0 -> passes the semantic gate
+        await _rescore_job_in_place(
+            session,
+            run.id,
+            job_id,
+            "Backend Engineer Python FastAPI",
+            profiles,
+            profile,
+            "compact",
+            job_embedding=[1.0, 0.0],
+            intent_embedding=[1.0, 0.0],
+        )
+
+    # SAME row, no new row created
+    rows = (
+        (
+            await session.execute(
+                select(Job).where(Job.raw_text == "Backend Engineer Python FastAPI")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].id == job_id
+    assert rows[0].state == "scored"
+    assert rows[0].relevance_score == 80
+    assert rows[0].embedding_json is not None
