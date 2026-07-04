@@ -1,21 +1,32 @@
 # Session Handoff
 
-**Updated:** 2026-07-02
-**`v1.2.0` is LIVE in production.** Phase 2 (semantic matching) is built on branch
-`feat/discovery-semantic-matching`, `make check` green (594) — NOT yet merged/deployed.
+**Updated:** 2026-07-04
+**`v1.3.0` is LIVE in production and VERIFIED with real results.** Semantic discovery matching
+shipped; the feed is populated with genuinely relevant roles. Nothing in flight.
 
-## In flight: Discovery semantic matching Phase 2 (branch `feat/discovery-semantic-matching`)
-Replaces discovery's literal keyword Stage-1 with an embedding cosine gate (job vs. candidate
-intent), reusing the live text-embedding-3-small + pgvector infra; adds `POST /api/discovery/rescore`
-to re-evaluate the ~844 stuck `filtered` jobs. Verified in prod earlier that the Phase-1 pipeline
-scores a fresh relevant job (78) but re-running sources hits dedup — hence the rescore.
-- Spec: `docs/superpowers/specs/2026-07-01-discovery-semantic-matching-design.md`
-- Plan: `docs/superpowers/plans/2026-07-01-discovery-semantic-matching.md`
-- SDD ledger: `.superpowers/sdd/progress.md` (Tasks 1-5 done; Task 4 controller-implemented after
-  a subagent session-limit; one item flagged for final review: rescore dedup-hash-rename approach)
-- **This phase REQUIRES a DB migration** (0013, pgvector column on `jobs`).
-- **Next action:** final whole-branch review → merge → run `aws-migrate.yml` (0013) → tag `v1.3.0`
-  → deploy → `POST /api/discovery/rescore` and calibrate `DISCOVERY_SEMANTIC_THRESHOLD` (default 0.30).
+## Shipped: Discovery semantic matching Phase 2 (v1.3.0, LIVE + verified)
+Semantic Stage-1 gate (embedding cosine, job vs. candidate intent) replaced the literal keyword
+filter; keyword fallback on any embedding failure (`_safe_embed`); job embeddings stored
+(migration 0013); `POST /api/discovery/rescore` re-evaluates the filtered backlog IN PLACE
+(final Opus review found + we fixed 2 Criticals: embed-exception fallback gap, rescore
+orphaning/UNIQUE-collision — reworked to in-place idempotent rescore).
+- **Prod verification (07-04 fetch run):** 503 found → 142 semantic Stage-1 → 36 scored. Feed
+  went 0 → 55 scored jobs; top matches: Sr Agentic Engineer (88), Grafana AI/Agentic SWE (82),
+  AI Engineering Lead Shift Remote UK (78) — roles a literal keyword match would have missed.
+- **Threshold:** prod runs on the 0.30 default. Calibration on 60 real jobs said 0.35 is the
+  sweet spot (junk < 0.30, engineering roles 0.45-0.56); set `DISCOVERY_SEMANTIC_THRESHOLD=0.35`
+  in the task defs if Haiku spend on Stage-2 looks high.
+- **Backlog rescore: deliberately SKIPPED** (user decision 07-04) — the ~1,047 filtered jobs are
+  from June, mostly stale; not worth the LLM spend. The endpoint exists (API-only, no UI button)
+  if ever wanted. Migration note: 0013 columns were pre-applied via idempotent DDL before the
+  deploy (prod has RUN_MIGRATIONS_ON_STARTUP=false and aws-migrate runs the deployed image, so
+  migrate-first via the workflow was impossible pre-deploy); deploy then stamped alembic at 0013.
+- Spec/plan: `docs/superpowers/specs/2026-07-01-...` / `docs/superpowers/plans/2026-07-01-...`
+- **Next up (queued, user-approved direction):** outreach depth — multi-contact per company,
+  follow-up sequences, reply detection. The "quality + outreach" differentiator vs. Tsenta.
+- Small follow-ups (optional): "Rescore backlog" button on Discover; IVFFlat index on
+  jobs.embedding_vector when the semantic search box gets built; batch-all duplicate-hash
+  re-embed dedup (token waste).
 
 ## Shipped: Discovery search-criteria Phase 1 (v1.2.0, merged `a4fca24`)
 Fixed the prod outage where discovery returned 0 jobs for everyone (no user had `search_profiles`;

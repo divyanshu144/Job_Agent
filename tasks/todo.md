@@ -96,4 +96,7 @@ on-disk yaml not in image; no DB profile has search_profiles). Admin-only for no
 - [x] Semantic Stage-1 gate wired into _process_job + all fetch/batch paths (keyword fallback)
 - [x] POST /discovery/rescore backlog re-score
 - [x] make check green (594)
-- [ ] Final whole-branch review → merge → migrate (0013) → tag v1.3.0 → rescore + calibrate threshold
+- [x] Final whole-branch review (Opus, NOT-READY → fixed 2 Criticals) → merged → migrated (0013) → v1.3.0 LIVE
+- [x] Verified in prod: 503→142 semantic→36 scored; feed 0→55 jobs, top matches highly relevant
+- [x] Threshold calibrated (0.35 sweet spot; prod on 0.30 default — bump if Stage-2 spend high)
+- [x] Backlog rescore: SKIPPED deliberately (June jobs stale; endpoint exists API-only)
