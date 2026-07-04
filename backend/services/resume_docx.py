@@ -72,11 +72,10 @@ def render_resume_docx(output: ResumeTailorerOutput) -> bytes:
             if line:
                 document.add_paragraph(line)
 
-    if output.tailored_bullets:
-        document.add_heading("Additional Highlights", level=1)
-        for item in output.tailored_bullets:
-            if item.rewritten.strip():
-                document.add_paragraph(item.rewritten, style=_BULLET_STYLE)
+    # NOTE: output.tailored_bullets is deliberately NOT rendered. It is metadata
+    # explaining which bullets were rewritten; the rewrites are already placed in
+    # the Experience/Projects sections above, so rendering it again ("Additional
+    # Highlights") duplicated content verbatim and pushed the document to 2 pages.
 
     buffer = io.BytesIO()
     document.save(buffer)
