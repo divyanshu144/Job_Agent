@@ -62,6 +62,7 @@ export function Results() {
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
+  const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
   const [genStates, setGenStates] = useState<Partial<Record<AgentName, AgentStatus>>>({});
   const [genErrors, setGenErrors] = useState<Partial<Record<AgentName, string>>>({});
   const [isRetrying, setIsRetrying] = useState(false);
@@ -201,11 +202,17 @@ export function Results() {
     try {
       let blob: Blob;
       let extension = "pdf";
+      setDownloadNotice(null);
       try {
         blob = await api.downloadResumePdf(data.id);
       } catch {
+        // Fall back to DOCX, but say so — a silent format switch masked a
+        // 10-day prod PDF outage. The user must know they got a fallback.
         blob = await api.downloadResumeDocx(data.id);
         extension = "docx";
+        setDownloadNotice(
+          "PDF generation failed, so you got the DOCX version instead. The team can check the server logs for the PDF error.",
+        );
       }
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -435,7 +442,16 @@ export function Results() {
         )}
         {tab === "resume" && (
           r.resume_tailorer
-            ? <ResumeDownloadPreview resume={r.resume_tailorer} onDownload={downloadResume} />
+            ? (
+              <div className="space-y-3">
+                {downloadNotice && (
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    {downloadNotice}
+                  </p>
+                )}
+                <ResumeDownloadPreview resume={r.resume_tailorer} onDownload={downloadResume} />
+              </div>
+            )
             : <EmptyPanel>Prepare documents to see tailored resume bullets.</EmptyPanel>
         )}
 
