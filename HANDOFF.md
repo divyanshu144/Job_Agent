@@ -1,8 +1,20 @@
 # Session Handoff
 
-**Updated:** 2026-07-04
-**`v1.3.0` is LIVE in production and VERIFIED with real results.** Semantic discovery matching
-shipped; the feed is populated with genuinely relevant roles. Nothing in flight.
+**Updated:** 2026-07-06
+**`v1.3.1` is LIVE.** Nothing in flight.
+
+## Shipped: v1.3.1 — prod PDF downloads restored (10-day outage fixed)
+User report "2-page resume" unmasked a real outage: since v1.1.1 (June 24), EVERY PDF download
+503'd — the ligature fix's \usepackage{lmodern} needs the separate Debian `lmodern` package
+(NOT in texlive-fonts-recommended; my earlier claim was wrong — see lessons.md 2026-07-05).
+The frontend's silent PDF->DOCX fallback hid it; users got the 2-page DOCX with a duplicated
+"Additional Highlights" section (tailored_bullets metadata wrongly rendered as content).
+Fixes shipped: lmodern in the image; a BUILD-TIME guard that compiles the real template inside
+the image (missing TeX dep now fails the build); DOCX duplication removed; fallback now shows a
+visible notice. **Verified in the deployed image with the user's real stored resume:
+pages=1, ligatures_clean=True, per-user header present.**
+
+## Previously: v1.3.0 — semantic discovery matching (LIVE + verified)
 
 ## Shipped: Discovery semantic matching Phase 2 (v1.3.0, LIVE + verified)
 Semantic Stage-1 gate (embedding cosine, job vs. candidate intent) replaced the literal keyword
