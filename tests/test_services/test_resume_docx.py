@@ -60,4 +60,8 @@ def test_render_resume_docx_outputs_valid_docx_with_content() -> None:
     assert "JobFit" in text
     assert "Generated tailored application materials" in text
     assert "BSc Computer Science - Example University (2020)" in text
-    assert "Built reliable FastAPI services for production workflows" in text
+    # tailored_bullets are rewrite-explanation metadata; their rewrites are already
+    # placed in Experience/Projects, so rendering them again duplicates content and
+    # pushes the DOCX to two pages. They must NOT appear in the document.
+    assert "Additional Highlights" not in text
+    assert "Built reliable FastAPI services for production workflows" not in text

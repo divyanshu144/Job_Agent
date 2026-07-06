@@ -346,3 +346,27 @@ Avoid: implementing layout/length limits by trimming inside a sentence. Avoid on
 output-token cap for agents whose output sizes differ by ~10x.
 
 See: backend/services/resume_latex_template.py _limit_words, backend/agents/base.py max_output_tokens
+
+## 2026-07-05 — "verified by reading the package list" is not verification; silent fallbacks mask outages
+
+Pattern: v1.1.1's ligature fix added \usepackage{lmodern} to the resume template. I "verified"
+deployability by reading the Dockerfile apt list and asserting "lmodern ∈ texlive-fonts-recommended"
+— which is false on Debian (lmodern is a separate package). Result: EVERY prod PDF download 503'd
+for ~10 days. Nobody noticed because the frontend silently fell back to the DOCX on PDF failure —
+the user just kept getting 2-page DOCXes and reported "resume generation is broken".
+
+Root causes:
+1. Verified a runtime dependency by reading a manifest instead of testing inside the artifact.
+   The claim even made it into a commit message as fact.
+2. A silent fallback (PDF -> DOCX with no user notice, no alert/metric) converted a hard outage
+   into a subtle quality complaint, which is much harder to detect and diagnose.
+
+Fixes: lmodern added to the Dockerfile; a build-time guard now renders + compiles the REAL
+template through the real code path inside the image (missing TeX dep = failed build, not a
+prod outage); the frontend fallback now shows a visible notice when the PDF fails.
+
+Avoid: asserting "package X is included in meta-package Y" without running the check inside the
+image (kpsewhich / actual compile). Avoid silent degradation on user-facing outputs — fallbacks
+must be observable (user notice + log/metric), or they hide outages indefinitely.
+
+See: Dockerfile backend-tex stage (compile guard), frontend/src/pages/Results.tsx downloadResume

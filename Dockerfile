@@ -26,13 +26,25 @@ USER appuser
 # so changing backend code never reinstalls it — only the final source COPY layer
 # rebuilds. The assembled app is copied from backend-base (single source of truth).
 FROM python-deps AS backend-tex
+# NOTE: lmodern is a SEPARATE Debian package — NOT part of texlive-fonts-recommended.
+# Its absence broke \usepackage{lmodern} in the resume template and 503'd every PDF
+# download in prod (masked by the silent DOCX fallback). The compile guard below now
+# fails the image build for this whole class of missing-TeX-dependency bug.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-latex-recommended \
     texlive-latex-extra \
     texlive-fonts-recommended \
+    lmodern \
     && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --shell /usr/sbin/nologin appuser
 COPY --from=backend-base --chown=appuser:appuser /app /app
+# Build-time guard: render + compile the REAL resume template through the real code
+# path, so a missing TeX package or a template error fails the build, not prod.
+RUN python -c "import asyncio; \
+from backend.schemas import ResumeTailorerOutput; \
+from backend.services.resume_latex_template import compile_latex_to_pdf, render_resume_latex; \
+asyncio.run(compile_latex_to_pdf(render_resume_latex(ResumeTailorerOutput(summary='build-time template check')), require_one_page=False)); \
+print('resume template compile guard: OK')"
 ENV PYTHONPATH=/app
 EXPOSE 8000
 USER appuser
