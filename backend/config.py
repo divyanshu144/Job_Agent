@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = ""  # falls back to redis_url when empty
     celery_result_backend: str = ""  # falls back to redis_url when empty
+    # Sentry error alerting. Empty → Sentry disabled (local dev + tests never emit).
+    # Threaded through SSM + task-def secrets in prod, like DATABASE_URL.
+    sentry_dsn: str = ""
 
     @property
     def is_production(self) -> bool:
