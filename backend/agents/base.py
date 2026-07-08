@@ -97,6 +97,14 @@ class BaseAgent:
         self._analysis_id: str | None = None
         self._user_id: str | None = None
         self._prompt_version: PromptVersion | None = None
+        self._retry_count = 0
+
+    @property
+    def retry_count(self) -> int:
+        """Total retries this agent burned before returning/raising: transient SDK
+        retries (in _call) + self-correction retries (in _call_structured). Fresh
+        per request because agents are instantiated fresh per request."""
+        return self._retry_count
 
     def with_tracking(
         self,
@@ -171,8 +179,10 @@ class BaseAgent:
         try:
             msg = cast(anthropic.types.Message, await retryer(_once))
         except Exception:
+            self._retry_count += max(0, retryer.statistics.get("attempt_number", 1) - 1)
             _record_failure(type(self).__name__.lower())
             raise
+        self._retry_count += max(0, retryer.statistics.get("attempt_number", 1) - 1)
         _record_success()
         return msg.content[0].text  # type: ignore[union-attr]
 
@@ -216,6 +226,7 @@ class BaseAgent:
         try:
             return output_cls.model_validate(_parse_json(raw))
         except (json.JSONDecodeError, ValidationError, AgentError) as e:
+            self._retry_count += 1
             await self._log_retry(label)
             correction_system = self._correction_prompt(system, raw, str(e))
             raw2 = await self._call(correction_system, user)
