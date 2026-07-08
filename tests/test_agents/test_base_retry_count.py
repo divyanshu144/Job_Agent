@@ -2,7 +2,6 @@ import pytest
 
 from backend.agents.base import BaseAgent
 from backend.agents.job_parser import AgentError
-from backend.schemas import PriorOutputs
 
 
 class _Tiny(BaseAgent):
