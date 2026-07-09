@@ -66,9 +66,9 @@ async def test_streaming_phase1_failure_captured(db_session):
             events.append(ev)
 
     # capture_pipeline_error was called for the failing agent with correct metadata
-    assert any(
-        k["agent"] == "job_parser" and k["phase"] == "phase1" for k in captured
-    ), f"capture not called with expected args; got {captured}"
+    assert any(k["agent"] == "job_parser" and k["phase"] == "phase1" for k in captured), (
+        f"capture not called with expected args; got {captured}"
+    )
 
     # pipeline_error SSE event still emitted (SSE behaviour unchanged)
     assert any(e.name == "pipeline_error" for e in events), (

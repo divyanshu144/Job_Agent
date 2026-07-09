@@ -17,6 +17,7 @@ import sentry_sdk
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
+from sentry_sdk.types import Event, Hint
 
 from backend.config import settings
 
@@ -33,7 +34,7 @@ def _hash_user_id(user_id: str | None) -> str | None:
     return hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:12]
 
 
-def _scrub(event: dict[str, Any], hint: dict[str, Any]) -> dict[str, Any] | None:
+def _scrub(event: Event, hint: Hint) -> Event | None:
     """before_send hook. Defence in depth: drop request body/cookies/headers so a
     future integration change can't silently start leaking JD/CV/profile content."""
     request = event.get("request")

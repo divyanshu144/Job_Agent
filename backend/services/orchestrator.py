@@ -40,12 +40,12 @@ from backend.services.instrumentation import new_trace_id, span
 from backend.services.job_result import upsert_job_result
 from backend.services.memory import format_retrieved_profile_context, retrieve_profile_memory
 from backend.services.pipeline_errors import to_user_error
-from backend.services.sentry import capture_pipeline_error
 from backend.services.profile_builder import (
     ProfileNotConfiguredError,
     get_or_build_profile,
     profile_content_hash,
 )
+from backend.services.sentry import capture_pipeline_error
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +143,9 @@ class Phase1Result:
 
 
 class _AgentProtocol(Protocol):
+    @property
+    def retry_count(self) -> int: ...
+
     async def run(self, profile: str, jd: str, prior: PriorOutputs) -> Any: ...
 
 
@@ -259,8 +262,12 @@ async def _run_phase1(
                 partial = True
                 ue = to_user_error(agent_name, e)
                 capture_pipeline_error(
-                    e, agent=agent_name, phase="phase1",
-                    user_id=None, retry_count=agent.retry_count, error_code=ue.code,
+                    e,
+                    agent=agent_name,
+                    phase="phase1",
+                    user_id=None,
+                    retry_count=agent.retry_count,
+                    error_code=ue.code,
                 )
                 errors[agent_name] = (ue.message, ue.code)
     finally:
@@ -397,8 +404,12 @@ async def run_evaluate_pipeline(
                 partial = True
                 ue = to_user_error(agent_name, e)
                 capture_pipeline_error(
-                    e, agent=agent_name, phase="phase1",
-                    user_id=user_id, retry_count=agent.retry_count, error_code=ue.code,
+                    e,
+                    agent=agent_name,
+                    phase="phase1",
+                    user_id=user_id,
+                    retry_count=agent.retry_count,
+                    error_code=ue.code,
                 )
                 errors[agent_name] = (ue.message, ue.code)
                 yield SSEEvent(
@@ -522,8 +533,12 @@ async def run_steps(
             logger.exception("step %s failed", name)
             ue = to_user_error(name, e)
             capture_pipeline_error(
-                e, agent=name, phase="phase2",
-                user_id=analysis.user_id, retry_count=agent.retry_count, error_code=ue.code,
+                e,
+                agent=name,
+                phase="phase2",
+                user_id=analysis.user_id,
+                retry_count=agent.retry_count,
+                error_code=ue.code,
             )
             await upsert_job_result(
                 db,
@@ -575,8 +590,12 @@ async def run_steps(
                 exc = result if isinstance(result, Exception) else Exception(str(result))
                 ue = to_user_error(name, exc)
                 capture_pipeline_error(
-                    exc, agent=name, phase="phase2",
-                    user_id=uid, retry_count=0, error_code=ue.code,
+                    exc,
+                    agent=name,
+                    phase="phase2",
+                    user_id=uid,
+                    retry_count=0,
+                    error_code=ue.code,
                 )
                 await upsert_job_result(db, analysis.id, name, error=ue.message, error_code=ue.code)
                 yield SSEEvent(

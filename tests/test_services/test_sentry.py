@@ -1,8 +1,8 @@
 import pytest
 import sentry_sdk
 
-from backend.services import sentry as sentry_mod
 from backend.services import sentry
+from backend.services import sentry as sentry_mod
 
 
 @pytest.fixture(autouse=True)
@@ -93,6 +93,10 @@ def test_capture_sets_tags_and_hashed_user_no_pii(monkeypatch):
 def test_capture_noop_and_silent_when_uninitialised():
     # No init in this test → must not raise and must emit nothing.
     sentry_mod.capture_pipeline_error(
-        ValueError("x"), agent="a", phase="phase1",
-        user_id=None, retry_count=0, error_code="agent_failed",
+        ValueError("x"),
+        agent="a",
+        phase="phase1",
+        user_id=None,
+        retry_count=0,
+        error_code="agent_failed",
     )
