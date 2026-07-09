@@ -186,6 +186,7 @@ Sensitive values should live in Secrets Manager or SSM Parameter Store and be re
 - `JWT_SECRET`
 - `ANTHROPIC_API_KEY`
 - `OPENAI_API_KEY`
+- `SENTRY_DSN`
 - `HUNTER_API_KEY`
 - `GMAIL_CLIENT_ID`
 - `GMAIL_CLIENT_SECRET`
@@ -240,6 +241,7 @@ They contain placeholder ARNs and image URIs such as:
 
 - `<AWS_ACCOUNT_ID>.dkr.ecr.eu-west-2.amazonaws.com/jobfit-api:latest`
 - `arn:aws:ssm:eu-west-2:<AWS_ACCOUNT_ID>:parameter/jobfit/staging/database-url`
+- `arn:aws:ssm:eu-west-2:<AWS_ACCOUNT_ID>:parameter/jobfit/staging/sentry-dsn`
 
 The deploy workflow renders image URIs automatically. Replace role ARNs and secret parameter ARNs before registering task definitions for a real AWS account.
 
