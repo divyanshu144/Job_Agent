@@ -19,6 +19,7 @@ from backend.config import settings
 _broker = settings.celery_broker_url or settings.redis_url
 _backend = settings.celery_result_backend or settings.redis_url
 
+
 @worker_process_init.connect
 def _init_sentry_worker(**_kwargs: object) -> None:
     # Fires INSIDE each forked child, so the Sentry transport thread is created
