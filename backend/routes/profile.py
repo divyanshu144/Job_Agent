@@ -216,10 +216,10 @@ async def upload_cv(
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
     cv_text = await extractor(contents)
     if len(cv_text.strip()) < _MIN_EXTRACTED_CHARS:
-        raise HTTPException(
-            status_code=400,
-            detail="Could not extract enough resume text from the uploaded file",
-        )
+        detail = "Could not extract enough resume text from the uploaded file"
+        if extractor is extract_text_from_pdf_bytes:
+            detail += " even after attempting OCR — the scan may be too low-quality to read"
+        raise HTTPException(status_code=400, detail=detail)
     existing = await _latest_user_profile(db, current_user.id)
     fallback_yaml = existing.yaml_data if existing is not None else default_profile_yaml()
     yaml_text, extracted = await _extract_resume(cv_text, fallback_yaml)
