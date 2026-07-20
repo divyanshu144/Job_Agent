@@ -2,11 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import io
+import logging
 from pathlib import Path
 
+import pytesseract
 from docx import Document
 from docx.table import Table, _Cell
+from pdf2image import convert_from_bytes
 from pypdf import PdfReader
+
+logger = logging.getLogger(__name__)
+
+# Below this, pypdf likely hit an image-only/scanned page rather than real text.
+_OCR_TRIGGER_CHARS = 20
 
 
 def _extract_pdf_sync(pdf_bytes: bytes) -> str:
@@ -14,9 +22,22 @@ def _extract_pdf_sync(pdf_bytes: bytes) -> str:
     return "\n".join(page.extract_text() or "" for page in reader.pages)
 
 
+def _extract_pdf_ocr_sync(pdf_bytes: bytes) -> str:
+    images = convert_from_bytes(pdf_bytes)
+    return "\n".join(pytesseract.image_to_string(image) for image in images)
+
+
 async def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _extract_pdf_sync, pdf_bytes)
+    text = await loop.run_in_executor(None, _extract_pdf_sync, pdf_bytes)
+    if len(text.strip()) >= _OCR_TRIGGER_CHARS:
+        return text
+    try:
+        ocr_text = await loop.run_in_executor(None, _extract_pdf_ocr_sync, pdf_bytes)
+    except Exception:
+        logger.warning("OCR fallback failed for scanned/image-only PDF", exc_info=True)
+        return text
+    return ocr_text if len(ocr_text.strip()) > len(text.strip()) else text
 
 
 def _iter_table_text(table: Table) -> list[str]:

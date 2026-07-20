@@ -177,7 +177,7 @@ FastAPI / Celery integrations.
 - `backend/config.py`: add `sentry_dsn: str = ""`. Empty default → disabled locally
   and in tests. Read only through `settings`, per project convention.
 - **SSM parameter** (new): `/jobfit/staging/sentry-dsn` holding the ingest DSN
-  `https://7e381c9f6b0fe6da8cc6cf6d95304d47@o4511549443997696.ingest.de.sentry.io/4511699442794576`.
+  (real value lives only in SSM — never in this repo).
   The DSN is a write-only ingest key, but we thread it through SSM like every other
   secret for consistency with the existing pattern (never committed, never in a
   task-def `environment` block).

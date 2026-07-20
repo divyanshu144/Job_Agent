@@ -840,5 +840,5 @@ Expected: fmt clean, lint clean (ruff + mypy + schema-drift), all tests pass, co
 ## Notes for the executor
 
 - **Deviation from spec wording:** the spec named "three except sites"; this plan covers **four** — the phase-2 parallel `asyncio.gather` path is also a handled `pipeline_error` emit (where `cover_letter`/`resume_tailorer` run). Covering it is strictly more complete and matches the spec's stated goal ("handled pipeline failures"). Site 4 sources `user_id=uid` and `retry_count=0` because the agent instance is out of scope there.
-- **DSN value for SSM** (not committed anywhere): `https://7e381c9f6b0fe6da8cc6cf6d95304d47@o4511549443997696.ingest.de.sentry.io/4511699442794576`.
+- **DSN value for SSM**: stored only in SSM at `/jobfit/staging/sentry-dsn` — never committed to this repo. Retrieve it from AWS when registering the parameter.
 - If `retryer.statistics` is empty in some tenacity version (no retries occurred), `.get("attempt_number", 1)` yields 1 → increment 0. Safe.

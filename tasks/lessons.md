@@ -370,3 +370,25 @@ image (kpsewhich / actual compile). Avoid silent degradation on user-facing outp
 must be observable (user notice + log/metric), or they hide outages indefinitely.
 
 See: Dockerfile backend-tex stage (compile guard), frontend/src/pages/Results.tsx downloadResume
+
+## [2026-07-18] OCR fallback for scanned PDFs added `poppler-utils`/`tesseract-ocr` to Dockerfile — unverified in this session, same class of risk as the lmodern incident above
+
+Pattern: Added a pytesseract + pdf2image OCR fallback to `extract_text_from_pdf_bytes` for
+image-only/scanned resume PDFs. pdf2image needs the `pdftoppm` binary (from `poppler-utils`) and
+pytesseract needs the `tesseract` binary (from `tesseract-ocr`) at runtime — neither is importable
+at the Python level, so `pip install` and unit tests (which mock `convert_from_bytes` /
+`pytesseract.image_to_string`) pass with zero signal on whether the binaries actually exist in the
+built image. No Docker daemon was available in this session, so the Dockerfile apt-get addition
+could not be build-verified end-to-end.
+
+Fix: added `poppler-utils` and `tesseract-ocr` to the `backend-tex` stage's existing apt-get line
+(same stage as `lmodern`, for the same reason — api-only, not worker/beat). Flagged explicitly to
+the user as unverified rather than reported as done.
+
+Avoid: repeating the exact mistake from the 2026-07-05 lmodern lesson — do not let mocked unit
+tests stand in for a real image build when the change adds a system-level binary dependency. Next
+session with Docker available: `docker build --target api` then exercise the OCR path against a
+real scanned PDF (or at minimum `docker run <image> tesseract --version && pdftoppm -v`) before
+this is considered verified.
+
+See: Dockerfile backend-tex stage, backend/services/cv_parser.py (_extract_pdf_ocr_sync)

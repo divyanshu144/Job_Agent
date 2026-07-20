@@ -12,11 +12,29 @@ from __future__ import annotations
 
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import beat_init, worker_process_init
 
 from backend.config import settings
 
 _broker = settings.celery_broker_url or settings.redis_url
 _backend = settings.celery_result_backend or settings.redis_url
+
+
+@worker_process_init.connect  # type: ignore[misc]  # celery signal decorator is untyped
+def _init_sentry_worker(**_kwargs: object) -> None:
+    # Fires INSIDE each forked child, so the Sentry transport thread is created
+    # post-fork (fork-safe). Never init at module import — that is pre-fork.
+    from backend.services.sentry import init_sentry
+
+    init_sentry("worker")
+
+
+@beat_init.connect  # type: ignore[misc]  # celery signal decorator is untyped
+def _init_sentry_beat(**_kwargs: object) -> None:
+    from backend.services.sentry import init_sentry
+
+    init_sentry("beat")
+
 
 celery_app = Celery(
     "jobfit",

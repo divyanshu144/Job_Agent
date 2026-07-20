@@ -17,6 +17,55 @@ async def test_extract_text_from_bytes():
     assert "Python FastAPI" in result
 
 
+async def test_extract_text_falls_back_to_ocr_for_scanned_pdf():
+    mock_reader = MagicMock()
+    mock_reader.pages = [MagicMock(extract_text=MagicMock(return_value=""))]
+    with (
+        patch("backend.services.cv_parser.PdfReader", return_value=mock_reader),
+        patch("backend.services.cv_parser.convert_from_bytes", return_value=["page-1-image"]),
+        patch(
+            "backend.services.cv_parser.pytesseract.image_to_string",
+            return_value="OCR-recovered resume text with Python experience.",
+        ),
+    ):
+        from backend.services.cv_parser import extract_text_from_pdf_bytes
+
+        result = await extract_text_from_pdf_bytes(b"scanned-pdf-bytes")
+    assert "OCR-recovered resume text" in result
+
+
+async def test_extract_text_keeps_pypdf_result_when_ocr_fails():
+    mock_reader = MagicMock()
+    mock_reader.pages = [MagicMock(extract_text=MagicMock(return_value=""))]
+    with (
+        patch("backend.services.cv_parser.PdfReader", return_value=mock_reader),
+        patch(
+            "backend.services.cv_parser.convert_from_bytes",
+            side_effect=RuntimeError("poppler not installed"),
+        ),
+    ):
+        from backend.services.cv_parser import extract_text_from_pdf_bytes
+
+        result = await extract_text_from_pdf_bytes(b"scanned-pdf-bytes")
+    assert result == ""
+
+
+async def test_extract_text_skips_ocr_when_pypdf_already_has_enough_text():
+    mock_reader = MagicMock()
+    mock_reader.pages = [
+        MagicMock(extract_text=MagicMock(return_value="Plenty of real extracted text here.")),
+    ]
+    with (
+        patch("backend.services.cv_parser.PdfReader", return_value=mock_reader),
+        patch("backend.services.cv_parser.convert_from_bytes") as mock_convert,
+    ):
+        from backend.services.cv_parser import extract_text_from_pdf_bytes
+
+        result = await extract_text_from_pdf_bytes(b"real-pdf-bytes")
+    assert result == "Plenty of real extracted text here."
+    mock_convert.assert_not_called()
+
+
 async def test_extract_text_missing_file_returns_empty():
     from backend.services.cv_parser import extract_text_from_file
 

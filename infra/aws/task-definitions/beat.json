@@ -39,7 +39,8 @@
         { "name": "CELERY_RESULT_BACKEND", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/celery-result-backend" },
         { "name": "JWT_SECRET", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/jwt-secret" },
         { "name": "ANTHROPIC_API_KEY", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/anthropic-api-key" },
-        { "name": "OPENAI_API_KEY", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/openai-api-key" }
+        { "name": "OPENAI_API_KEY", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/openai-api-key" },
+        { "name": "SENTRY_DSN", "valueFrom": "arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/sentry-dsn" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",

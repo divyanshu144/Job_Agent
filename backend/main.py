@@ -52,6 +52,9 @@ def _check_jwt_secret() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    from backend.services.sentry import init_sentry
+
+    init_sentry("api")
     configure_logging()
     _check_jwt_secret()
     if settings.run_migrations_on_startup:
