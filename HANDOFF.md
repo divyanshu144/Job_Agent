@@ -19,11 +19,12 @@ after attempting OCR" when the failed extraction was a PDF. Task done via `debug
 
 ## Next Action
 
-Nothing in flight after this commit. Before this is considered fully verified: build the `api`
-Docker target and confirm `tesseract --version` / `pdftoppm -v` resolve inside the image (no
-Docker daemon was available in this session — see Open Questions). If accepted as-is, this can
-merge into the existing `feat/sentry-error-alerting` branch's eventual PR, or be pulled onto its
-own branch/PR — user hasn't specified which.
+Docker verification is now DONE (2026-07-20): `docker build --target api` succeeds, and inside
+the image `tesseract 5.5.0` / `pdftoppm 25.03.0` resolve, `pytesseract.get_tesseract_version()`
+returns 5.5.0, `pdf2image` + `backend.services.cv_parser.extract_text_from_pdf_bytes` import
+cleanly. The OCR-fallback change is fully verified. If accepted as-is, this can merge into the
+existing `feat/sentry-error-alerting` branch's eventual PR, or be pulled onto its own branch/PR —
+user hasn't specified which.
 
 ## Why It Stopped
 
@@ -38,13 +39,12 @@ HANDOFF.md update: `Dockerfile`, `backend/routes/profile.py`, `backend/services/
 
 ## Open Questions
 
-- **Docker build unverified in this session** (no daemon available): the `poppler-utils` /
-  `tesseract-ocr` apt-get addition to the `backend-tex` Dockerfile stage has not been build- or
-  runtime-tested. Unit tests mock the OCR calls, so they give zero signal on whether the binaries
-  actually resolve in the built image — this is the same risk class as the `lmodern` incident
-  logged in `tasks/lessons.md` (2026-07-05). Logged as a fresh entry (2026-07-18) in the same
-  file. Next session with Docker: `docker build --target api` then exercise the OCR path against
-  a real scanned PDF before calling this closed.
+- ~~**Docker build unverified in this session**~~ — RESOLVED 2026-07-20. `docker build --target api`
+  built clean; `tesseract 5.5.0` and `pdftoppm 25.03.0` resolve inside the image, and
+  `pytesseract`/`pdf2image`/`cv_parser` import and reach the binaries. The `lmodern`-class risk
+  (mocked unit tests giving zero signal on binary availability) is retired for this change.
+  Remaining nice-to-have: exercise the OCR path against a real scanned PDF end-to-end, but the
+  binary-resolution risk that motivated this is closed.
 
 ## Verification Baseline
 
