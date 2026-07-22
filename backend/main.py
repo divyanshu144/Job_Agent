@@ -27,6 +27,7 @@ from backend.routes.feedback import router as feedback_router
 from backend.routes.history import router as history_router
 from backend.routes.metrics import router as metrics_router
 from backend.routes.profile import router as profile_router
+from backend.routes.resume import router as resume_router
 from backend.routes.targets import router as targets_router
 from backend.services.instrumentation import configure_logging
 from backend.services.rate_limit import limiter
@@ -95,6 +96,7 @@ app.include_router(metrics_router, prefix=settings.api_prefix)
 app.include_router(feedback_router, prefix=settings.api_prefix)
 app.include_router(campaign_router, prefix=settings.api_prefix)
 app.include_router(targets_router, prefix=settings.api_prefix)
+app.include_router(resume_router, prefix=settings.api_prefix)
 
 
 # Prometheus: per-route latency histograms + status-labelled request counters.

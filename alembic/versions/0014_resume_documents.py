@@ -19,7 +19,13 @@ branch_labels: Union[str, tuple[str, ...], None] = None
 depends_on: Union[str, tuple[str, ...], None] = None
 
 
-def _doc_table(name: str) -> None:
+def _doc_table(name: str, existing_tables: set[str]) -> None:
+    # Guard against a "legacy full schema" boot (Base.metadata.create_all already
+    # ran, e.g. test_startup.py's index-less-legacy-schema simulation): this
+    # migration must be a no-op for tables ORM already created, same convention
+    # as 0011_memory_chunks.py.
+    if name in existing_tables:
+        return
     op.create_table(
         name,
         sa.Column("id", sa.String(), primary_key=True),
@@ -37,33 +43,41 @@ def _doc_table(name: str) -> None:
 
 
 def upgrade() -> None:
-    _doc_table("resume_documents")
-    _doc_table("cover_letter_documents")
-    op.create_table(
-        "resume_document_revisions",
-        sa.Column("id", sa.String(), primary_key=True),
-        sa.Column("document_id", sa.String(), nullable=False, index=True),
-        sa.Column("doc_kind", sa.String(), nullable=False),
-        sa.Column("rev", sa.Integer(), nullable=False),
-        sa.Column("content_json", sa.Text(), nullable=False),
-        sa.Column("source", sa.String(), nullable=False),
-        sa.Column("summary", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.UniqueConstraint("document_id", "rev", name="uq_resume_revision_doc_rev"),
-    )
-    op.create_table(
-        "resume_edit_rules",
-        sa.Column("id", sa.String(), primary_key=True),
-        sa.Column("user_id", sa.String(), sa.ForeignKey("users.id"), index=True),
-        sa.Column("mode", sa.String(), nullable=False),
-        sa.Column("text", sa.Text(), nullable=False),
-        sa.Column("scope", sa.String(), nullable=False, server_default="resume"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-    )
+    existing_tables = set(sa.inspect(op.get_bind()).get_table_names())
+    _doc_table("resume_documents", existing_tables)
+    _doc_table("cover_letter_documents", existing_tables)
+    if "resume_document_revisions" not in existing_tables:
+        op.create_table(
+            "resume_document_revisions",
+            sa.Column("id", sa.String(), primary_key=True),
+            sa.Column("document_id", sa.String(), nullable=False, index=True),
+            sa.Column("doc_kind", sa.String(), nullable=False),
+            sa.Column("rev", sa.Integer(), nullable=False),
+            sa.Column("content_json", sa.Text(), nullable=False),
+            sa.Column("source", sa.String(), nullable=False),
+            sa.Column("summary", sa.Text(), nullable=True),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+            sa.UniqueConstraint("document_id", "rev", name="uq_resume_revision_doc_rev"),
+        )
+    if "resume_edit_rules" not in existing_tables:
+        op.create_table(
+            "resume_edit_rules",
+            sa.Column("id", sa.String(), primary_key=True),
+            sa.Column("user_id", sa.String(), sa.ForeignKey("users.id"), index=True),
+            sa.Column("mode", sa.String(), nullable=False),
+            sa.Column("text", sa.Text(), nullable=False),
+            sa.Column("scope", sa.String(), nullable=False, server_default="resume"),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        )
 
 
 def downgrade() -> None:
-    op.drop_table("resume_edit_rules")
-    op.drop_table("resume_document_revisions")
-    op.drop_table("cover_letter_documents")
-    op.drop_table("resume_documents")
+    existing_tables = set(sa.inspect(op.get_bind()).get_table_names())
+    if "resume_edit_rules" in existing_tables:
+        op.drop_table("resume_edit_rules")
+    if "resume_document_revisions" in existing_tables:
+        op.drop_table("resume_document_revisions")
+    if "cover_letter_documents" in existing_tables:
+        op.drop_table("cover_letter_documents")
+    if "resume_documents" in existing_tables:
+        op.drop_table("resume_documents")
