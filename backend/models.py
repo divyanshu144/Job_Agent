@@ -421,6 +421,7 @@ class CoverLetterDocument(Base):
 
 class ResumeDocumentRevision(Base):
     __tablename__ = "resume_document_revisions"
+    __table_args__ = (UniqueConstraint("document_id", "rev", name="uq_resume_revision_doc_rev"),)
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
     document_id: Mapped[str] = mapped_column(String, index=True)
     doc_kind: Mapped[str] = mapped_column(String)  # "resume" | "cover_letter"

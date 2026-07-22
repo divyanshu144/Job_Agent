@@ -49,6 +49,7 @@ def upgrade() -> None:
         sa.Column("source", sa.String(), nullable=False),
         sa.Column("summary", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.UniqueConstraint("document_id", "rev", name="uq_resume_revision_doc_rev"),
     )
     op.create_table(
         "resume_edit_rules",

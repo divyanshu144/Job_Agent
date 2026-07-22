@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import Profile, ResumeDocument, ResumeDocumentRevision
@@ -11,24 +11,13 @@ from backend.services.resume_seed import seed_resume_content
 REVISION_LIMIT = 50
 
 
-async def _snapshot(
-    db: AsyncSession, doc: ResumeDocument, source: str, summary: str | None
-) -> None:
-    db.add(
-        ResumeDocumentRevision(
-            document_id=doc.id,
-            doc_kind="resume",
-            rev=doc.rev,
-            content_json=doc.content_json,
-            source=source,
-            summary=summary,
-        )
-    )
+async def _prune(db: AsyncSession, document_id: str) -> None:
+    """Keep only the newest REVISION_LIMIT snapshots (by rev desc) for a document."""
     rows = (
         (
             await db.execute(
                 select(ResumeDocumentRevision)
-                .where(ResumeDocumentRevision.document_id == doc.id)
+                .where(ResumeDocumentRevision.document_id == document_id)
                 .order_by(ResumeDocumentRevision.rev.desc())
             )
         )
@@ -72,7 +61,7 @@ async def get_or_seed_master(db: AsyncSession, user_id: str, profile: Profile) -
     # No revision snapshot here: apply_write() snapshots the pre-write state on the
     # first real write, which captures this seed content at rev 0. An extra snapshot
     # here would collide with that one (same document_id + rev=0) and make
-    # _neighbour_content's scalar_one_or_none() raise MultipleResultsFound.
+    # restore_revision's scalar_one_or_none() raise MultipleResultsFound.
     await db.commit()
     await db.refresh(doc)
     return doc
@@ -132,18 +121,62 @@ async def apply_write(
     source: str,
     summary: str | None = None,
 ) -> ResumeDocument:
-    if base_rev != doc.rev:
-        raise StaleRevError(current=doc)
-    await _snapshot(db, doc, source=source, summary=summary)  # snapshot the pre-write state
-    doc.content_json = new_content.model_dump_json()
-    doc.rev = doc.rev + 1
+    # Capture the PK before any rollback: rollback() unconditionally expires ORM
+    # instances, so reading doc.id afterwards would trigger a sync lazy-load (illegal
+    # in async). The post-rollback select() below re-populates this same doc instance.
+    document_id = doc.id
+    # Snapshot the pre-write state at base_rev. If the CAS below loses, the rollback
+    # discards this insert, so no orphan/duplicate snapshot is persisted.
+    db.add(
+        ResumeDocumentRevision(
+            document_id=document_id,
+            doc_kind="resume",
+            rev=base_rev,
+            content_json=doc.content_json,
+            source=source,
+            summary=summary,
+        )
+    )
+    # Suppress autoflush so the pending snapshot insert is not flushed until the CAS
+    # decision. On the losing path the rollback discards it (avoiding a duplicate
+    # (document_id, rev) row that the unique constraint would otherwise reject before
+    # we can raise StaleRevError); on the winning path it flushes within the commit.
+    with db.no_autoflush:
+        result = await db.execute(
+            update(ResumeDocument)
+            .where(ResumeDocument.id == document_id, ResumeDocument.rev == base_rev)
+            .values(content_json=new_content.model_dump_json(), rev=base_rev + 1)
+        )
+    if result.rowcount == 0:
+        await db.rollback()
+        current = (
+            await db.execute(select(ResumeDocument).where(ResumeDocument.id == document_id))
+        ).scalar_one()
+        raise StaleRevError(current=current)
+    await _prune(db, document_id)
     await db.commit()
     await db.refresh(doc)
     return doc
 
 
-async def _neighbour_content(db: AsyncSession, doc: ResumeDocument, target_rev: int) -> str | None:
-    row = (
+async def list_revisions(db: AsyncSession, doc: ResumeDocument) -> list[ResumeDocumentRevision]:
+    return list(
+        (
+            await db.execute(
+                select(ResumeDocumentRevision)
+                .where(ResumeDocumentRevision.document_id == doc.id)
+                .order_by(ResumeDocumentRevision.rev)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def restore_revision(
+    db: AsyncSession, doc: ResumeDocument, base_rev: int, target_rev: int
+) -> ResumeDocument:
+    snap = (
         await db.execute(
             select(ResumeDocumentRevision).where(
                 ResumeDocumentRevision.document_id == doc.id,
@@ -151,24 +184,11 @@ async def _neighbour_content(db: AsyncSession, doc: ResumeDocument, target_rev: 
             )
         )
     ).scalar_one_or_none()
-    return row.content_json if row is not None else None
+    if snap is None:
+        return doc  # nothing to restore at that rev
+    content = ResumeTailorerOutput.model_validate_json(snap.content_json)
+    return await apply_write(db, doc, content, base_rev=base_rev, source="undo")
 
 
 async def undo(db: AsyncSession, doc: ResumeDocument, base_rev: int) -> ResumeDocument:
-    if base_rev != doc.rev:
-        raise StaleRevError(current=doc)
-    prior = await _neighbour_content(db, doc, doc.rev - 1)
-    if prior is None:
-        return doc  # nothing to undo
-    content = ResumeTailorerOutput.model_validate_json(prior)
-    return await apply_write(db, doc, content, base_rev=doc.rev, source="undo")
-
-
-async def redo(db: AsyncSession, doc: ResumeDocument, base_rev: int) -> ResumeDocument:
-    if base_rev != doc.rev:
-        raise StaleRevError(current=doc)
-    nxt = await _neighbour_content(db, doc, doc.rev + 1)
-    if nxt is None:
-        return doc
-    content = ResumeTailorerOutput.model_validate_json(nxt)
-    return await apply_write(db, doc, content, base_rev=doc.rev, source="undo")
+    return await restore_revision(db, doc, base_rev, target_rev=base_rev - 1)
