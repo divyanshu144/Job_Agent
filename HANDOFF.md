@@ -1,76 +1,73 @@
 # Session Handoff
 
-**Updated:** 2026-07-20
-**Branch:** main (synced with origin/main at `658fa00`)
+**Updated:** 2026-07-22
+**Branch:** feat/resume-editor (branched from main @ `0d9a55b`)
 
 ---
 
 ## Current State
 
-Shipped **v1.4.0** to `main`: the whole `feat/sentry-error-alerting` feature + the resume OCR
-fallback, merged via `--no-ff` merge commit `658fa00`, pushed, tagged `v1.4.0`, tag pushed.
-The tag triggered the **Deploy AWS ECS** workflow — which **FAILED at the pre-deploy migration
-gate**. Production was NOT touched: no ECS service was rolled out, prod still runs **v1.3.1**.
+Design/brainstorming phase for the **Resume Editor** feature. No implementation code yet —
+only the design spec. Spec written and being committed:
+`docs/superpowers/specs/2026-07-22-resume-editor-design.md`.
 
-- Resume OCR fix: fully verified this session (`docker build --target api` clean; `tesseract 5.5.0`
-  / `pdftoppm 25.03.0` resolve in-image; `pytesseract`/`pdf2image`/`cv_parser` import + reach the
-  binaries). That risk is closed.
-- Lint/format re-checked clean before merge (`ruff check` + `ruff format --check`).
+Feature (agreed with user): promote the tailored resume to a first-class **editable, versioned**
+`ResumeDocument` with **two edit paths** (inline direct edit + Opus 4.8 chat editor), **one
+locked ATS format** for everyone, **two entry points** (standalone Resume section + per-analysis)
+sharing one `ResumeEditor` component, **versioning** (Default + create/switch/rename/delete),
+per-user **always/never rules**, **master-as-base** tailoring (full profile stays the knowledge
+base), scoped **Opus→Sonnet fallback** (chat-edit path, breaker-open only), and first-class
+**truthfulness/hallucination control** (grounded prompts → deterministic faithfulness validator
+→ user-visible warnings → no silent save-to-master). Spec also now covers **prompt-injection
+defenses** (§9.5), **`rev`-based optimistic-concurrency CAS** guarding the inline-vs-chat write
+race (§5.3), and **server-backed undo/redo edit history** (`resume_document_revisions`, §3.4).
+
+Note: the prior deploy blocker (v1.4.0, missing SSM `/jobfit/staging/sentry-dsn`) is UNRELATED
+to this branch and still open on the deploy side — see git history / previous handoff if resuming
+that thread.
+
+**Plan 1 (backend foundation) COMPLETE** — executed via subagent-driven development on
+`feat/resume-editor` (from `main` @ `0d9a55b`). All 5 tasks implemented, per-task reviewed, and a
+final whole-branch review (Opus) passed with its fixes applied + re-reviewed. `make check` green:
+658 passed, 82.72% coverage. Head: `f3b29e1`. Ledger: `.superpowers/sdd/progress.md`.
+
+Delivered: `resume_documents`/`cover_letter_documents`/`resume_document_revisions`/`resume_edit_rules`
+tables + migration 0014; Pydantic schemas; deterministic profile→resume seed; document service with
+DB-level atomic-CAS writes, versioning, cursor-driven undo/restore; config (`resume_model=opus-4-8`,
+fallback, faithfulness flag); `routes/resume.py` (registered). No LLM yet (starts Plan 2).
+
+Tracked Minors (deferred, in ledger): redo snapshots tagged `source="undo"` (cosmetic); base_rev
+query-param vs JSON-body inconsistency (unify in frontend Plan 5); `set_active` KeyError unreachable;
+undo/restore lack a dedicated 409-body assertion test.
+
+## Next Action
+
+Two choices for the user: (a) finish the branch — merge `feat/resume-editor` to `main` or open a PR
+(the branch also carries the unrelated docs/spec commits); or (b) continue to **Plan 2**
+(`ResumeEditorAgent` — Opus 4.8 chat editor, SSE endpoint, resilience §8, injection-hardened prompt,
+rule capture), which I'd write next then execute the same way. Recommend merging Plan 1 first.
 
 ## Why It Stopped
 
-User asked to stop the session. Deploy is **blocked awaiting a user decision** (see Next Action).
-
-## Next Action — DEPLOY IS BLOCKED, needs user input
-
-Deploy run `29759957641` failed with:
-```
-stopCode: TaskFailedToStart
-ResourceInitializationError: unable to retrieve secrets from ssm:
-invalid ssm parameters: /jobfit/staging/sentry-dsn
-```
-Root cause: commit `4574027` added a `SENTRY_DSN` secret ref
-(`arn:aws:ssm:eu-west-2:896476315730:parameter/jobfit/staging/sentry-dsn`) to all three task-defs
-(`infra/aws/task-definitions/{api,worker,beat}.json`), but that SSM parameter was **never created**.
-Confirmed missing: `/jobfit/staging/` has 7 other params (anthropic-api-key, database-url,
-jwt-secret, …) but no `sentry-dsn`. This is a missing provisioning step, NOT a code bug — the
-infra README even lists it as required setup.
-
-Two ways forward (user must pick):
-1. **Provision the DSN** (recommended — the release IS the error alerting). Local AWS admin creds
-   are available (`jobfit-cli-admin` @ account `896476315730`), so once the user supplies the DSN:
-   ```
-   aws ssm put-parameter --name /jobfit/staging/sentry-dsn --type SecureString \
-     --value "<DSN>" --region eu-west-2
-   gh run rerun 29759957641 --failed      # resumes deploy from the failed step
-   ```
-2. **Ship without Sentry**: remove the `SENTRY_DSN` secret block from the three task-defs, cut a
-   new tag (v1.4.1), redeploy. Leaves error alerting inert until the DSN is added later.
+Plan 1 complete and fully reviewed; awaiting user decision on branch finish vs. proceeding to Plan 2.
 
 ## In-Flight
 
-- **Uncommitted:** this `HANDOFF.md` update only (working tree otherwise clean, on `main`).
-- Docker image `jobfit-api:ocr-check` still present locally from verification — can be pruned.
-- Local branch `feat/sentry-error-alerting` still exists (also pushed to origin); now fully merged
-  into main — safe to delete when convenient.
+- No uncommitted changes after this HANDOFF commit (all task work committed by subagents).
 
 ## Open Questions
 
-- **SENTRY_DSN provisioning** (the blocker above). The DSN value was deliberately redacted from the
-  repo (commit `06258f4`); it must come from the user — do not dig it out of git history or guess.
-- Note the SSM path namespace is `/jobfit/staging/…` even though the deploy targets the prod
-  `jobfit-cluster`. Appears intentional (single-account naming) since the 7 working secrets use the
-  same prefix — worth a glance to confirm it's not a staging/prod mixup.
-- OCR path still not exercised against a real scanned PDF end-to-end (nice-to-have; fast path
-  unchanged so low risk).
+- Cover-letter chat editing: full parity now vs resume-first + follow-up (spec §14). Defers
+  cleanly with no data-model change.
+- Optional Layer-3 LLM faithfulness judge: keep off (`resume_faithfulness_judge_enabled=False`)
+  until the deterministic Layer-2 validator shows gaps in real use.
+- master-as-base couples into the `resume_tailorer` prompt + pipeline (spec §7) — confirmed in
+  principle; verify no regression when implementing.
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `docker build --target api` | ✓ built clean (incl. resume-template compile guard) |
-| `tesseract --version` / `pdftoppm -v` in image | ✓ 5.5.0 / 25.03.0 |
-| `pytesseract.get_tesseract_version()` in image | ✓ 5.5.0 (wrapper reaches binary) |
-| `ruff check` / `ruff format --check` (backend + tests) | ✓ clean |
-| Deploy AWS ECS (tag v1.4.0, run 29759957641) | ✗ FAILED at migration gate — missing SSM `/jobfit/staging/sentry-dsn` |
-| Production | Untouched — still on v1.3.1 (no service rolled out) |
+| `make test` | Not run this session (docs-only change) |
+| `make lint` | Not run this session (docs-only change) |
+| `make check` | Not run this session (docs-only change) |

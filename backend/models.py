@@ -380,3 +380,63 @@ class DiscoveryBatch(Base):
         DateTime(timezone=True), nullable=True, default=None
     )
     run: Mapped[DiscoveryRun] = relationship("DiscoveryRun", back_populates="batches")
+
+
+class ResumeDocument(Base):
+    __tablename__ = "resume_documents"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    analysis_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("analyses.id"), nullable=True, default=None, index=True
+    )
+    kind: Mapped[str] = mapped_column(String)  # "master" | "analysis"
+    name: Mapped[str] = mapped_column(String, default="Default")
+    content_json: Mapped[str] = mapped_column(Text, default="{}")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Optimistic-concurrency counter (see design §5.3). Bumped on every accepted write.
+    rev: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+class CoverLetterDocument(Base):
+    __tablename__ = "cover_letter_documents"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    analysis_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("analyses.id"), nullable=True, default=None, index=True
+    )
+    kind: Mapped[str] = mapped_column(String)
+    name: Mapped[str] = mapped_column(String, default="Default")
+    content_json: Mapped[str] = mapped_column(Text, default="{}")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    rev: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+class ResumeDocumentRevision(Base):
+    __tablename__ = "resume_document_revisions"
+    __table_args__ = (UniqueConstraint("document_id", "rev", name="uq_resume_revision_doc_rev"),)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    document_id: Mapped[str] = mapped_column(String, index=True)
+    doc_kind: Mapped[str] = mapped_column(String)  # "resume" | "cover_letter"
+    rev: Mapped[int] = mapped_column(Integer)
+    content_json: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String)  # seed|tailor|inline|chat|undo
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class ResumeEditRule(Base):
+    __tablename__ = "resume_edit_rules"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    mode: Mapped[str] = mapped_column(String)  # "always" | "never"
+    text: Mapped[str] = mapped_column(Text)
+    scope: Mapped[str] = mapped_column(String, default="resume")  # resume|cover_letter|both
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

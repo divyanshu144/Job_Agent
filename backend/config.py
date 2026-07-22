@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     # Sentry error alerting. Empty → Sentry disabled (local dev + tests never emit).
     # Threaded through SSM + task-def secrets in prod, like DATABASE_URL.
     sentry_dsn: str = ""
+    # Resume editor (chat-driven tailoring, Plan 2+). Opus primary, Sonnet fallback.
+    resume_model: str = "claude-opus-4-8"
+    resume_model_fallback: str = "claude-sonnet-4-6"
+    resume_faithfulness_judge_enabled: bool = False
 
     @property
     def is_production(self) -> bool:

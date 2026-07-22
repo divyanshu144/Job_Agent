@@ -574,3 +574,56 @@ class FeedbackResponse(BaseModel):
     note: str | None
     trace_id: str | None
     created_at: datetime
+
+
+class ResumeVersionSummary(BaseModel):
+    id: str
+    name: str
+    is_active: bool
+    rev: int
+    updated_at: datetime
+
+
+class ResumeDocumentResponse(BaseModel):
+    id: str
+    kind: str
+    name: str
+    is_active: bool
+    rev: int
+    content: ResumeTailorerOutput
+    updated_at: datetime
+
+
+class ResumeContentUpdate(BaseModel):
+    base_rev: int
+    content: ResumeTailorerOutput
+
+
+class ResumeVersionCreate(BaseModel):
+    name: str = "New version"
+    clone_active: bool = True
+
+
+class ResumeVersionPatch(BaseModel):
+    name: str | None = None
+    make_active: bool | None = None
+
+
+class ResumeRevisionSummary(BaseModel):
+    rev: int
+    source: str
+    summary: str | None = None
+    created_at: datetime
+
+
+class EditRuleCreate(BaseModel):
+    mode: Literal["always", "never"]
+    text: str
+    scope: Literal["resume", "cover_letter", "both"] = "resume"
+
+
+class EditRuleResponse(BaseModel):
+    id: str
+    mode: str
+    text: str
+    scope: str
