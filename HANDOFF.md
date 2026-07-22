@@ -26,20 +26,24 @@ Note: the prior deploy blocker (v1.4.0, missing SSM `/jobfit/staging/sentry-dsn`
 to this branch and still open on the deploy side — see git history / previous handoff if resuming
 that thread.
 
+Spec approved. Split into 6 sequential plans. **Plan 1 (backend foundation) is written:**
+`docs/superpowers/plans/2026-07-22-resume-editor-01-backend-foundation.md` — tables + migration,
+schemas, deterministic master seed, document service (CAS writes/versions/undo), config settings,
+`routes/resume.py` + registration. Plans 2–6 (chat agent, faithfulness, master-as-base tailoring,
+frontend, cover-letter) to be written after Plan 1 lands.
+
 ## Next Action
 
-Await user review of the spec. If approved, invoke the **writing-plans** skill to produce the
-step-by-step implementation plan following §13 build sequence. Do NOT start implementation
-before the plan is approved.
+Awaiting user's execution choice for Plan 1: subagent-driven (fresh subagent per task, review
+between) vs inline (executing-plans, batch w/ checkpoints). Then execute Plan 1 Task 1.
 
 ## Why It Stopped
 
-Awaiting user review of the written spec (brainstorming skill's user-review gate).
+Plan 1 written; awaiting execution-approach choice from the user.
 
 ## In-Flight
 
-- `docs/superpowers/specs/2026-07-22-resume-editor-design.md` (new spec — being committed)
-- `HANDOFF.md` (this file)
+- No uncommitted changes (spec + Plan 1 committed).
 
 ## Open Questions
 
