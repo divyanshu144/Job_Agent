@@ -196,6 +196,11 @@ async def chat_edit(
                 "edit_error", {"message": "Could not apply that change — your resume is unchanged."}
             )
             logger.warning("resume chat edit failed for doc %s: %s", doc.id, exc)
+        except Exception as exc:  # never leave the stream without a terminal event
+            yield _sse(
+                "edit_error", {"message": "Could not apply that change — your resume is unchanged."}
+            )
+            logger.warning("resume chat edit failed unexpectedly for doc %s: %s", doc.id, exc)
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
 

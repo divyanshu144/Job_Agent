@@ -16,7 +16,8 @@ from backend.services.profile_builder import get_owned_profile
 
 # A persistent service failure escaping the agent's own transient retries is the
 # design's "breaker-open" condition — the one place the scoped Sonnet fallback fires.
-_SERVICE_FAILURES = (anthropic.APIError, anthropic.APITimeoutError)
+# APITimeoutError is a subclass of APIError, so it's already covered.
+_SERVICE_FAILURES = (anthropic.APIError,)
 
 
 async def _load_rules_text(db: AsyncSession, user_id: str) -> str:
