@@ -123,9 +123,13 @@ never rewritten).
 | `summary` | str, nullable | one-line change summary (from the chat agent) |
 | `created_at` | datetime | |
 
-- **Undo** restores the previous snapshot's `content_json` as a new rev (`source="undo"`);
-  **redo** re-applies. The frontend tracks the undo cursor; the server just serves snapshots and
-  commits restores as ordinary writes (so undo/redo also respect the concurrency guard).
+- **Undo** restores the immediately-prior revision's `content_json` as a new rev
+  (`restore_revision(target=rev-1)`). **Redo** and jump-to-revision are the same primitive
+  (`restore_revision(target_rev)`) with a forward target. The frontend tracks the undo cursor and
+  passes the target rev; the server just serves snapshots (`list_revisions`) and commits restores
+  as ordinary CAS writes (so undo/redo also respect the concurrency guard). A parameterless
+  server-side redo is impossible against an append-only log, so redo is cursor-driven, not
+  a distinct server operation.
 - **Bounded:** keep the most recent **N=50** revisions per document; prune older snapshots on
   write. (Named versions in §3.1 are the durable coarse-grained history; revisions are the
   fine-grained within-version undo buffer.)
@@ -361,8 +365,14 @@ document CRUD, versions, edit); rule management can live alongside or in the sam
 - `POST /resume/{id}/chat` — chat edit (SSE); captures `base_rev` at read, CAS-commits (409 on
   stale). Returns updated content, new `rev`, change summary, `validation_warnings`, and any
   captured rule.
-- `POST /resume/{id}/undo` · `POST /resume/{id}/redo` — restore adjacent revision snapshot
-  (§3.4) as a new rev via the same CAS path; requires `base_rev`.
+- `GET  /resume/{id}/revisions` — the revision list (rev, source, summary, created_at); the
+  frontend's undo-cursor source of truth (§3.4).
+- `POST /resume/{id}/undo` — restore the immediately-prior revision (`rev-1`) as a new rev via
+  the CAS path; requires `base_rev`.
+- `POST /resume/{id}/restore` — restore a specific revision (`target_rev`) as a new rev via the
+  CAS path; requires `base_rev`. This is how the frontend performs **redo** (and jump-to-revision):
+  it tracks the cursor and passes the target rev. A parameterless server-side "redo" cannot work
+  with an append-only revision log — the server serves snapshots; the frontend owns the cursor.
 
 Every read of a document returns its current `rev`; every write takes `base_rev`.
 - `GET  /analysis/{analysis_id}/resume` — active per-analysis resume (created by the tailorer).

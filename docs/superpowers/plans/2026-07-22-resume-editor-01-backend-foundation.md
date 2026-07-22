@@ -1011,19 +1011,37 @@ async def undo_content(
     return _to_response(doc)
 
 
-@router.post("/resume/{doc_id}/redo", response_model=ResumeDocumentResponse)
-async def redo_content(
+@router.post("/resume/{doc_id}/restore", response_model=ResumeDocumentResponse)
+async def restore_content(
     doc_id: str,
     base_rev: int,
+    target_rev: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ResumeDocumentResponse:
+    # Cursor-driven restore: the frontend performs REDO (and jump-to-revision) by passing the
+    # target rev. A parameterless server-side redo cannot work against an append-only log.
     doc = await _owned_master(db, doc_id, current_user.id)
     try:
-        doc = await svc.redo(db, doc, base_rev=base_rev)
+        doc = await svc.restore_revision(db, doc, base_rev=base_rev, target_rev=target_rev)
     except StaleRevError as exc:
         raise HTTPException(status_code=409, detail="Resume changed; reload and retry") from exc
     return _to_response(doc)
+
+
+@router.get("/resume/{doc_id}/revisions")
+async def list_revisions(
+    doc_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    # The frontend's undo-cursor source of truth (design §3.4).
+    doc = await _owned_master(db, doc_id, current_user.id)
+    revs = await svc.list_revisions(db, doc)
+    return [
+        {"rev": r.rev, "source": r.source, "summary": r.summary, "created_at": r.created_at.isoformat()}
+        for r in revs
+    ]
 
 
 @router.get("/resume/rules", response_model=list[EditRuleResponse])
@@ -1125,7 +1143,7 @@ git commit -m "feat(resume-editor): resume + rules routes with concurrency-guard
 - §5.1 direct-edit persistence (PATCH content) → Task 5 ✓
 - §5.3 `rev` CAS, 409, revision snapshots, undo/redo → Task 4 + Task 5 ✓
 - §3.1 master seeded deterministically from profile → Task 3 ✓
-- §10 API (versions CRUD, content PATCH w/ base_rev, undo/redo, rules) → Task 5 ✓
+- §10 API (versions CRUD, content PATCH w/ base_rev, undo/restore + revisions list, rules) → Task 5 ✓
 - Deferred by design to later plans: chat endpoint (§5.2/Plan 2), faithfulness warnings (§9/Plan 3), master-as-base (§7/Plan 4), download wiring + preview (§6/Plan 5), cover-letter chat/UI (Plan 6).
 
 **Placeholder scan:** none — every step has concrete code/commands.
