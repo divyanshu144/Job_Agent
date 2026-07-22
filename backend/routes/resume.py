@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import json
+import logging
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.agents.base import AgentError
 from backend.database import get_db
 from backend.models import ResumeDocument, ResumeEditRule, User
 from backend.schemas import (
     EditRuleCreate,
     EditRuleResponse,
+    ResumeChatRequest,
     ResumeContentUpdate,
     ResumeDocumentResponse,
     ResumeRevisionSummary,
@@ -19,10 +25,13 @@ from backend.schemas import (
     ResumeVersionPatch,
     ResumeVersionSummary,
 )
+from backend.services import resume_chat
 from backend.services import resume_document as svc
 from backend.services.auth_service import get_current_user
 from backend.services.profile_builder import get_owned_profile
 from backend.services.resume_errors import StaleRevError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["resume"])
 
@@ -153,6 +162,42 @@ async def patch_content(
             },
         ) from exc
     return _to_response(doc)
+
+
+def _sse(name: str, data: dict[str, Any]) -> str:
+    return f"event: {name}\ndata: {json.dumps(data)}\n\n"
+
+
+@router.post("/resume/{doc_id}/chat")
+async def chat_edit(
+    doc_id: str,
+    data: ResumeChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    # Auth + ownership resolved BEFORE streaming (real 401/404).
+    doc = await _owned_master(db, doc_id, current_user.id)
+
+    async def _stream() -> AsyncGenerator[str, None]:
+        yield _sse("edit_start", {"doc_id": doc.id})
+        try:
+            result = await resume_chat.apply_chat_edit(
+                db, doc, current_user.id, base_rev=data.base_rev, instruction=data.instruction
+            )
+            yield _sse("edit_done", result.model_dump(mode="json"))
+        except StaleRevError as exc:
+            current = exc.current
+            yield _sse(
+                "edit_conflict",
+                {"rev": current.rev, "content": json.loads(current.content_json or "{}")},
+            )
+        except AgentError as exc:
+            yield _sse(
+                "edit_error", {"message": "Could not apply that change — your resume is unchanged."}
+            )
+            logger.warning("resume chat edit failed for doc %s: %s", doc.id, exc)
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
 
 
 @router.post("/resume/{doc_id}/undo", response_model=ResumeDocumentResponse)
