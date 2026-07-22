@@ -1,4 +1,11 @@
-from backend.schemas import ResumeContentUpdate, ResumeDocumentResponse, ResumeTailorerOutput
+from backend.schemas import (
+    EditRuleCreate,
+    ResumeChatRequest,
+    ResumeContentUpdate,
+    ResumeDocumentResponse,
+    ResumeEditorOutput,
+    ResumeTailorerOutput,
+)
 
 
 def test_content_update_requires_base_rev():
@@ -18,3 +25,26 @@ def test_document_response_carries_rev_and_content():
         updated_at="2026-07-22T00:00:00Z",
     )
     assert resp.rev == 2 and resp.content.headline == "Eng"
+
+
+def test_editor_output_parses_with_rule():
+    out = ResumeEditorOutput.model_validate(
+        {
+            "content": {"headline": "Engineer"},
+            "summary": "Tightened the first bullet.",
+            "new_rule": {"mode": "never", "text": "utilized", "scope": "resume"},
+        }
+    )
+    assert out.content.headline == "Engineer"
+    assert out.summary.startswith("Tightened")
+    assert isinstance(out.new_rule, EditRuleCreate) and out.new_rule.mode == "never"
+
+
+def test_editor_output_rule_optional():
+    out = ResumeEditorOutput.model_validate({"content": {"headline": "X"}, "summary": "no rule"})
+    assert out.new_rule is None
+
+
+def test_chat_request_requires_base_rev_and_instruction():
+    req = ResumeChatRequest(base_rev=2, instruction="make the first bullet punchier")
+    assert req.base_rev == 2 and "punchier" in req.instruction

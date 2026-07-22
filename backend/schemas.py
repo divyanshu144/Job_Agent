@@ -627,3 +627,26 @@ class EditRuleResponse(BaseModel):
     mode: str
     text: str
     scope: str
+
+
+class ResumeEditorOutput(BaseModel):
+    """Structured output of ResumeEditorAgent: the full rewritten resume, a one-line
+    change summary shown in the chat thread, and an optional standing rule the user's
+    instruction implied (e.g. 'never use utilized')."""
+
+    content: ResumeTailorerOutput
+    summary: str = ""
+    new_rule: EditRuleCreate | None = None
+
+
+class ResumeChatRequest(BaseModel):
+    base_rev: int
+    instruction: str
+
+
+class ResumeChatResult(BaseModel):
+    rev: int
+    content: ResumeTailorerOutput
+    summary: str
+    warnings: list[ValidationWarning] = Field(default_factory=list)
+    new_rule: EditRuleResponse | None = None
