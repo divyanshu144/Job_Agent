@@ -18,7 +18,9 @@ sharing one `ResumeEditor` component, **versioning** (Default + create/switch/re
 per-user **always/never rules**, **master-as-base** tailoring (full profile stays the knowledge
 base), scoped **Opus→Sonnet fallback** (chat-edit path, breaker-open only), and first-class
 **truthfulness/hallucination control** (grounded prompts → deterministic faithfulness validator
-→ user-visible warnings → no silent save-to-master).
+→ user-visible warnings → no silent save-to-master). Spec also now covers **prompt-injection
+defenses** (§9.5), **`rev`-based optimistic-concurrency CAS** guarding the inline-vs-chat write
+race (§5.3), and **server-backed undo/redo edit history** (`resume_document_revisions`, §3.4).
 
 Note: the prior deploy blocker (v1.4.0, missing SSM `/jobfit/staging/sentry-dsn`) is UNRELATED
 to this branch and still open on the deploy side — see git history / previous handoff if resuming
