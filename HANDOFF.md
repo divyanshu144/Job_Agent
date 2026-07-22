@@ -26,30 +26,34 @@ Note: the prior deploy blocker (v1.4.0, missing SSM `/jobfit/staging/sentry-dsn`
 to this branch and still open on the deploy side — see git history / previous handoff if resuming
 that thread.
 
-Executing **Plan 1 (backend foundation)** via subagent-driven development on `feat/resume-editor`.
-Progress ledger: `.superpowers/sdd/progress.md` (git-ignored). Base for Plan 1: `ababa56`.
+**Plan 1 (backend foundation) COMPLETE** — executed via subagent-driven development on
+`feat/resume-editor` (from `main` @ `0d9a55b`). All 5 tasks implemented, per-task reviewed, and a
+final whole-branch review (Opus) passed with its fixes applied + re-reviewed. `make check` green:
+658 passed, 82.72% coverage. Head: `f3b29e1`. Ledger: `.superpowers/sdd/progress.md`.
 
-- **Task 1 (models + migration): COMPLETE** — commit `64ba014`, task review clean, migration
-  verified upgrade→downgrade→upgrade against real Postgres.
-- **Task 2 (Pydantic schemas): COMPLETE** — commit `7dc4830`, task review clean. Test placed at
-  flat path `tests/test_resume_document_schemas.py` (the `tests/test_schemas/` package path in the
-  plan would have collided with the existing flat `tests/test_schemas.py` and broken collection).
-- **Task 3 (deterministic master seed): NEXT.**
-- Tasks 4–5 (document service, routes) pending.
+Delivered: `resume_documents`/`cover_letter_documents`/`resume_document_revisions`/`resume_edit_rules`
+tables + migration 0014; Pydantic schemas; deterministic profile→resume seed; document service with
+DB-level atomic-CAS writes, versioning, cursor-driven undo/restore; config (`resume_model=opus-4-8`,
+fallback, faithfulness flag); `routes/resume.py` (registered). No LLM yet (starts Plan 2).
+
+Tracked Minors (deferred, in ledger): redo snapshots tagged `source="undo"` (cosmetic); base_rev
+query-param vs JSON-body inconsistency (unify in frontend Plan 5); `set_active` KeyError unreachable;
+undo/restore lack a dedicated 409-body assertion test.
 
 ## Next Action
 
-Dispatch Task 3 implementer (master seed `backend/services/resume_seed.py`) from
-`.superpowers/sdd/task-3-brief.md`; then review-package `7dc4830..<head>` + task reviewer.
-Do NOT re-dispatch Tasks 1–2 (ledger = done).
+Two choices for the user: (a) finish the branch — merge `feat/resume-editor` to `main` or open a PR
+(the branch also carries the unrelated docs/spec commits); or (b) continue to **Plan 2**
+(`ResumeEditorAgent` — Opus 4.8 chat editor, SSE endpoint, resilience §8, injection-hardened prompt,
+rule capture), which I'd write next then execute the same way. Recommend merging Plan 1 first.
 
 ## Why It Stopped
 
-Mid-execution checkpoint (stop-hook), not a true stop. Tree clean after this HANDOFF commit.
+Plan 1 complete and fully reviewed; awaiting user decision on branch finish vs. proceeding to Plan 2.
 
 ## In-Flight
 
-- No uncommitted changes after this HANDOFF commit (Tasks 1–2 committed by subagents).
+- No uncommitted changes after this HANDOFF commit (all task work committed by subagents).
 
 ## Open Questions
 
