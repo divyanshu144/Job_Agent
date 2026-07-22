@@ -609,6 +609,13 @@ class ResumeVersionPatch(BaseModel):
     make_active: bool | None = None
 
 
+class ResumeRevisionSummary(BaseModel):
+    rev: int
+    source: str
+    summary: str | None = None
+    created_at: datetime
+
+
 class EditRuleCreate(BaseModel):
     mode: Literal["always", "never"]
     text: str

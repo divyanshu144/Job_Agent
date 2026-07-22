@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import Profile, ResumeDocument, ResumeDocumentRevision
@@ -103,6 +103,9 @@ async def rename_version(db: AsyncSession, doc: ResumeDocument, name: str) -> Re
 
 async def delete_version(db: AsyncSession, user_id: str, doc: ResumeDocument) -> None:
     was_active = doc.is_active
+    await db.execute(
+        delete(ResumeDocumentRevision).where(ResumeDocumentRevision.document_id == doc.id)
+    )
     await db.delete(doc)
     await db.flush()
     if was_active:
@@ -120,6 +123,7 @@ async def apply_write(
     base_rev: int,
     source: str,
     summary: str | None = None,
+    doc_kind: str = "resume",
 ) -> ResumeDocument:
     # Capture the PK before any rollback: rollback() unconditionally expires ORM
     # instances, so reading doc.id afterwards would trigger a sync lazy-load (illegal
@@ -130,7 +134,7 @@ async def apply_write(
     db.add(
         ResumeDocumentRevision(
             document_id=document_id,
-            doc_kind="resume",
+            doc_kind=doc_kind,
             rev=base_rev,
             content_json=doc.content_json,
             source=source,

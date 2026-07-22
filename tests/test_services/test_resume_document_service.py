@@ -1,9 +1,9 @@
 import json
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import select, update
 
-from backend.models import Profile, ResumeDocument
+from backend.models import Profile, ResumeDocument, ResumeDocumentRevision
 from backend.schemas import ResumeTailorerOutput
 from backend.services import resume_document as svc
 from tests.factories import make_user
@@ -95,3 +95,70 @@ async def test_restore_revision_enables_redo(db_session):
     )  # frontend redo cursor
     assert json.loads(redone.content_json)["headline"] == "V1"
     assert redone.rev == 3
+
+
+async def test_apply_write_defaults_doc_kind_to_resume(db_session):
+    user = await make_user(db_session)
+    doc = await _master(db_session, user.id)
+    await svc.apply_write(
+        db_session, doc, ResumeTailorerOutput(headline="New"), base_rev=0, source="inline"
+    )
+    snap = (
+        await db_session.execute(
+            select(ResumeDocumentRevision).where(ResumeDocumentRevision.document_id == doc.id)
+        )
+    ).scalar_one()
+    assert snap.doc_kind == "resume"
+
+
+async def test_apply_write_accepts_explicit_doc_kind(db_session):
+    user = await make_user(db_session)
+    doc = await _master(db_session, user.id)
+    await svc.apply_write(
+        db_session,
+        doc,
+        ResumeTailorerOutput(headline="New"),
+        base_rev=0,
+        source="inline",
+        doc_kind="cover_letter",
+    )
+    snap = (
+        await db_session.execute(
+            select(ResumeDocumentRevision).where(ResumeDocumentRevision.document_id == doc.id)
+        )
+    ).scalar_one()
+    assert snap.doc_kind == "cover_letter"
+
+
+async def test_delete_version_purges_revisions(db_session):
+    user = await make_user(db_session)
+    doc = await _master(db_session, user.id)
+    await svc.apply_write(
+        db_session, doc, ResumeTailorerOutput(headline="A"), base_rev=0, source="inline"
+    )
+    await svc.apply_write(
+        db_session, doc, ResumeTailorerOutput(headline="B"), base_rev=1, source="inline"
+    )
+    existing = (
+        (
+            await db_session.execute(
+                select(ResumeDocumentRevision).where(ResumeDocumentRevision.document_id == doc.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(existing) == 2  # sanity: snapshots exist before delete
+
+    await svc.delete_version(db_session, user.id, doc)
+
+    remaining = (
+        (
+            await db_session.execute(
+                select(ResumeDocumentRevision).where(ResumeDocumentRevision.document_id == doc.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert remaining == []

@@ -29,7 +29,7 @@ def _doc_table(name: str, existing_tables: set[str]) -> None:
     op.create_table(
         name,
         sa.Column("id", sa.String(), primary_key=True),
-        sa.Column("user_id", sa.String(), sa.ForeignKey("users.id"), index=True),
+        sa.Column("user_id", sa.String(), sa.ForeignKey("users.id"), nullable=False, index=True),
         sa.Column("analysis_id", sa.String(), sa.ForeignKey("analyses.id"), nullable=True),
         sa.Column("kind", sa.String(), nullable=False),
         sa.Column("name", sa.String(), nullable=False, server_default="Default"),
@@ -63,7 +63,7 @@ def upgrade() -> None:
         op.create_table(
             "resume_edit_rules",
             sa.Column("id", sa.String(), primary_key=True),
-            sa.Column("user_id", sa.String(), sa.ForeignKey("users.id"), index=True),
+            sa.Column("user_id", sa.String(), sa.ForeignKey("users.id"), nullable=False, index=True),
             sa.Column("mode", sa.String(), nullable=False),
             sa.Column("text", sa.Text(), nullable=False),
             sa.Column("scope", sa.String(), nullable=False, server_default="resume"),

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import select
 
 import backend.models  # noqa: F401
-from backend.models import ResumeDocument, ResumeEditRule
+from backend.models import ResumeDocument, ResumeDocumentRevision, ResumeEditRule
 from tests.factories import make_profile, make_user
 
 _USER_ID = "test-user-id"  # matches conftest._FAKE_USER (the auth override)
@@ -35,6 +36,9 @@ async def test_patch_content_enforces_base_rev(app_client, db_session):
         json={"base_rev": 0, "content": {"headline": "Clobber"}},
     )
     assert stale.status_code == 409  # concurrency guard fired
+    detail = stale.json()["detail"]
+    assert detail["rev"] == 1
+    assert detail["content"]["headline"] == "Engineer"  # current state, for client reconciliation
 
 
 async def test_resume_requires_auth(unauthenticated_client):
@@ -99,6 +103,41 @@ async def test_patch_version_renames_and_flips_active(app_client, db_session):
     assert default["is_active"] is False
 
 
+async def test_get_version_returns_owned_version_by_id(app_client, db_session):
+    await make_profile(db_session, user_id=_USER_ID, profile_review_data="{}")
+    await db_session.commit()
+    await app_client.get("/api/resume")  # seeds Default (active)
+
+    other = (
+        await app_client.post("/api/resume/versions", json={"name": "Other", "clone_active": False})
+    ).json()
+
+    resp = await app_client.get(f"/api/resume/versions/{other['id']}")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == other["id"]
+    assert body["name"] == "Other"
+
+
+async def test_get_version_is_ownership_scoped(app_client, db_session):
+    other_user = await make_user(
+        db_session, id="other-get-resume", email="other-get-resume@example.com"
+    )
+    foreign = ResumeDocument(
+        user_id=other_user.id,
+        kind="master",
+        name="Foreign",
+        content_json="{}",
+        is_active=False,
+        rev=0,
+    )
+    db_session.add(foreign)
+    await db_session.commit()
+
+    resp = await app_client.get(f"/api/resume/versions/{foreign.id}")
+    assert resp.status_code == 404
+
+
 async def test_delete_version_removes_inactive(app_client, db_session):
     await make_profile(db_session, user_id=_USER_ID, profile_review_data="{}")
     await db_session.commit()
@@ -113,6 +152,41 @@ async def test_delete_version_removes_inactive(app_client, db_session):
 
     listed = (await app_client.get("/api/resume/versions")).json()
     assert len(listed) == 1
+
+
+async def test_delete_version_purges_revisions(app_client, db_session):
+    await make_profile(db_session, user_id=_USER_ID, profile_review_data="{}")
+    await db_session.commit()
+
+    other = (
+        await app_client.post("/api/resume/versions", json={"name": "Other", "clone_active": False})
+    ).json()
+    await app_client.patch(
+        f"/api/resume/{other['id']}/content",
+        json={"base_rev": 0, "content": {"headline": "A"}},
+    )
+    await app_client.patch(
+        f"/api/resume/{other['id']}/content",
+        json={"base_rev": 1, "content": {"headline": "B"}},
+    )
+    revisions = (await app_client.get(f"/api/resume/{other['id']}/revisions")).json()
+    assert len(revisions) == 2  # sanity: snapshots exist before delete
+
+    deleted = await app_client.delete(f"/api/resume/versions/{other['id']}")
+    assert deleted.status_code == 204
+
+    remaining = (
+        (
+            await db_session.execute(
+                select(ResumeDocumentRevision).where(
+                    ResumeDocumentRevision.document_id == other["id"]
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert remaining == []
 
 
 async def test_delete_version_is_ownership_scoped(app_client, db_session):
@@ -263,6 +337,7 @@ async def test_delete_rule_is_ownership_scoped(app_client, db_session):
     ("method", "path", "kwargs"),
     [
         ("GET", "/api/resume/versions", {}),
+        ("GET", "/api/resume/versions/missing-id", {}),
         ("POST", "/api/resume/versions", {"json": {"name": "X", "clone_active": False}}),
         ("PATCH", "/api/resume/versions/missing-id", {"json": {"name": "X"}}),
         ("DELETE", "/api/resume/versions/missing-id", {}),

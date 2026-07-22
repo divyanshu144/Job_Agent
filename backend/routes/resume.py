@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
@@ -14,6 +13,7 @@ from backend.schemas import (
     EditRuleResponse,
     ResumeContentUpdate,
     ResumeDocumentResponse,
+    ResumeRevisionSummary,
     ResumeTailorerOutput,
     ResumeVersionCreate,
     ResumeVersionPatch,
@@ -80,6 +80,18 @@ async def list_versions(
     ]
 
 
+@router.get("/resume/versions/{doc_id}", response_model=ResumeDocumentResponse)
+async def get_version(
+    doc_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ResumeDocumentResponse:
+    # Recovery path for a 409 on a non-active version (design §5.3): the client can
+    # fetch any owned version's current content directly by id, not just the active one.
+    doc = await _owned_master(db, doc_id, current_user.id)
+    return _to_response(doc)
+
+
 @router.post("/resume/versions", response_model=ResumeDocumentResponse)
 async def create_version(
     data: ResumeVersionCreate,
@@ -131,7 +143,15 @@ async def patch_content(
     try:
         doc = await svc.apply_write(db, doc, data.content, base_rev=data.base_rev, source="inline")
     except StaleRevError as exc:
-        raise HTTPException(status_code=409, detail="Resume changed; reload and retry") from exc
+        current = exc.current
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Resume changed; reload and retry",
+                "rev": current.rev,
+                "content": json.loads(current.content_json or "{}"),
+            },
+        ) from exc
     return _to_response(doc)
 
 
@@ -146,7 +166,15 @@ async def undo_content(
     try:
         doc = await svc.undo(db, doc, base_rev=base_rev)
     except StaleRevError as exc:
-        raise HTTPException(status_code=409, detail="Resume changed; reload and retry") from exc
+        current = exc.current
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Resume changed; reload and retry",
+                "rev": current.rev,
+                "content": json.loads(current.content_json or "{}"),
+            },
+        ) from exc
     return _to_response(doc)
 
 
@@ -164,26 +192,31 @@ async def restore_content(
     try:
         doc = await svc.restore_revision(db, doc, base_rev=base_rev, target_rev=target_rev)
     except StaleRevError as exc:
-        raise HTTPException(status_code=409, detail="Resume changed; reload and retry") from exc
+        current = exc.current
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Resume changed; reload and retry",
+                "rev": current.rev,
+                "content": json.loads(current.content_json or "{}"),
+            },
+        ) from exc
     return _to_response(doc)
 
 
-@router.get("/resume/{doc_id}/revisions")
+@router.get("/resume/{doc_id}/revisions", response_model=list[ResumeRevisionSummary])
 async def list_document_revisions(
     doc_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> list[dict[str, Any]]:
+) -> list[ResumeRevisionSummary]:
     # The frontend's undo-cursor source of truth (design §3.4).
     doc = await _owned_master(db, doc_id, current_user.id)
     revs = await svc.list_revisions(db, doc)
     return [
-        {
-            "rev": r.rev,
-            "source": r.source,
-            "summary": r.summary,
-            "created_at": r.created_at.isoformat(),
-        }
+        ResumeRevisionSummary(
+            rev=r.rev, source=r.source, summary=r.summary, created_at=r.created_at
+        )
         for r in revs
     ]
 
