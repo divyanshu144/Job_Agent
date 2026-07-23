@@ -590,8 +590,11 @@ class ResumeDocumentResponse(BaseModel):
     name: str
     is_active: bool
     rev: int
+    analysis_id: str | None = None
+    created_at: datetime
     content: ResumeTailorerOutput
     updated_at: datetime
+    warnings: list[ValidationWarning] = Field(default_factory=list)
 
 
 class ResumeContentUpdate(BaseModel):
@@ -657,3 +660,7 @@ class ResumeChatResult(BaseModel):
 class SaveToMasterRequest(BaseModel):
     name: str | None = None
     confirm: bool = False
+
+
+class RetailorRequest(BaseModel):
+    base_rev: int = Field(ge=0)

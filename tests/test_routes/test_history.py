@@ -242,6 +242,45 @@ async def test_download_resume_pdf_for_owned_analysis(app_client, db_session):
     assert resp.content.startswith(b"%PDF")
 
 
+async def test_download_resume_pdf_serves_edited_fork(app_client, db_session):
+    from backend.services import resume_document as docsvc
+
+    profile = await make_profile(db_session, user_id=_USER_ID)
+    analysis = await make_analysis(db_session, profile=profile, user_id=_USER_ID)
+    db_session.add(
+        JobResult(
+            analysis_id=analysis.id,
+            agent_name="resume_tailorer",
+            output_json=json.dumps({"headline": "Original tailored"}),
+        )
+    )
+    await db_session.commit()
+    fork = await docsvc.ensure_analysis_resume(
+        db_session, _USER_ID, analysis.id, json.dumps({"headline": "Original tailored"})
+    )
+    await db_session.commit()
+    # edit the fork via the content-patch route — the PDF must be built from the EDIT,
+    # not the original JobResult (fork-preference, mirrors the DOCX test).
+    await app_client.patch(
+        f"/api/resume/{fork.id}/content",
+        json={"base_rev": 0, "content": {"headline": "Edited headline"}},
+    )
+
+    with patch(
+        "backend.routes.history.render_resume_pdf",
+        new_callable=AsyncMock,
+        return_value=b"%PDF-1.4 generated",
+    ) as mock_render:
+        resp = await app_client.get(f"/api/analysis/{analysis.id}/resume.pdf")
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/pdf")
+    assert resp.content.startswith(b"%PDF")
+    # fork-preference: the PDF must be built from the EDIT, not the original JobResult.
+    rendered_output = mock_render.call_args.args[0]
+    assert rendered_output.headline == "Edited headline"
+
+
 async def test_download_resume_docx_rejects_cross_user_analysis(app_client, db_session):
     other_user = await make_user(
         db_session, id="other-resume-user", email="other-resume@example.com"

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams } from "react-router-dom";
-import { AlertTriangle, Download, RefreshCw, ThumbsDown, ThumbsUp, Wand2 } from "lucide-react";
+import { Link, useParams } from "react-router-dom";
+import { AlertTriangle, Download, FileEdit, RefreshCw, ThumbsDown, ThumbsUp, Wand2 } from "lucide-react";
 import { api, streamGenerate, retryAnalysis } from "../api/client";
 import type { AnalysisDetail, AgentName, AgentStatus, Contact, Step, RetryRequest, ResumeTailorerOutput } from "../types";
 import { PHASE2_AGENTS } from "../types";
@@ -449,6 +449,12 @@ export function Results() {
                     {downloadNotice}
                   </p>
                 )}
+                <Link
+                  to={`/resume/analysis/${data.id}`}
+                  className="inline-flex items-center gap-2 rounded bg-[#5b5bd6] px-4 py-2 text-sm font-medium text-white hover:bg-[#6b6be0]"
+                >
+                  <FileEdit className="size-4" /> Edit this resume
+                </Link>
                 <ResumeDownloadPreview resume={r.resume_tailorer} onDownload={downloadResume} />
               </div>
             )

@@ -82,14 +82,75 @@ async def test_save_to_master_flagged_requires_confirm(app_client, db_session):
 
 
 async def test_analysis_resume_routes_require_auth(unauthenticated_client):
-    for method, path in [
-        ("GET", "/api/analysis/x/resume"),
-        ("POST", "/api/analysis/x/resume/save-to-master"),
+    for method, path, body in [
+        ("GET", "/api/analysis/x/resume", None),
+        ("POST", "/api/analysis/x/resume/save-to-master", {}),
+        ("POST", "/api/analysis/x/resume/retailor", {"base_rev": 0}),
     ]:
         resp = await getattr(unauthenticated_client, method.lower())(
-            path, **({"json": {}} if method == "POST" else {})
+            path, **({"json": body} if body is not None else {})
         )
         assert resp.status_code == 401
+
+
+async def test_get_analysis_resume_recomputes_warnings(app_client, db_session):
+    await make_profile(
+        db_session,
+        user_id=_USER_ID,
+        profile_review_data="{}",
+        yaml_data="plain profile",
+        merged_profile="m",
+    )
+    analysis, doc = await _fork(db_session, headline="Raised revenue 300% at Globex")
+    resp = await app_client.get(f"/api/analysis/{analysis.id}/resume")
+    assert resp.status_code == 200
+    rules = [w["rule"] for w in resp.json()["warnings"]]
+    assert "unsupported_metric" in rules  # recomputed on read, never persisted
+
+
+async def test_retailor_route_happy_path(app_client, db_session):
+    from unittest.mock import AsyncMock, patch
+
+    from backend.models import JobResult
+    from backend.schemas import ResumeTailorerOutput
+
+    await make_profile(
+        db_session,
+        user_id=_USER_ID,
+        profile_review_data="{}",
+        yaml_data="Python",
+        merged_profile="m",
+    )
+    analysis, doc = await _fork(db_session, headline="old tailoring")
+    db_session.add(
+        JobResult(
+            analysis_id=analysis.id,
+            agent_name="job_parser",
+            output_json=json.dumps(
+                {
+                    "required_skills": ["Python"],
+                    "nice_to_have": [],
+                    "role_type": "BE",
+                    "seniority": "Senior",
+                }
+            ),
+        )
+    )
+    await db_session.commit()
+
+    new_output = ResumeTailorerOutput(headline="re-tailored from new master")
+    with patch(
+        "backend.agents.resume_tailorer.ResumeTailorerAgent.run",
+        new_callable=AsyncMock,
+        return_value=new_output,
+    ):
+        resp = await app_client.post(
+            f"/api/analysis/{analysis.id}/resume/retailor", json={"base_rev": 0}
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["rev"] == 1
+    assert body["content"]["headline"] == "re-tailored from new master"
 
 
 async def test_download_docx_serves_edited_fork(app_client, db_session):

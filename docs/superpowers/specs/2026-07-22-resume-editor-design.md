@@ -317,6 +317,16 @@ promotion requires explicit user confirmation. Legit edits go through with a dis
 - **Rule adherence:** rule "never use 'utilized'" → assert absence in output.
 - **Style:** assert no em/en dashes.
 
+**Grounding-corpus asymmetry (recorded from Plan 4 review).** The pipeline's
+`validate_resume_tailorer` grounds against profile+master (it MUTATES output — omitting
+supported master content would destroy the user's curation), while the chat editor and the
+save-to-master guard ground against the profile ONLY (flag-only paths; the user is ground
+truth). Consequences: (a) a chat-fabricated claim the user confirmed into the master is
+treated as grounded by the pipeline validator, but re-flags at EVERY promotion attempt —
+silent accretion is impossible; (b) legitimate master-curated content not literally in the
+profile re-warns on every promotion — UI copy must read "not found in your profile, verify",
+never "fabricated".
+
 ---
 
 ## 9.5 Security — prompt injection

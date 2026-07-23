@@ -30,6 +30,29 @@ _PHASE1 = ["job_parser", "match_scorer", "gap_analyst"]
 _PHASE2 = ["resource_planner", "cover_letter", "resume_tailorer"]
 
 
+async def _resolve_resume_output(
+    db: AsyncSession, user_id: str, analysis_id: str
+) -> ResumeTailorerOutput:
+    """Fork-preference: an edited per-analysis fork wins over the original pipeline
+    output, mirroring the read path (design's fork-as-editable-copy). Raises 404 when
+    neither a fork nor a pipeline result exists."""
+    result = (
+        await db.execute(
+            select(JobResult).where(
+                JobResult.analysis_id == analysis_id,
+                JobResult.agent_name == "resume_tailorer",
+            )
+        )
+    ).scalar_one_or_none()
+
+    fork = await get_analysis_resume(db, user_id, analysis_id)
+    if fork is not None and fork.content_json not in (None, "", "{}"):
+        return ResumeTailorerOutput.model_validate(json.loads(fork.content_json))
+    if result is not None and result.output_json:
+        return ResumeTailorerOutput.model_validate(json.loads(result.output_json))
+    raise HTTPException(status_code=404, detail="Tailored resume is not available")
+
+
 async def _latest_profile_id(db: AsyncSession, user_id: str) -> str | None:
     return (
         await db.execute(
@@ -168,22 +191,7 @@ async def download_resume_docx(
     if analysis is None:
         raise HTTPException(status_code=404, detail=f"Analysis {analysis_id} not found")
 
-    result = (
-        await db.execute(
-            select(JobResult).where(
-                JobResult.analysis_id == analysis_id,
-                JobResult.agent_name == "resume_tailorer",
-            )
-        )
-    ).scalar_one_or_none()
-
-    fork = await get_analysis_resume(db, current_user.id, analysis_id)
-    if fork is not None and fork.content_json not in (None, "", "{}"):
-        output = ResumeTailorerOutput.model_validate(json.loads(fork.content_json))
-    elif result is not None and result.output_json:
-        output = ResumeTailorerOutput.model_validate(json.loads(result.output_json))
-    else:
-        raise HTTPException(status_code=404, detail="Tailored resume is not available")
+    output = await _resolve_resume_output(db, current_user.id, analysis_id)
 
     body = render_resume_docx(output)
     filename = f"jobfit-resume-{analysis_id}.docx"
@@ -208,22 +216,7 @@ async def download_resume_pdf(
     if analysis is None:
         raise HTTPException(status_code=404, detail=f"Analysis {analysis_id} not found")
 
-    result = (
-        await db.execute(
-            select(JobResult).where(
-                JobResult.analysis_id == analysis_id,
-                JobResult.agent_name == "resume_tailorer",
-            )
-        )
-    ).scalar_one_or_none()
-
-    fork = await get_analysis_resume(db, current_user.id, analysis_id)
-    if fork is not None and fork.content_json not in (None, "", "{}"):
-        output = ResumeTailorerOutput.model_validate(json.loads(fork.content_json))
-    elif result is not None and result.output_json:
-        output = ResumeTailorerOutput.model_validate(json.loads(result.output_json))
-    else:
-        raise HTTPException(status_code=404, detail="Tailored resume is not available")
+    output = await _resolve_resume_output(db, current_user.id, analysis_id)
 
     profile = await get_owned_profile(db, current_user.id)
     identity = resume_identity_from_profile(profile, current_user.email)

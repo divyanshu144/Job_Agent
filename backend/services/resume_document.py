@@ -227,7 +227,7 @@ async def get_analysis_resume(
 
 async def ensure_analysis_resume(
     db: AsyncSession, user_id: str, analysis_id: str, content_json: str
-) -> ResumeDocument | None:
+) -> ResumeDocument:
     """Create the per-analysis editable fork — ONLY if the analysis has none yet.
     A pipeline retry must never clobber a fork the user may have edited."""
     existing = await get_analysis_resume(db, user_id, analysis_id)

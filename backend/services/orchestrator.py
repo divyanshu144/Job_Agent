@@ -584,7 +584,7 @@ async def run_steps(
                 )
 
                 master = await get_active_master(db, analysis.user_id)
-                if master is not None:
+                if master is not None and master.content_json not in (None, "", "{}"):
                     # Graceful degradation: an un-tuned master beats no resume.
                     await ensure_analysis_resume(
                         db, analysis.user_id, analysis.id, master.content_json
@@ -639,7 +639,7 @@ async def run_steps(
                     )
 
                     master = await get_active_master(db, analysis.user_id)
-                    if master is not None:
+                    if master is not None and master.content_json not in (None, "", "{}"):
                         # Graceful degradation: an un-tuned master beats no resume.
                         await ensure_analysis_resume(
                             db, analysis.user_id, analysis.id, master.content_json

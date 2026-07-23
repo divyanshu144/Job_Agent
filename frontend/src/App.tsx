@@ -7,6 +7,7 @@ import {
   Compass,
   FileClock,
   FileSearch,
+  FileText,
   Files,
   FolderCheck,
   LogOut,
@@ -26,6 +27,7 @@ import { MyResults } from "./pages/MyResults";
 import { ProfileSetup } from "./pages/ProfileSetup";
 import { AnalyseJob } from "./pages/AnalyseJob";
 import { Results } from "./pages/Results";
+import { ResumeEditor } from "./pages/ResumeEditor";
 import { Saved } from "./pages/Saved";
 import { Discover } from "./pages/Discover";
 import { Costs } from "./pages/Costs";
@@ -48,6 +50,7 @@ const pageTitles: Record<string, string> = {
   "/profile": "Profile",
   "/analyse": "Submit Role",
   "/results": "Application Packages",
+  "/resume": "Resume Editor",
   "/campaign": "Campaigns",
   "/discover": "Role Discovery",
   "/saved": "Saved Roles",
@@ -76,7 +79,11 @@ function Shell({ children }: { children: ReactNode }) {
 
   const title =
     pageTitles[location.pathname] ??
-    (location.pathname.startsWith("/results") ? "Application Package" : "JobFit");
+    (location.pathname.startsWith("/results")
+      ? "Application Package"
+      : location.pathname.startsWith("/resume")
+        ? "Resume Editor"
+        : "JobFit");
   const linkClass = navLink;
   const initials = user.email.slice(0, 2).toUpperCase();
   const isOperations =
@@ -100,6 +107,10 @@ function Shell({ children }: { children: ReactNode }) {
       <NavLink to="/results" end className={linkClass} onClick={() => setMobileOpen(false)}>
         <Files className="size-4" />
         <span>Application Packages</span>
+      </NavLink>
+      <NavLink to="/resume" className={linkClass} onClick={() => setMobileOpen(false)}>
+        <FileText className="size-4" />
+        <span>Resume Editor</span>
       </NavLink>
       <NavLink to="/profile" className={linkClass} onClick={() => setMobileOpen(false)}>
         <UserRound className="size-4" />
@@ -289,6 +300,11 @@ export default function App() {
             <Route path="/analyse" element={<ProtectedRoute><AnalyseJob /></ProtectedRoute>} />
             <Route path="/results" element={<ProtectedRoute><MyResults /></ProtectedRoute>} />
             <Route path="/results/:id" element={<ProtectedRoute><Results /></ProtectedRoute>} />
+            <Route path="/resume" element={<ProtectedRoute><ResumeEditor /></ProtectedRoute>} />
+            <Route
+              path="/resume/analysis/:analysisId"
+              element={<ProtectedRoute><ResumeEditor /></ProtectedRoute>}
+            />
             <Route path="/campaign" element={<ProtectedRoute requireAdmin><Campaign /></ProtectedRoute>} />
             <Route path="/discover" element={<ProtectedRoute requireAdmin><Discover /></ProtectedRoute>} />
             <Route path="/saved" element={<ProtectedRoute requireAdmin><Saved /></ProtectedRoute>} />
