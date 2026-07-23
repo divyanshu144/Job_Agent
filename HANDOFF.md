@@ -1,85 +1,55 @@
 # Session Handoff
 
-**Updated:** 2026-07-22
-**Branch:** feat/resume-editor (branched from main @ `0d9a55b`)
+**Updated:** 2026-07-23
+**Branch:** main (local; NOT pushed)
 
 ---
 
 ## Current State
 
-Design/brainstorming phase for the **Resume Editor** feature. No implementation code yet —
-only the design spec. Spec written and being committed:
-`docs/superpowers/specs/2026-07-22-resume-editor-design.md`.
+Resume Editor **Plans 1 AND 2 are merged to local `main`** and verified (`make check`: 675 passed,
+82.97% coverage). Merge commits: `b82180e` (Plan 1: editable/versioned resume data layer — CAS
+writes, versions, undo/restore, rules, routes) and `e4caf66` (Plan 2: Opus 4.8 chat editor —
+ResumeEditorAgent, injection-hardened grounded prompt, resume_chat service with scoped Sonnet
+fallback + fallback_used + transactional CAS commit + best-effort rule capture, SSE endpoint
+`POST /api/resume/{doc_id}/chat` with guaranteed terminal events). Both went through subagent-driven
+execution with per-task reviews + Opus whole-branch reviews; all review fixes landed. Feature
+branches deleted. NOT pushed (unrelated pre-existing DSN-in-history concern on local main gates any
+push — see git history).
 
-Feature (agreed with user): promote the tailored resume to a first-class **editable, versioned**
-`ResumeDocument` with **two edit paths** (inline direct edit + Opus 4.8 chat editor), **one
-locked ATS format** for everyone, **two entry points** (standalone Resume section + per-analysis)
-sharing one `ResumeEditor` component, **versioning** (Default + create/switch/rename/delete),
-per-user **always/never rules**, **master-as-base** tailoring (full profile stays the knowledge
-base), scoped **Opus→Sonnet fallback** (chat-edit path, breaker-open only), and first-class
-**truthfulness/hallucination control** (grounded prompts → deterministic faithfulness validator
-→ user-visible warnings → no silent save-to-master). Spec also now covers **prompt-injection
-defenses** (§9.5), **`rev`-based optimistic-concurrency CAS** guarding the inline-vs-chat write
-race (§5.3), and **server-backed undo/redo edit history** (`resume_document_revisions`, §3.4).
-
-Note: the prior deploy blocker (v1.4.0, missing SSM `/jobfit/staging/sentry-dsn`) is UNRELATED
-to this branch and still open on the deploy side — see git history / previous handoff if resuming
-that thread.
-
-**Plan 1 (backend foundation) COMPLETE** — executed via subagent-driven development on
-`feat/resume-editor` (from `main` @ `0d9a55b`). All 5 tasks implemented, per-task reviewed, and a
-final whole-branch review (Opus) passed with its fixes applied + re-reviewed. `make check` green:
-658 passed, 82.72% coverage. Head: `f3b29e1`. Ledger: `.superpowers/sdd/progress.md`.
-
-Delivered: `resume_documents`/`cover_letter_documents`/`resume_document_revisions`/`resume_edit_rules`
-tables + migration 0014; Pydantic schemas; deterministic profile→resume seed; document service with
-DB-level atomic-CAS writes, versioning, cursor-driven undo/restore; config (`resume_model=opus-4-8`,
-fallback, faithfulness flag); `routes/resume.py` (registered). No LLM yet (starts Plan 2).
-
-Tracked Minors (deferred, in ledger): redo snapshots tagged `source="undo"` (cosmetic); base_rev
-query-param vs JSON-body inconsistency (unify in frontend Plan 5); `set_active` KeyError unreachable;
-undo/restore lack a dedicated 409-body assertion test.
-
-Plan 1 merged to `main` (merge commit `b82180e`, verified `make check` green). **Plan 2 (chat
-editor agent) is written:** `docs/superpowers/plans/2026-07-22-resume-editor-02-chat-agent.md`, on
-new branch `feat/resume-editor-chat`. Plan 2 = 5 tasks: chat schemas, injection-hardened grounded
-prompt (`prompts/resume_editor.md`), `ResumeEditorAgent` (Opus 4.8 whole-doc rewrite), `resume_chat`
-service (grounding + scoped Sonnet fallback on persistent failure + CAS commit `source="chat"` + rule
-capture), and the SSE endpoint `POST /api/resume/{doc_id}/chat`
-(edit_start/edit_done/edit_conflict/edit_error). Faithfulness warnings deferred to Plan 3 (Task 4
-returns `warnings=[]`).
-
-Verified before writing: `BaseAgent._call_structured` already IS resilience Layer 1+2 (transient
-retry + one self-correction); SSE via `StreamingResponse` yielding `event:/data:`;
-`context_builder.build_resume_tailoring_context` is the grounding input.
+Remaining plans (specs in docs/superpowers/specs/2026-07-22-resume-editor-design.md, §13):
+Plan 3 faithfulness validator + user-visible warnings; Plan 4 master-as-base tailoring;
+Plan 5 frontend ResumeEditor (split-pane, locked HTML preview, versions, undo/redo, SSE chat);
+Plan 6 cover-letter mode.
 
 ## Next Action
 
-Awaiting user's execution choice for Plan 2 (subagent-driven vs inline). Then execute Plan 2 Task 1
-(chat schemas) from `.superpowers/sdd/task-1-brief.md` (regenerate the ledger for Plan 2 first —
-current ledger is Plan 1's).
+**Blocked on a user design decision for Plan 3** (flagged-edit semantics): when the faithfulness
+validator flags an edit as possibly ungrounded — (a) commit it with a dismissible warning (lenient;
+current apply_chat_edit shape unchanged) or (b) hold it un-committed until the user confirms
+(strict spec §9 reading; requires restructuring apply_chat_edit + a pending/committed discriminator
+in the payload). Then write Plan 3 (writing-plans skill) and execute subagent-driven.
 
 ## Why It Stopped
 
-Plan 2 written; awaiting execution-approach choice.
+Plan 2 merged and verified; natural checkpoint. Plan 3 needs the flagged-edit decision.
 
 ## In-Flight
 
-- No uncommitted changes after this HANDOFF commit (Plan 2 doc committed on feat/resume-editor-chat).
+- No uncommitted changes (this HANDOFF commit closes the session cleanly).
 
 ## Open Questions
 
-- Cover-letter chat editing: full parity now vs resume-first + follow-up (spec §14). Defers
-  cleanly with no data-model change.
-- Optional Layer-3 LLM faithfulness judge: keep off (`resume_faithfulness_judge_enabled=False`)
-  until the deterministic Layer-2 validator shows gaps in real use.
-- master-as-base couples into the `resume_tailorer` prompt + pipeline (spec §7) — confirmed in
-  principle; verify no regression when implementing.
+- Flagged-edit semantics (above) — decide before Plan 3.
+- Frontend conflict handler (Plan 5): edit_conflict SSE payload is {rev, content} while PATCH 409
+  detail is {message, rev, content} — code against the intersection or unify shapes.
+- _load_rules_text is unbounded/unordered — cap + order when the rules UI lands (Plan 5).
+- Prior sentry-era open item: DSN in 2 local-only main commits — resolve before ANY push of main.
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make test` | Not run this session (docs-only change) |
-| `make lint` | Not run this session (docs-only change) |
-| `make check` | Not run this session (docs-only change) |
+| `make test` | 675 passed · 82.97% coverage ✓ (on merged main) |
+| `make lint` | ✓ clean (ruff + mypy + schema-drift) |
+| `make check` | ✓ clean |
