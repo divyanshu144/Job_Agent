@@ -40,20 +40,32 @@ Tracked Minors (deferred, in ledger): redo snapshots tagged `source="undo"` (cos
 query-param vs JSON-body inconsistency (unify in frontend Plan 5); `set_active` KeyError unreachable;
 undo/restore lack a dedicated 409-body assertion test.
 
+Plan 1 merged to `main` (merge commit `b82180e`, verified `make check` green). **Plan 2 (chat
+editor agent) is written:** `docs/superpowers/plans/2026-07-22-resume-editor-02-chat-agent.md`, on
+new branch `feat/resume-editor-chat`. Plan 2 = 5 tasks: chat schemas, injection-hardened grounded
+prompt (`prompts/resume_editor.md`), `ResumeEditorAgent` (Opus 4.8 whole-doc rewrite), `resume_chat`
+service (grounding + scoped Sonnet fallback on persistent failure + CAS commit `source="chat"` + rule
+capture), and the SSE endpoint `POST /api/resume/{doc_id}/chat`
+(edit_start/edit_done/edit_conflict/edit_error). Faithfulness warnings deferred to Plan 3 (Task 4
+returns `warnings=[]`).
+
+Verified before writing: `BaseAgent._call_structured` already IS resilience Layer 1+2 (transient
+retry + one self-correction); SSE via `StreamingResponse` yielding `event:/data:`;
+`context_builder.build_resume_tailoring_context` is the grounding input.
+
 ## Next Action
 
-Two choices for the user: (a) finish the branch — merge `feat/resume-editor` to `main` or open a PR
-(the branch also carries the unrelated docs/spec commits); or (b) continue to **Plan 2**
-(`ResumeEditorAgent` — Opus 4.8 chat editor, SSE endpoint, resilience §8, injection-hardened prompt,
-rule capture), which I'd write next then execute the same way. Recommend merging Plan 1 first.
+Awaiting user's execution choice for Plan 2 (subagent-driven vs inline). Then execute Plan 2 Task 1
+(chat schemas) from `.superpowers/sdd/task-1-brief.md` (regenerate the ledger for Plan 2 first —
+current ledger is Plan 1's).
 
 ## Why It Stopped
 
-Plan 1 complete and fully reviewed; awaiting user decision on branch finish vs. proceeding to Plan 2.
+Plan 2 written; awaiting execution-approach choice.
 
 ## In-Flight
 
-- No uncommitted changes after this HANDOFF commit (all task work committed by subagents).
+- No uncommitted changes after this HANDOFF commit (Plan 2 doc committed on feat/resume-editor-chat).
 
 ## Open Questions
 
