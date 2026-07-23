@@ -652,3 +652,8 @@ class ResumeChatResult(BaseModel):
     new_rule: EditRuleResponse | None = None
     # True when the edit was applied by the backup model (design §8's subtle note).
     fallback_used: bool = False
+
+
+class SaveToMasterRequest(BaseModel):
+    name: str | None = None
+    confirm: bool = False

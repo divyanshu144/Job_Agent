@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents.base import AgentError
 from backend.database import get_db
+from backend.evals.faithfulness import validate_resume_faithfulness
 from backend.models import ResumeDocument, ResumeEditRule, User
 from backend.schemas import (
     EditRuleCreate,
@@ -24,10 +25,12 @@ from backend.schemas import (
     ResumeVersionCreate,
     ResumeVersionPatch,
     ResumeVersionSummary,
+    SaveToMasterRequest,
 )
 from backend.services import resume_chat
 from backend.services import resume_document as svc
 from backend.services.auth_service import get_current_user
+from backend.services.context_builder import build_resume_tailoring_context
 from backend.services.profile_builder import get_owned_profile
 from backend.services.resume_errors import StaleRevError
 
@@ -55,6 +58,24 @@ async def _owned_master(db: AsyncSession, doc_id: str, user_id: str) -> ResumeDo
                 ResumeDocument.id == doc_id,
                 ResumeDocument.user_id == user_id,
                 ResumeDocument.kind == "master",
+            )
+        )
+    ).scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Resume version not found")
+    return doc
+
+
+async def _owned_doc(db: AsyncSession, doc_id: str, user_id: str) -> ResumeDocument:
+    # Same shape as _owned_master WITHOUT the kind filter — the edit family (content
+    # patch, chat, undo, restore, revisions) must reach both master versions AND
+    # per-analysis forks. Version CRUD (create/list/patch/delete) stays master-only
+    # via _owned_master.
+    doc = (
+        await db.execute(
+            select(ResumeDocument).where(
+                ResumeDocument.id == doc_id,
+                ResumeDocument.user_id == user_id,
             )
         )
     ).scalar_one_or_none()
@@ -148,7 +169,7 @@ async def patch_content(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ResumeDocumentResponse:
-    doc = await _owned_master(db, doc_id, current_user.id)
+    doc = await _owned_doc(db, doc_id, current_user.id)
     try:
         doc = await svc.apply_write(db, doc, data.content, base_rev=data.base_rev, source="inline")
     except StaleRevError as exc:
@@ -176,7 +197,7 @@ async def chat_edit(
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     # Auth + ownership resolved BEFORE streaming (real 401/404).
-    doc = await _owned_master(db, doc_id, current_user.id)
+    doc = await _owned_doc(db, doc_id, current_user.id)
 
     async def _stream() -> AsyncGenerator[str, None]:
         yield _sse("edit_start", {"doc_id": doc.id})
@@ -216,7 +237,7 @@ async def undo_content(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ResumeDocumentResponse:
-    doc = await _owned_master(db, doc_id, current_user.id)
+    doc = await _owned_doc(db, doc_id, current_user.id)
     try:
         doc = await svc.undo(db, doc, base_rev=base_rev)
     except StaleRevError as exc:
@@ -242,7 +263,7 @@ async def restore_content(
 ) -> ResumeDocumentResponse:
     # Cursor-driven restore: the frontend performs REDO (and jump-to-revision) by passing the
     # target rev. A parameterless server-side redo cannot work against an append-only log.
-    doc = await _owned_master(db, doc_id, current_user.id)
+    doc = await _owned_doc(db, doc_id, current_user.id)
     try:
         doc = await svc.restore_revision(db, doc, base_rev=base_rev, target_rev=target_rev)
     except StaleRevError as exc:
@@ -265,7 +286,7 @@ async def list_document_revisions(
     db: AsyncSession = Depends(get_db),
 ) -> list[ResumeRevisionSummary]:
     # The frontend's undo-cursor source of truth (design §3.4).
-    doc = await _owned_master(db, doc_id, current_user.id)
+    doc = await _owned_doc(db, doc_id, current_user.id)
     revs = await svc.list_revisions(db, doc)
     return [
         ResumeRevisionSummary(
@@ -273,6 +294,49 @@ async def list_document_revisions(
         )
         for r in revs
     ]
+
+
+@router.get("/analysis/{analysis_id}/resume", response_model=ResumeDocumentResponse)
+async def get_analysis_resume(
+    analysis_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ResumeDocumentResponse:
+    doc = await svc.get_analysis_resume(db, current_user.id, analysis_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="No tailored resume for this analysis")
+    return _to_response(doc)
+
+
+@router.post("/analysis/{analysis_id}/resume/save-to-master", response_model=ResumeDocumentResponse)
+async def save_to_master(
+    analysis_id: str,
+    data: SaveToMasterRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ResumeDocumentResponse:
+    doc = await svc.get_analysis_resume(db, current_user.id, analysis_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="No tailored resume for this analysis")
+
+    # §9 guard: recompute against the CURRENT profile (never persisted), require an
+    # explicit confirm when anything looks unsupported.
+    profile = await get_owned_profile(db, current_user.id)
+    source = build_resume_tailoring_context(profile) if profile is not None else ""
+    content = ResumeTailorerOutput.model_validate(json.loads(doc.content_json or "{}"))
+    warnings = validate_resume_faithfulness(content, source)
+    if warnings and not data.confirm:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "This resume has unverified claims; confirm to save to master",
+                "warnings": [w.model_dump() for w in warnings],
+            },
+        )
+    promoted = await svc.promote_analysis_to_master(
+        db, current_user.id, doc, name=data.name or "Promoted"
+    )
+    return _to_response(promoted)
 
 
 @router.get("/resume/rules", response_model=list[EditRuleResponse])

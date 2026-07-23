@@ -540,6 +540,8 @@ async def run_steps(
                     )
                 ),
             )
+            # Currently unreachable: resume_tailorer always dispatches via
+            # _PARALLEL_PHASE2 (kept for symmetry; untested).
             if name == "resume_tailorer" and analysis.user_id is not None:
                 from backend.services.resume_document import ensure_analysis_resume
 
@@ -573,6 +575,8 @@ async def run_steps(
                     )
                 ),
             )
+            # Currently unreachable: resume_tailorer always dispatches via
+            # _PARALLEL_PHASE2 (kept for symmetry; untested).
             if name == "resume_tailorer" and analysis.user_id is not None:
                 from backend.services.resume_document import (
                     ensure_analysis_resume,
