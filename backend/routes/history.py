@@ -19,6 +19,7 @@ from backend.schemas import (
 )
 from backend.services.auth_service import get_current_user
 from backend.services.profile_builder import get_owned_profile, resume_identity_from_profile
+from backend.services.resume_document import get_analysis_resume
 from backend.services.resume_docx import render_resume_docx
 from backend.services.resume_latex_template import ResumeTemplateError, render_resume_pdf
 
@@ -175,10 +176,15 @@ async def download_resume_docx(
             )
         )
     ).scalar_one_or_none()
-    if result is None or not result.output_json:
+
+    fork = await get_analysis_resume(db, current_user.id, analysis_id)
+    if fork is not None and fork.content_json not in (None, "", "{}"):
+        output = ResumeTailorerOutput.model_validate(json.loads(fork.content_json))
+    elif result is not None and result.output_json:
+        output = ResumeTailorerOutput.model_validate(json.loads(result.output_json))
+    else:
         raise HTTPException(status_code=404, detail="Tailored resume is not available")
 
-    output = ResumeTailorerOutput.model_validate(json.loads(result.output_json))
     body = render_resume_docx(output)
     filename = f"jobfit-resume-{analysis_id}.docx"
     return Response(
@@ -210,10 +216,15 @@ async def download_resume_pdf(
             )
         )
     ).scalar_one_or_none()
-    if result is None or not result.output_json:
+
+    fork = await get_analysis_resume(db, current_user.id, analysis_id)
+    if fork is not None and fork.content_json not in (None, "", "{}"):
+        output = ResumeTailorerOutput.model_validate(json.loads(fork.content_json))
+    elif result is not None and result.output_json:
+        output = ResumeTailorerOutput.model_validate(json.loads(result.output_json))
+    else:
         raise HTTPException(status_code=404, detail="Tailored resume is not available")
 
-    output = ResumeTailorerOutput.model_validate(json.loads(result.output_json))
     profile = await get_owned_profile(db, current_user.id)
     identity = resume_identity_from_profile(profile, current_user.email)
     try:

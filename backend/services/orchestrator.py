@@ -159,7 +159,19 @@ async def _profile_context(
     if profile is None:
         return ""
     if agent_name == "resume_tailorer":
-        return build_resume_tailoring_context(profile)
+        base_ctx = build_resume_tailoring_context(profile)
+        if profile.user_id is not None:
+            from backend.services.resume_document import get_active_master
+
+            master = await get_active_master(db, profile.user_id)
+            if master is not None and master.content_json not in (None, "", "{}"):
+                base_ctx += (
+                    "\n\n## Current Master Resume (structural base — see instructions)\n"
+                    "<current_master_resume>\n"
+                    f"{master.content_json}\n"
+                    "</current_master_resume>"
+                )
+        return base_ctx
     if agent_name in {"job_parser", "match_scorer"}:
         return profile_context_for_agent(profile, agent_name)
     chunks = await retrieve_profile_memory(
@@ -528,6 +540,14 @@ async def run_steps(
                     )
                 ),
             )
+            # Currently unreachable: resume_tailorer always dispatches via
+            # _PARALLEL_PHASE2 (kept for symmetry; untested).
+            if name == "resume_tailorer" and analysis.user_id is not None:
+                from backend.services.resume_document import ensure_analysis_resume
+
+                await ensure_analysis_resume(
+                    db, analysis.user_id, analysis.id, json.dumps(output.model_dump())
+                )
             yield SSEEvent("agent_done", {"agent": name, "output": output.model_dump()})
         except Exception as e:
             logger.exception("step %s failed", name)
@@ -555,6 +575,20 @@ async def run_steps(
                     )
                 ),
             )
+            # Currently unreachable: resume_tailorer always dispatches via
+            # _PARALLEL_PHASE2 (kept for symmetry; untested).
+            if name == "resume_tailorer" and analysis.user_id is not None:
+                from backend.services.resume_document import (
+                    ensure_analysis_resume,
+                    get_active_master,
+                )
+
+                master = await get_active_master(db, analysis.user_id)
+                if master is not None:
+                    # Graceful degradation: an un-tuned master beats no resume.
+                    await ensure_analysis_resume(
+                        db, analysis.user_id, analysis.id, master.content_json
+                    )
             yield SSEEvent("pipeline_error", {"agent": name, "error": ue.message, "code": ue.code})
 
     if parallel:
@@ -598,6 +632,18 @@ async def run_steps(
                     error_code=ue.code,
                 )
                 await upsert_job_result(db, analysis.id, name, error=ue.message, error_code=ue.code)
+                if name == "resume_tailorer" and analysis.user_id is not None:
+                    from backend.services.resume_document import (
+                        ensure_analysis_resume,
+                        get_active_master,
+                    )
+
+                    master = await get_active_master(db, analysis.user_id)
+                    if master is not None:
+                        # Graceful degradation: an un-tuned master beats no resume.
+                        await ensure_analysis_resume(
+                            db, analysis.user_id, analysis.id, master.content_json
+                        )
                 yield SSEEvent(
                     "pipeline_error", {"agent": name, "error": ue.message, "code": ue.code}
                 )
@@ -616,6 +662,12 @@ async def run_steps(
                         )
                     ),
                 )
+                if name == "resume_tailorer" and analysis.user_id is not None:
+                    from backend.services.resume_document import ensure_analysis_resume
+
+                    await ensure_analysis_resume(
+                        db, analysis.user_id, analysis.id, json.dumps(result.model_dump())
+                    )
                 yield SSEEvent("agent_done", {"agent": name, "output": result.model_dump()})
 
     # Finalize from the full stored set (not just this run's results).
