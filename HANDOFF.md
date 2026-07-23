@@ -1,14 +1,16 @@
 # Session Handoff
 
-**Updated:** 2026-07-23 (Plan 3 merged)
+**Updated:** 2026-07-23 (Plan 4 merged — backend complete)
 **Branch:** main (local; NOT pushed)
 
 ---
 
 ## Current State
 
-Resume Editor **Plans 1, 2 AND 3 are merged to local `main`** and verified (`make check`: 688
-passed, 83.05% coverage). Merge commits: `b82180e` (Plan 1: editable/versioned resume data layer — CAS
+Resume Editor **Plans 1-4 are merged to local `main`** and verified (`make check`: 702 passed,
+82.92% coverage). THE BACKEND IS COMPLETE (resume half; cover-letter = Plan 6). Plan 4 merge:
+`50c8961` — master-as-base tailoring, per-analysis editable forks (never-clobber + degradation),
+edit family on forks, save-to-master with recompute+confirm guard, downloads serve edited forks. Merge commits: `b82180e` (Plan 1: editable/versioned resume data layer — CAS
 writes, versions, undo/restore, rules, routes), `5c169c1` (Plan 3: deterministic faithfulness
 validator, flag-only option (a), warnings in edit_done payload) and `e4caf66` (Plan 2: Opus 4.8 chat editor —
 ResumeEditorAgent, injection-hardened grounded prompt, resume_chat service with scoped Sonnet
@@ -27,14 +29,16 @@ Plan 6 cover-letter mode.
 
 ## Next Action
 
-Write **Plan 4** (master-as-base tailoring, per-analysis ResumeDocuments, save-to-master with the
-recompute-warnings + confirm promote guard) via the writing-plans skill, then execute
-subagent-driven. Flagged-edit decision RESOLVED: option (a) commit + dismissible flag (shipped in
-Plan 3).
+**Pre-Plan-5 follow-up commit** (small, per Plan 4's final review — see ledger for full list):
+I-2 warnings-on-read for GET /analysis/{id}/resume; M-5 analysis_id+created_at on
+ResumeDocumentResponse; M-4 blank-master guard in the degradation hook; M-1 shared download helper
++ PDF test; M-2 fork-chat route test; M-3 loop-closure test; REC-1 grounding-asymmetry paragraph in
+design §9. Then write **Plan 5** (frontend ResumeEditor) — INCLUDE the "re-tailor from current
+master" action (I-1 decision: option (a), user-confirmed 2026-07-23).
 
 ## Why It Stopped
 
-Plan 3 merged and verified; natural checkpoint.
+Plan 4 merged and verified; natural checkpoint.
 
 ## In-Flight
 
@@ -51,6 +55,6 @@ Plan 3 merged and verified; natural checkpoint.
 
 | Check | Result |
 |---|---|
-| `make test` | 688 passed · 83.05% coverage ✓ (on merged main) |
+| `make test` | 702 passed · 82.92% coverage ✓ (on merged main) |
 | `make lint` | ✓ clean (ruff + mypy + schema-drift) |
 | `make check` | ✓ clean |
