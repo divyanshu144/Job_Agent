@@ -1,14 +1,18 @@
 # Session Handoff
 
-**Updated:** 2026-07-23 (Plan 4 merged — backend complete)
+**Updated:** 2026-07-24 (Plan 5 merged — editor UI shipped)
 **Branch:** main (local; NOT pushed)
 
 ---
 
 ## Current State
 
-Resume Editor **Plans 1-4 are merged to local `main`** and verified (`make check`: 702 passed,
-82.92% coverage). THE BACKEND IS COMPLETE (resume half; cover-letter = Plan 6). Plan 4 merge:
+Resume Editor **Plans 1-5 are merged to local `main`** and verified (backend `make check`: 708
+passed, 82.87%; frontend `npm run build`+lint clean; live browser smoke passed). The resume editor
+is END-TO-END USABLE (standalone /resume + per-analysis /resume/analysis/:id). Plan 5 merge:
+`95f2ad7` — split-pane ResumeEditor UI (chat SSE, inline CAS edit, versions, undo, warning chips,
+save-to-master confirm, re-tailor), backend prep (warnings-on-read, retailor endpoint). Only Plan
+6 (cover-letter mode) remains. Plan 4 merge:
 `50c8961` — master-as-base tailoring, per-analysis editable forks (never-clobber + degradation),
 edit family on forks, save-to-master with recompute+confirm guard, downloads serve edited forks. Merge commits: `b82180e` (Plan 1: editable/versioned resume data layer — CAS
 writes, versions, undo/restore, rules, routes), `5c169c1` (Plan 3: deterministic faithfulness
@@ -55,6 +59,6 @@ Plan 4 merged and verified; natural checkpoint.
 
 | Check | Result |
 |---|---|
-| `make test` | 702 passed · 82.92% coverage ✓ (on merged main) |
+| `make test` | 708 passed · 82.87% coverage ✓ (on merged main) |
 | `make lint` | ✓ clean (ruff + mypy + schema-drift) |
 | `make check` | ✓ clean |
