@@ -4,6 +4,12 @@ Flag-only and NON-mutating: unlike validate_resume_tailorer (which omits unsuppo
 items — correct for the automated tailorer), the chat path surfaces warnings and lets
 the user keep, dismiss, or undo. The user is the ground truth for their own resume.
 Zero LLM calls.
+
+Deliberately UNCHECKED at this layer: job titles, dates, degrees, and project names.
+Literal matching would false-positive on nearly every legitimate rephrasing ("SWE II"
+to "Software Engineer", "2022-2024" to "Mar 2022 - Present"). Those claim types are
+covered by the grounding prompt (Layer 1) with the optional LLM judge (Layer 3,
+resume_faithfulness_judge_enabled) in reserve — see design spec §9.
 """
 
 from __future__ import annotations
@@ -36,7 +42,9 @@ def _check_metrics(cv_text: str, content: ResumeTailorerOutput) -> list[Validati
     'forty percent' in the source does NOT support '40%'. Digit-boundary guarded so a
     fabricated '40%' is not wrongly "supported" by an unrelated longer number in the
     source (e.g. '140') — the match must not be adjacent to another digit on either
-    side. Deterministic > clever."""
+    side. Known limitation: comma-grouped numbers ('1,200') tokenize as separate runs
+    ('1', '200') and may warn even when the source has the ungrouped form; dismiss the
+    chip. Deterministic > clever."""
     warnings: list[ValidationWarning] = []
     for text in _prose_fields(content):
         for token in _METRIC_RE.findall(text):
@@ -46,7 +54,7 @@ def _check_metrics(cv_text: str, content: ResumeTailorerOutput) -> list[Validati
                     _warn(
                         _AGENT,
                         "unsupported_metric",
-                        f"'{token}' (in: '{text[:60]}') was not found in your profile — "
+                        f"'{token}' (in: '{text[:60]}') was not found in your profile, "
                         "verify before keeping",
                     )
                 )
@@ -62,9 +70,7 @@ def validate_resume_faithfulness(
     for text in _prose_fields(content):
         if any(d in text for d in _DASHES):
             warnings.append(
-                _warn(
-                    _AGENT, "style_dash", f"em/en dash in: '{text[:60]}' — rephrase or use commas"
-                )
+                _warn(_AGENT, "style_dash", f"em/en dash in: '{text[:60]}', rephrase or use commas")
             )
 
     cv_text = _evidence_text(source_text)
@@ -77,7 +83,7 @@ def validate_resume_faithfulness(
                 _warn(
                     _AGENT,
                     "unsupported_employer",
-                    f"employer '{exp.company}' was not found in your profile — "
+                    f"employer '{exp.company}' was not found in your profile, "
                     "verify before keeping",
                 )
             )
@@ -87,7 +93,7 @@ def validate_resume_faithfulness(
                 _warn(
                     _AGENT,
                     "unsupported_institution",
-                    f"institution '{edu.institution}' was not found in your profile — "
+                    f"institution '{edu.institution}' was not found in your profile, "
                     "verify before keeping",
                 )
             )
@@ -97,7 +103,7 @@ def validate_resume_faithfulness(
                 _warn(
                     _AGENT,
                     "unsupported_skill",
-                    f"skill '{skill}' was not found in your profile — verify before keeping",
+                    f"skill '{skill}' was not found in your profile, verify before keeping",
                 )
             )
 
