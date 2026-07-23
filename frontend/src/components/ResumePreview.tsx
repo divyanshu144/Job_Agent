@@ -32,14 +32,14 @@ function EditableText({
   if (!editable || !editing) {
     return (
       <span
-        className={`${className} ${editable ? "cursor-text rounded px-0.5 hover:bg-[#5b5bd6]/10" : ""} ${value ? "" : "text-neutral-500 italic"}`}
+        className={`${className} ${editable ? "-mx-0.5 cursor-text rounded px-0.5 transition-colors hover:bg-[rgba(91,91,214,0.1)]" : ""} ${value ? "" : "italic text-[#a1a1aa]"}`}
         onClick={() => editable && setEditing(true)}
       >
         {value || placeholder}
       </span>
     );
   }
-  const fieldClassName = `${className} w-full rounded border border-[#5b5bd6]/50 bg-[#0f0f17] px-1 outline-none`;
+  const fieldClassName = `${className} w-full rounded border border-[#5b5bd6] bg-white px-1 text-[#0f0f17] outline-none ring-2 ring-[rgba(91,91,214,0.15)]`;
   return multiline ? (
     <textarea
       value={draft}
@@ -68,7 +68,7 @@ function EditableText({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2">
-      <h3 className="border-b border-neutral-700 pb-1 text-xs font-bold uppercase tracking-widest text-neutral-300">
+      <h3 className="border-b border-[rgba(0,0,0,0.2)] pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#3f3f46]">
         {title}
       </h3>
       {children}
@@ -87,13 +87,13 @@ export function ResumePreview({
 }) {
   const change = (mutate: Mutator) => onFieldChange?.(mutate);
   return (
-    <article className="mx-auto max-w-[52rem] space-y-6 rounded-lg bg-white/[0.03] p-8 font-serif text-sm leading-relaxed text-neutral-100">
+    <article className="mx-auto max-w-[52rem] space-y-6 rounded-md bg-white p-8 font-serif text-sm leading-relaxed text-[#1a1a1a] shadow-[0_1px_3px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.04)] sm:p-12">
       <header className="space-y-1 text-center">
         <EditableText
           value={content.headline}
-          placeholder="Headline"
+          placeholder="Your headline"
           editable={editable}
-          className="text-xl font-bold"
+          className="text-2xl font-bold tracking-tight"
           onCommit={(v) => change((d) => void (d.headline = v))}
         />
         <div>
@@ -102,7 +102,7 @@ export function ResumePreview({
             placeholder="Professional summary"
             multiline
             editable={editable}
-            className="block text-left text-sm text-neutral-300"
+            className="block text-left text-sm text-[#3f3f46]"
             onCommit={(v) => change((d) => void (d.summary = v))}
           />
         </div>
@@ -122,7 +122,7 @@ export function ResumePreview({
                 <span className="font-semibold">
                   {[exp.company, exp.role].filter(Boolean).join(" | ")}
                 </span>
-                <span className="shrink-0 text-xs text-neutral-400">{exp.dates}</span>
+                <span className="shrink-0 text-xs text-[#71717a]">{exp.dates}</span>
               </div>
               <ul className="list-disc space-y-0.5 pl-5">
                 {exp.bullets.map((b, j) => (
@@ -149,7 +149,7 @@ export function ResumePreview({
           {content.projects.map((proj, i) => (
             <div key={i} className="space-y-1">
               <span className="font-semibold">{proj.name}</span>
-              {proj.description && <p className="text-neutral-300">{proj.description}</p>}
+              {proj.description && <p className="text-[#3f3f46]">{proj.description}</p>}
               <ul className="list-disc space-y-0.5 pl-5">
                 {proj.bullets.map((b, j) => (
                   <li key={j}>
@@ -176,7 +176,7 @@ export function ResumePreview({
                 <span className="font-semibold">{edu.institution}</span>
                 {edu.degree ? `, ${edu.degree}` : ""}
               </span>
-              <span className="shrink-0 text-xs text-neutral-400">{edu.dates}</span>
+              <span className="shrink-0 text-xs text-[#71717a]">{edu.dates}</span>
             </div>
           ))}
         </Section>

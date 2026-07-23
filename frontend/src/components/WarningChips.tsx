@@ -27,7 +27,7 @@ export function WarningChips({ warnings }: { warnings: ValidationWarning[] }) {
         return (
           <span
             key={key}
-            className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-300"
+            className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700"
             title={w.rule === "style_dash" ? RULE_COPY.style_dash : w.detail}
           >
             <AlertTriangle className="size-3" />
@@ -36,7 +36,7 @@ export function WarningChips({ warnings }: { warnings: ValidationWarning[] }) {
               type="button"
               aria-label="Dismiss warning"
               onClick={() => setDismissed(new Set(dismissed).add(key))}
-              className="ml-0.5 text-amber-300/60 hover:text-amber-200"
+              className="ml-0.5 text-amber-500 transition-colors hover:text-amber-700"
             >
               <X className="size-3" />
             </button>
