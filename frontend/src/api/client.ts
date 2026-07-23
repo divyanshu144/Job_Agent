@@ -1,4 +1,4 @@
-import type { ProfileResponse, ProfileReviewData, ProfileReviewResponse, AnalysisDetail, AgentName, SSECallbacks, RetryRequest, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback, AnalysisSummary, InviteResponse, PasswordResetRequestResponse, CampaignRun, TargetCompany } from "../types";
+import type { ProfileResponse, ProfileReviewData, ProfileReviewResponse, AnalysisDetail, AgentName, SSECallbacks, RetryRequest, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback, AnalysisSummary, InviteResponse, PasswordResetRequestResponse, CampaignRun, TargetCompany, ResumeDocumentResponse, ResumeVersionSummary, ResumeRevisionSummary, EditRuleResponse, ResumeChatResult, ResumeTailorerOutput } from "../types";
 
 const BASE = "/api";
 
@@ -6,10 +6,15 @@ const BASE = "/api";
 // instead of string-matching backend error copy.
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  // Parsed `detail` from the error response body, when present. Lets callers branch on
+  // structured detail (e.g. a 409's { message, rev, content } or { message, warnings })
+  // without re-parsing the response.
+  detail?: unknown;
+  constructor(message: string, status: number, detail?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -46,9 +51,10 @@ async function _errorMessage(r: Response, method: string, path: string): Promise
     throw new ApiError(
       "Profile review API is not available on the running backend. Restart the backend so /api/profile/review is registered.",
       r.status,
+      detail,
     );
   }
-  throw new ApiError(_detailToMessage(detail, `${method} ${path} failed: ${r.status}`), r.status);
+  throw new ApiError(_detailToMessage(detail, `${method} ${path} failed: ${r.status}`), r.status, detail);
 }
 
 async function get<T>(path: string): Promise<T> {
@@ -227,6 +233,31 @@ export const api = {
   updateTarget: (targetId: string, active: boolean) =>
     patch<TargetCompany>(`/targets/${targetId}`, { active }),
   deleteTarget: (targetId: string) => del(`/targets/${targetId}`),
+
+  // --- resume editor ---
+  getMasterResume: () => get<ResumeDocumentResponse>("/resume"),
+  listResumeVersions: () => get<ResumeVersionSummary[]>("/resume/versions"),
+  createResumeVersion: (name: string, cloneActive = true) =>
+    post<ResumeDocumentResponse>("/resume/versions", { name, clone_active: cloneActive }),
+  patchResumeVersion: (id: string, body: { name?: string; make_active?: boolean }) =>
+    patch<ResumeDocumentResponse>(`/resume/versions/${id}`, body),
+  deleteResumeVersion: (id: string) => del(`/resume/versions/${id}`),
+  patchResumeContent: (id: string, baseRev: number, content: ResumeTailorerOutput) =>
+    patch<ResumeDocumentResponse>(`/resume/${id}/content`, { base_rev: baseRev, content }),
+  // base_rev/target_rev are query params on the backend (not a body) — keep the querystring form.
+  undoResume: (id: string, baseRev: number) =>
+    post<ResumeDocumentResponse>(`/resume/${id}/undo?base_rev=${baseRev}`, {}),
+  restoreResume: (id: string, baseRev: number, targetRev: number) =>
+    post<ResumeDocumentResponse>(`/resume/${id}/restore?base_rev=${baseRev}&target_rev=${targetRev}`, {}),
+  listResumeRevisions: (id: string) => get<ResumeRevisionSummary[]>(`/resume/${id}/revisions`),
+  listEditRules: () => get<EditRuleResponse[]>("/resume/rules"),
+  deleteEditRule: (id: string) => del(`/resume/rules/${id}`),
+  getAnalysisResume: (analysisId: string) =>
+    get<ResumeDocumentResponse>(`/analysis/${analysisId}/resume`),
+  saveToMaster: (analysisId: string, name: string | null, confirm: boolean) =>
+    post<ResumeDocumentResponse>(`/analysis/${analysisId}/resume/save-to-master`, { name, confirm }),
+  retailorAnalysis: (analysisId: string, baseRev: number) =>
+    post<ResumeDocumentResponse>(`/analysis/${analysisId}/resume/retailor`, { base_rev: baseRev }),
 };
 
 function _streamSSE(url: string, init: RequestInit, callbacks: SSECallbacks): () => void {
@@ -291,4 +322,81 @@ export function retryAnalysis(
     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
     callbacks,
   );
+}
+
+export interface ResumeChatCallbacks {
+  onEditStart?: () => void;
+  onEditDone?: (result: ResumeChatResult) => void;
+  onEditConflict?: (c: { rev: number; content: ResumeTailorerOutput }) => void;
+  onEditError?: (message: string) => void;
+  onStreamEnd?: () => void;
+}
+
+// Not routed through _streamSSE: that helper's SSECallbacks shape (pipeline_start/
+// agent_start/agent_done/pipeline_error/pipeline_done) doesn't fit the chat-edit event
+// set, and it has no onStreamEnd hook for cleanup on early/aborted requests. The parse
+// loop below mirrors _streamSSE's proven split("\n\n") / split("\n") / startsWith
+// framing exactly; only the event switch and callback shape differ.
+export function streamResumeChat(
+  docId: string,
+  baseRev: number,
+  instruction: string,
+  callbacks: ResumeChatCallbacks,
+): () => void {
+  const controller = new AbortController();
+  (async () => {
+    try {
+      const resp = await fetch(`${BASE}/resume/${docId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base_rev: baseRev, instruction }),
+        credentials: "include",
+        signal: controller.signal,
+      });
+      if (!resp.ok || !resp.body) {
+        callbacks.onEditError?.(`Chat request failed (${resp.status})`);
+        return;
+      }
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() ?? "";
+        for (const chunk of chunks) {
+          if (!chunk.trim()) continue;
+          const lines = chunk.split("\n");
+          const eventLine = lines.find((l) => l.startsWith("event:"));
+          const dataLine = lines.find((l) => l.startsWith("data:"));
+          if (!eventLine || !dataLine) continue;
+          const eventName = eventLine.replace("event:", "").trim();
+          const data = JSON.parse(dataLine.replace("data:", "").trim());
+          switch (eventName) {
+            case "edit_start":
+              callbacks.onEditStart?.();
+              break;
+            case "edit_done":
+              callbacks.onEditDone?.(data as ResumeChatResult);
+              break;
+            case "edit_conflict":
+              callbacks.onEditConflict?.(data as { rev: number; content: ResumeTailorerOutput });
+              break;
+            case "edit_error":
+              callbacks.onEditError?.((data as { message?: string }).message ?? "Edit failed");
+              break;
+          }
+        }
+      }
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") {
+        callbacks.onEditError?.(errorMessage(e));
+      }
+    } finally {
+      callbacks.onStreamEnd?.();
+    }
+  })();
+  return () => controller.abort();
 }

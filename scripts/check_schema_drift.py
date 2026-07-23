@@ -19,6 +19,11 @@ PAIRS = [
     ("BulletItem", "BulletItem"),
     ("CampaignRunResponse", "CampaignRun"),
     ("TargetCompanyResponse", "TargetCompany"),
+    ("ResumeDocumentResponse", "ResumeDocumentResponse"),
+    ("ResumeVersionSummary", "ResumeVersionSummary"),
+    ("ResumeRevisionSummary", "ResumeRevisionSummary"),
+    ("ResumeChatResult", "ResumeChatResult"),
+    ("EditRuleResponse", "EditRuleResponse"),
 ]
 
 

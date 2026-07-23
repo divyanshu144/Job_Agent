@@ -280,3 +280,48 @@ export interface TargetCompany {
   active: boolean;
   created_at: string;
 }
+
+// --- resume editor — mirrors backend/schemas.py 1:1 ---
+export interface ResumeVersionSummary {
+  id: string;
+  name: string;
+  is_active: boolean;
+  rev: number;
+  updated_at: string;
+}
+
+export interface ResumeRevisionSummary {
+  rev: number;
+  source: string;
+  summary?: string | null;
+  created_at: string;
+}
+
+export interface EditRuleResponse {
+  id: string;
+  mode: string;
+  text: string;
+  scope: string;
+}
+
+export interface ResumeDocumentResponse {
+  id: string;
+  kind: string;
+  name: string;
+  is_active: boolean;
+  rev: number;
+  analysis_id?: string | null;
+  created_at: string;
+  content: ResumeTailorerOutput;
+  updated_at: string;
+  warnings: ValidationWarning[];
+}
+
+export interface ResumeChatResult {
+  rev: number;
+  content: ResumeTailorerOutput;
+  summary: string;
+  warnings: ValidationWarning[];
+  new_rule?: EditRuleResponse | null;
+  fallback_used: boolean;
+}
