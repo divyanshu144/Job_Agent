@@ -162,3 +162,44 @@ async def test_delete_version_purges_revisions(db_session):
         .all()
     )
     assert remaining == []
+
+
+async def test_get_active_master_none_when_unseeded(db_session):
+    user = await make_user(db_session)
+    assert await svc.get_active_master(db_session, user.id) is None
+
+
+async def test_ensure_analysis_resume_creates_once_and_never_clobbers(db_session):
+    from tests.factories import make_analysis
+
+    user = await make_user(db_session)
+    analysis = await make_analysis(db_session, user_id=user.id)
+    doc = await svc.ensure_analysis_resume(db_session, user.id, analysis.id, '{"headline": "T1"}')
+    assert doc is not None and doc.kind == "analysis" and doc.is_active and doc.rev == 0
+
+    # user edits the fork...
+    await svc.apply_write(
+        db_session, doc, ResumeTailorerOutput(headline="edited"), base_rev=0, source="inline"
+    )
+    # ...then the pipeline re-runs: the edit must survive.
+    again = await svc.ensure_analysis_resume(db_session, user.id, analysis.id, '{"headline": "T2"}')
+    assert again is not None and again.id == doc.id
+    assert json.loads(again.content_json)["headline"] == "edited"
+
+
+async def test_promote_creates_new_active_master_version(db_session):
+    from tests.factories import make_analysis
+
+    user = await make_user(db_session)
+    master = await _master(db_session, user.id)  # seeds "Default", active
+    analysis = await make_analysis(db_session, user_id=user.id)
+    fork = await svc.ensure_analysis_resume(
+        db_session, user.id, analysis.id, '{"headline": "Tailored"}'
+    )
+    promoted = await svc.promote_analysis_to_master(db_session, user.id, fork, name="From Acme")
+    assert promoted.kind == "master" and promoted.is_active
+    assert json.loads(promoted.content_json)["headline"] == "Tailored"
+    versions = await svc.list_master_versions(db_session, user.id)
+    assert len(versions) == 2  # old Default preserved (inactive) + new active version
+    assert sum(1 for v in versions if v.is_active) == 1
+    assert not next(v for v in versions if v.id == master.id).is_active

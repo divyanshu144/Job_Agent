@@ -196,3 +196,71 @@ async def restore_revision(
 
 async def undo(db: AsyncSession, doc: ResumeDocument, base_rev: int) -> ResumeDocument:
     return await restore_revision(db, doc, base_rev, target_rev=base_rev - 1)
+
+
+async def get_active_master(db: AsyncSession, user_id: str) -> ResumeDocument | None:
+    return (
+        await db.execute(
+            select(ResumeDocument).where(
+                ResumeDocument.user_id == user_id,
+                ResumeDocument.kind == "master",
+                ResumeDocument.is_active.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def get_analysis_resume(
+    db: AsyncSession, user_id: str, analysis_id: str
+) -> ResumeDocument | None:
+    return (
+        await db.execute(
+            select(ResumeDocument).where(
+                ResumeDocument.user_id == user_id,
+                ResumeDocument.analysis_id == analysis_id,
+                ResumeDocument.kind == "analysis",
+                ResumeDocument.is_active.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def ensure_analysis_resume(
+    db: AsyncSession, user_id: str, analysis_id: str, content_json: str
+) -> ResumeDocument | None:
+    """Create the per-analysis editable fork — ONLY if the analysis has none yet.
+    A pipeline retry must never clobber a fork the user may have edited."""
+    existing = await get_analysis_resume(db, user_id, analysis_id)
+    if existing is not None:
+        return existing
+    doc = ResumeDocument(
+        user_id=user_id,
+        analysis_id=analysis_id,
+        kind="analysis",
+        name="Tailored",
+        content_json=content_json,
+        is_active=True,
+        rev=0,
+    )
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+    return doc
+
+
+async def promote_analysis_to_master(
+    db: AsyncSession, user_id: str, fork: ResumeDocument, name: str
+) -> ResumeDocument:
+    """Non-destructive §3.1 'Save to master': a NEW active master version carries the
+    fork's content; the previous master survives as an inactive version."""
+    promoted = ResumeDocument(
+        user_id=user_id,
+        kind="master",
+        name=name,
+        content_json=fork.content_json,
+        is_active=False,
+        rev=0,
+    )
+    db.add(promoted)
+    await db.flush()
+    return await set_active(db, user_id, promoted.id)
