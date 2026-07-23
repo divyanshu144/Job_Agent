@@ -33,12 +33,15 @@ def _prose_fields(content: ResumeTailorerOutput) -> list[str]:
 def _check_metrics(cv_text: str, content: ResumeTailorerOutput) -> list[ValidationWarning]:
     """A number the profile never mentions is the classic resume hallucination.
     Literal digit-string match: '40%' is supported by '40' anywhere in the source;
-    'forty percent' in the source does NOT support '40%'. Deterministic > clever."""
+    'forty percent' in the source does NOT support '40%'. Digit-boundary guarded so a
+    fabricated '40%' is not wrongly "supported" by an unrelated longer number in the
+    source (e.g. '140') — the match must not be adjacent to another digit on either
+    side. Deterministic > clever."""
     warnings: list[ValidationWarning] = []
     for text in _prose_fields(content):
         for token in _METRIC_RE.findall(text):
             bare = token.rstrip("%")
-            if bare and bare not in cv_text:
+            if bare and re.search(rf"(?<!\d){re.escape(bare)}(?!\d)", cv_text) is None:
                 warnings.append(
                     _warn(
                         _AGENT,

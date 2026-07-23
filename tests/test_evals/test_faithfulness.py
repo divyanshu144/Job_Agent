@@ -88,3 +88,12 @@ def test_all_warnings_are_warn_severity_from_resume_editor():
     content = _content(skills=["Kubernetes"], summary="dash — here")
     for w in validate_resume_faithfulness(content, _SOURCE):
         assert w.agent == "resume_editor" and w.severity == "warn"
+
+
+def test_metric_not_supported_by_substring_of_longer_number():
+    content = _content(
+        experience=[{"company": "Acme Corp", "role": "SWE", "bullets": ["Cut deploy time by 87%"]}]
+    )
+    source = _SOURCE + "\nHandled 1874 tickets."
+    rules = [w.rule for w in validate_resume_faithfulness(content, source)]
+    assert "unsupported_metric" in rules  # '87' inside '1874' must NOT count as support

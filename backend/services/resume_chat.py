@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents.resume_editor import ResumeEditorAgent
 from backend.config import settings
+from backend.evals.faithfulness import validate_resume_faithfulness
 from backend.models import Profile, ResumeDocument, ResumeEditRule
 from backend.schemas import EditRuleCreate, EditRuleResponse, ResumeChatResult, ResumeEditorOutput
 from backend.services import resume_document as docsvc
@@ -117,6 +118,10 @@ async def apply_chat_edit(
     # expires ORM instances — a doc.rev access after that would sync-lazy-load (async unsafe).
     new_rev = doc.rev
 
+    # Option (a): flag, never block. Computed against the same profile corpus the
+    # agent was grounded on, AFTER the commit — a flagged edit is one undo away.
+    warnings = validate_resume_faithfulness(output.content, profile_ctx)
+
     rule_resp: EditRuleResponse | None = None
     if output.new_rule is not None:
         rule_resp = await _capture_rule(db, user_id, output.new_rule)
@@ -125,7 +130,7 @@ async def apply_chat_edit(
         rev=new_rev,
         content=output.content,
         summary=output.summary,
-        warnings=[],  # Plan 3 populates faithfulness warnings here
+        warnings=warnings,
         new_rule=rule_resp,
         fallback_used=fallback_used,
     )

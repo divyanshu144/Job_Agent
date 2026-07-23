@@ -176,3 +176,52 @@ async def test_chat_edit_stale_base_rev_raises(db_session):
         await resume_chat.apply_chat_edit(
             db_session, doc, user.id, base_rev=0, instruction="e2", agent_factory=_fake_agent(out)
         )
+
+
+async def test_chat_edit_flags_fabrications_but_still_commits(db_session):
+    """Option (a): a flagged edit COMMITS (rev advances) and carries warnings —
+    it is never blocked; the user dismisses or undoes."""
+    user = await make_user(db_session)
+    doc = await _seed_master(db_session, user.id)
+    out = ResumeEditorOutput.model_validate(
+        {
+            "content": {
+                "headline": "Engineer",
+                "skills": ["Python"],
+                "experience": [
+                    {"company": "Globex", "role": "SWE", "bullets": ["Raised revenue 300%"]}
+                ],
+            },
+            "summary": "big claims",
+        }
+    )
+    result = await resume_chat.apply_chat_edit(
+        db_session,
+        doc,
+        user.id,
+        base_rev=0,
+        instruction="beef it up",
+        agent_factory=_fake_agent(out),
+    )
+    assert result.rev == 1  # committed regardless — option (a)
+    rules = [w.rule for w in result.warnings]
+    assert "unsupported_employer" in rules
+    assert "unsupported_metric" in rules
+
+
+async def test_chat_edit_grounded_output_has_no_warnings(db_session):
+    user = await make_user(db_session)
+    doc = await _seed_master(db_session, user.id)
+    # _seed_master's profile has yaml_data="Python, FastAPI" — stay inside it.
+    out = ResumeEditorOutput.model_validate(
+        {"content": {"headline": "Engineer", "skills": ["Python"]}, "summary": "ok"}
+    )
+    result = await resume_chat.apply_chat_edit(
+        db_session,
+        doc,
+        user.id,
+        base_rev=0,
+        instruction="tidy",
+        agent_factory=_fake_agent(out),
+    )
+    assert result.warnings == []

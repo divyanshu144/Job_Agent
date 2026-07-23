@@ -110,6 +110,35 @@ async def test_chat_requires_auth(unauthenticated_client):
     assert resp.status_code == 401
 
 
+async def test_edit_done_carries_warnings(app_client, db_session, monkeypatch):
+    doc = await _seed(app_client, db_session)
+
+    async def _fake_edit(db, d, user_id, base_rev, instruction, **kw):
+        from backend.schemas import ResumeChatResult, ResumeTailorerOutput, ValidationWarning
+
+        return ResumeChatResult(
+            rev=base_rev + 1,
+            content=ResumeTailorerOutput(headline="X"),
+            summary="s",
+            warnings=[
+                ValidationWarning(
+                    agent="resume_editor",
+                    rule="unsupported_metric",
+                    detail="'99%' not found in your profile",
+                    severity="warn",
+                )
+            ],
+            new_rule=None,
+        )
+
+    monkeypatch.setattr(resume_chat, "apply_chat_edit", _fake_edit)
+    resp = await app_client.post(
+        f"/api/resume/{doc['id']}/chat", json={"base_rev": 0, "instruction": "x"}
+    )
+    done = next(d for n, d in _parse_sse(resp.text) if n == "edit_done")
+    assert done["warnings"][0]["rule"] == "unsupported_metric"
+
+
 async def test_chat_is_ownership_scoped(app_client, db_session):
     # Another user's master doc must 404 BEFORE any streaming starts (real HTTP status).
     from backend.models import ResumeDocument
