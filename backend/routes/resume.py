@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.agents.base import AgentError
 from backend.database import get_db
 from backend.evals.faithfulness import validate_resume_faithfulness
-from backend.models import ResumeDocument, ResumeEditRule, User
+from backend.models import Analysis, ResumeDocument, ResumeEditRule, User
 from backend.schemas import (
     EditRuleCreate,
     EditRuleResponse,
@@ -25,7 +25,9 @@ from backend.schemas import (
     ResumeVersionCreate,
     ResumeVersionPatch,
     ResumeVersionSummary,
+    RetailorRequest,
     SaveToMasterRequest,
+    ValidationWarning,
 )
 from backend.services import resume_chat
 from backend.services import resume_document as svc
@@ -33,21 +35,27 @@ from backend.services.auth_service import get_current_user
 from backend.services.context_builder import build_resume_tailoring_context
 from backend.services.profile_builder import get_owned_profile
 from backend.services.resume_errors import StaleRevError
+from backend.services.resume_retailor import retailor_analysis
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["resume"])
 
 
-def _to_response(doc: ResumeDocument) -> ResumeDocumentResponse:
+def _to_response(
+    doc: ResumeDocument, warnings: list[ValidationWarning] | None = None
+) -> ResumeDocumentResponse:
     return ResumeDocumentResponse(
         id=doc.id,
         kind=doc.kind,
         name=doc.name,
         is_active=doc.is_active,
         rev=doc.rev,
+        analysis_id=doc.analysis_id,
+        created_at=doc.created_at,
         content=ResumeTailorerOutput.model_validate(json.loads(doc.content_json or "{}")),
         updated_at=doc.updated_at,
+        warnings=warnings or [],
     )
 
 
@@ -93,7 +101,9 @@ async def get_active_resume(
     if profile is None:
         raise HTTPException(status_code=409, detail="Build your profile before creating a resume")
     doc = await svc.get_or_seed_master(db, current_user.id, profile)
-    return _to_response(doc)
+    source = build_resume_tailoring_context(profile)
+    content = ResumeTailorerOutput.model_validate(json.loads(doc.content_json or "{}"))
+    return _to_response(doc, warnings=validate_resume_faithfulness(content, source))
 
 
 @router.get("/resume/versions", response_model=list[ResumeVersionSummary])
@@ -305,6 +315,41 @@ async def get_analysis_resume(
     doc = await svc.get_analysis_resume(db, current_user.id, analysis_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="No tailored resume for this analysis")
+    profile = await get_owned_profile(db, current_user.id)
+    source = build_resume_tailoring_context(profile) if profile is not None else ""
+    content = ResumeTailorerOutput.model_validate(json.loads(doc.content_json or "{}"))
+    return _to_response(doc, warnings=validate_resume_faithfulness(content, source))
+
+
+@router.post("/analysis/{analysis_id}/resume/retailor", response_model=ResumeDocumentResponse)
+async def retailor(
+    analysis_id: str,
+    data: RetailorRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ResumeDocumentResponse:
+    analysis = (
+        await db.execute(
+            select(Analysis).where(Analysis.id == analysis_id, Analysis.user_id == current_user.id)
+        )
+    ).scalar_one_or_none()
+    if analysis is None:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    doc = await svc.get_analysis_resume(db, current_user.id, analysis_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="No tailored resume for this analysis")
+    try:
+        doc = await retailor_analysis(db, current_user.id, analysis, doc, base_rev=data.base_rev)
+    except StaleRevError as exc:
+        current = exc.current
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Resume changed; reload and retry",
+                "rev": current.rev,
+                "content": json.loads(current.content_json or "{}"),
+            },
+        ) from exc
     return _to_response(doc)
 
 

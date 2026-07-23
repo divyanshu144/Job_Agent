@@ -7,7 +7,8 @@ import httpx
 
 import backend.models  # noqa: F401
 from backend.services import resume_chat
-from tests.factories import make_profile
+from backend.services import resume_document as docsvc
+from tests.factories import make_analysis, make_profile
 
 _USER_ID = "test-user-id"  # matches the harness's authenticated user (see test_resume.py)
 
@@ -137,6 +138,41 @@ async def test_edit_done_carries_warnings(app_client, db_session, monkeypatch):
     )
     done = next(d for n, d in _parse_sse(resp.text) if n == "edit_done")
     assert done["warnings"][0]["rule"] == "unsupported_metric"
+
+
+async def test_chat_on_fork(app_client, db_session, monkeypatch):
+    # _owned_doc has no kind filter — chat must reach per-analysis forks too, not just
+    # master versions (M-2).
+    analysis = await make_analysis(db_session, user_id=_USER_ID)
+    fork = await docsvc.ensure_analysis_resume(
+        db_session, _USER_ID, analysis.id, json.dumps({"headline": "Tailored for Acme"})
+    )
+    await db_session.commit()
+
+    async def _fake_edit(db, d, user_id, base_rev, instruction, **kw):
+        from backend.schemas import ResumeChatResult, ResumeTailorerOutput
+
+        return ResumeChatResult(
+            rev=base_rev + 1,
+            content=ResumeTailorerOutput(headline="Edited fork by chat"),
+            summary="did it",
+            warnings=[],
+            new_rule=None,
+        )
+
+    monkeypatch.setattr(resume_chat, "apply_chat_edit", _fake_edit)
+
+    resp = await app_client.post(
+        f"/api/resume/{fork.id}/chat",
+        json={"base_rev": 0, "instruction": "make it punchy"},
+    )
+
+    assert resp.status_code == 200
+    events = _parse_sse(resp.text)
+    names = [n for n, _ in events]
+    assert "edit_done" in names
+    done = next(d for n, d in events if n == "edit_done")
+    assert done["content"]["headline"] == "Edited fork by chat"
 
 
 async def test_chat_is_ownership_scoped(app_client, db_session):

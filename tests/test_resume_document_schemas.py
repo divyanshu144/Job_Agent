@@ -32,6 +32,7 @@ def test_document_response_carries_rev_and_content():
         is_active=True,
         rev=2,
         content=ResumeTailorerOutput(headline="Eng"),
+        created_at="2026-07-22T00:00:00Z",
         updated_at="2026-07-22T00:00:00Z",
     )
     assert resp.rev == 2 and resp.content.headline == "Eng"

@@ -109,6 +109,37 @@ async def _seed_owned_analysis(session, user):
     return profile, analysis
 
 
+async def test_promote_closes_the_loop_into_next_tailoring_context(session):
+    """promote_analysis_to_master → the NEXT resume_tailorer call sees the promoted
+    content as the current master (M-3 loop-closure)."""
+    user = await make_user(session)
+    profile = await _profile(session, user_id=user.id)
+    await docsvc.get_or_seed_master(session, user.id, profile)
+
+    analysis = await _seed_owned_analysis_profile_only(session, user, profile)
+    fork = await docsvc.ensure_analysis_resume(
+        session, user.id, analysis.id, json.dumps({"headline": "Promoted Headline"})
+    )
+    await docsvc.promote_analysis_to_master(session, user.id, fork, name="Promoted")
+
+    ctx = await _profile_context(session, profile, "resume_tailorer", "jd", PriorOutputs())
+    assert "<current_master_resume>" in ctx
+    assert "Promoted Headline" in ctx
+
+
+async def _seed_owned_analysis_profile_only(session, user, profile) -> Analysis:
+    analysis = Analysis(
+        jd_text=JD,
+        profile_id=profile.id,
+        user_id=user.id,
+        partial=False,
+        evaluate_only=True,
+    )
+    session.add(analysis)
+    await session.commit()
+    return analysis
+
+
 async def test_generate_pipeline_creates_editable_fork(session):
     """After resume_tailorer succeeds, an active kind='analysis' ResumeDocument exists
     with the tailored content; re-running does not clobber (covered at service level)."""
