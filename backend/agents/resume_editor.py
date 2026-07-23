@@ -21,11 +21,13 @@ class ResumeEditorAgent(BaseAgent):
         self, current_resume: str, profile: str, rules: str, instruction: str
     ) -> ResumeEditorOutput:
         template = self._load_prompt("resume_editor")
+        # Untrusted blobs (profile, current resume) are substituted LAST so a literal
+        # slot token inside them can't have later substitutions spliced into it.
         system = (
-            template.replace("{current_resume}", current_resume)
-            .replace("{profile}", profile)
+            template.replace("{instruction}", instruction)
             .replace("{rules}", rules or "(none)")
-            .replace("{instruction}", instruction)
+            .replace("{profile}", profile)
+            .replace("{current_resume}", current_resume)
         )
         return await self._call_structured(
             system,

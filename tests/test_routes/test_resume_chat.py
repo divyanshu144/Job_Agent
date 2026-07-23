@@ -38,7 +38,6 @@ async def test_chat_streams_edit_done(app_client, db_session, monkeypatch):
     async def _fake_edit(db, d, user_id, base_rev, instruction, **kw):
         from backend.schemas import ResumeChatResult, ResumeTailorerOutput
 
-        # commit through the real service so rev advances:
         return ResumeChatResult(
             rev=base_rev + 1,
             content=ResumeTailorerOutput(headline="Edited by chat"),
@@ -109,3 +108,21 @@ async def test_chat_requires_auth(unauthenticated_client):
         "/api/resume/whatever/chat", json={"base_rev": 0, "instruction": "x"}
     )
     assert resp.status_code == 401
+
+
+async def test_chat_is_ownership_scoped(app_client, db_session):
+    # Another user's master doc must 404 BEFORE any streaming starts (real HTTP status).
+    from backend.models import ResumeDocument
+    from tests.factories import make_user
+
+    other = await make_user(db_session, id="other-chat", email="other-chat@example.com")
+    foreign = ResumeDocument(
+        user_id=other.id, kind="master", name="Default", content_json="{}", is_active=True
+    )
+    db_session.add(foreign)
+    await db_session.commit()
+
+    resp = await app_client.post(
+        f"/api/resume/{foreign.id}/chat", json={"base_rev": 0, "instruction": "x"}
+    )
+    assert resp.status_code == 404

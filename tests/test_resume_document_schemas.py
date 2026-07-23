@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from backend.schemas import (
     EditRuleCreate,
     ResumeChatRequest,
@@ -6,6 +9,13 @@ from backend.schemas import (
     ResumeEditorOutput,
     ResumeTailorerOutput,
 )
+
+
+def test_chat_request_rejects_empty_instruction_and_negative_rev():
+    with pytest.raises(ValidationError):
+        ResumeChatRequest(base_rev=0, instruction="")
+    with pytest.raises(ValidationError):
+        ResumeChatRequest(base_rev=-1, instruction="x")
 
 
 def test_content_update_requires_base_rev():

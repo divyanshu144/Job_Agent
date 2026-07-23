@@ -640,8 +640,8 @@ class ResumeEditorOutput(BaseModel):
 
 
 class ResumeChatRequest(BaseModel):
-    base_rev: int
-    instruction: str
+    base_rev: int = Field(ge=0)
+    instruction: str = Field(min_length=1)
 
 
 class ResumeChatResult(BaseModel):
@@ -650,3 +650,5 @@ class ResumeChatResult(BaseModel):
     summary: str
     warnings: list[ValidationWarning] = Field(default_factory=list)
     new_rule: EditRuleResponse | None = None
+    # True when the edit was applied by the backup model (design §8's subtle note).
+    fallback_used: bool = False

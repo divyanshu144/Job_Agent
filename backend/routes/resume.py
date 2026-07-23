@@ -202,7 +202,11 @@ async def chat_edit(
             )
             logger.warning("resume chat edit failed unexpectedly for doc %s: %s", doc.id, exc)
 
-    return StreamingResponse(_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/resume/{doc_id}/undo", response_model=ResumeDocumentResponse)

@@ -4,6 +4,7 @@ import anthropic
 import httpx
 import pytest
 
+from backend.config import settings
 from backend.models import Profile, ResumeDocument, ResumeEditRule
 from backend.schemas import ResumeEditorOutput
 from backend.services import resume_chat
@@ -34,7 +35,7 @@ def _fake_agent(output: ResumeEditorOutput, *, fail_times: int = 0, record: dict
 
     class _Fake:
         def __init__(self) -> None:
-            self.model = "claude-opus-4-8"
+            self.model = ""  # placeholder; the service always overwrites via agent.model = ...
 
         def with_tracking(self, *a, **k):
             return self
@@ -71,6 +72,7 @@ async def test_chat_edit_commits_via_cas_and_bumps_rev(db_session):
     )
     assert result.rev == 1
     assert result.content.headline == "Senior Backend Engineer"
+    assert result.fallback_used is False
     assert json.loads(doc.content_json)["headline"] == "Senior Backend Engineer"
 
 
@@ -123,7 +125,44 @@ async def test_chat_edit_falls_back_to_sonnet_on_persistent_failure(db_session):
         agent_factory=_fake_agent(out, fail_times=1, record=record),
     )
     assert result.rev == 1
-    assert record["model"] == "claude-sonnet-4-6"  # the fallback agent ran
+    assert record["model"] == settings.resume_model_fallback  # the fallback agent ran
+    assert result.fallback_used is True  # surfaced for the "applied with a backup model" note
+
+
+async def test_rule_capture_failure_never_breaks_a_committed_edit(db_session, monkeypatch):
+    """The rule insert runs AFTER apply_write committed the edit. If it fails, the edit
+    must still return a normal result (rule dropped, logged) — never an exception the
+    route would misreport as 'your resume is unchanged' (final review I2)."""
+    user = await make_user(db_session)
+    doc = await _seed_master(db_session, user.id)
+    out = ResumeEditorOutput.model_validate(
+        {
+            "content": {"headline": "Y"},
+            "summary": "s",
+            "new_rule": {"mode": "never", "text": "synergy", "scope": "resume"},
+        }
+    )
+    real_commit = db_session.commit
+    calls = {"n": 0}
+
+    async def _commit_then_fail():
+        calls["n"] += 1
+        if calls["n"] >= 2:  # commit #1 = apply_write's edit; #2 = the rule capture
+            raise RuntimeError("rule insert blew up")
+        await real_commit()
+
+    monkeypatch.setattr(db_session, "commit", _commit_then_fail)
+    result = await resume_chat.apply_chat_edit(
+        db_session,
+        doc,
+        user.id,
+        base_rev=0,
+        instruction="never say synergy",
+        agent_factory=_fake_agent(out),
+    )
+    # The edit committed (rev advanced), no exception propagated, the rule was dropped.
+    assert result.rev == 1
+    assert result.new_rule is None
 
 
 async def test_chat_edit_stale_base_rev_raises(db_session):
