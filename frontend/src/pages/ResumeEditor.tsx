@@ -27,6 +27,9 @@ export function ResumeEditor() {
   const [error, setError] = useState<string | null>(null);
   const [confirmPromote, setConfirmPromote] = useState<ValidationWarning[] | null>(null);
   const cancelStream = useRef<(() => void) | null>(null);
+  // Guards chat-stream callbacks against a stream started for a document that
+  // is no longer loaded (e.g. the user switched/created a version mid-stream).
+  const activeDocId = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -40,6 +43,10 @@ export function ResumeEditor() {
       setError(errorMessage(e, "Failed to load resume"));
     }
   }, [analysisId, isFork]);
+
+  useEffect(() => {
+    activeDocId.current = doc?.id ?? null;
+  }, [doc?.id]);
 
   useEffect(() => {
     void load();
@@ -75,19 +82,29 @@ export function ResumeEditor() {
   const sendChat = () => {
     if (!doc || !instruction.trim() || busy) return;
     const text = instruction.trim();
+    // Captured so a late-arriving event from this stream can be dropped if the
+    // user has since switched to a different document (see Fix 1 in review).
+    const streamDocId = doc.id;
     setInstruction("");
     setBusy(true);
     setChatLog((l) => [...l, { role: "user", text }]);
     cancelStream.current = streamResumeChat(doc.id, doc.rev, text, {
       onEditDone: (r) => {
+        if (activeDocId.current !== streamDocId) return;
         setDoc((d) => (d ? { ...d, rev: r.rev, content: r.content } : d));
         setChatWarnings(r.warnings);
         const suffix = r.fallback_used ? " (applied with a backup model)" : "";
         const rule = r.new_rule ? ` · Rule saved: ${r.new_rule.mode} ${r.new_rule.text}` : "";
         setChatLog((l) => [...l, { role: "assistant", text: `${r.summary}${suffix}${rule}` }]);
       },
-      onEditConflict: (c) => onConflict(c.rev, c.content),
-      onEditError: (m) => setChatLog((l) => [...l, { role: "assistant", text: m }]),
+      onEditConflict: (c) => {
+        if (activeDocId.current !== streamDocId) return;
+        onConflict(c.rev, c.content);
+      },
+      onEditError: (m) => {
+        if (activeDocId.current !== streamDocId) return;
+        setChatLog((l) => [...l, { role: "assistant", text: m }]);
+      },
       onStreamEnd: () => setBusy(false),
     });
   };
@@ -103,7 +120,8 @@ export function ResumeEditor() {
   };
 
   const promote = async (confirm: boolean) => {
-    if (!analysisId) return;
+    if (!analysisId || busy) return;
+    setBusy(true);
     try {
       await api.saveToMaster(analysisId, null, confirm);
       setConfirmPromote(null);
@@ -116,6 +134,8 @@ export function ResumeEditor() {
       } else {
         setError(errorMessage(e));
       }
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -169,11 +189,14 @@ export function ResumeEditor() {
           <div className="flex items-center gap-2 text-sm">
             <select
               value={doc.id}
+              disabled={busy}
               onChange={async (e) => {
+                if (busy) return;
+                cancelStream.current?.();
                 await api.patchResumeVersion(e.target.value, { make_active: true });
                 await load();
               }}
-              className="flex-1 rounded border border-neutral-700 bg-[#0f0f17] px-2 py-1.5"
+              className="flex-1 rounded border border-neutral-700 bg-[#0f0f17] px-2 py-1.5 disabled:opacity-50"
             >
               {versions.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -184,10 +207,13 @@ export function ResumeEditor() {
             </select>
             <button
               type="button"
-              className="rounded border border-neutral-700 px-2 py-1.5 text-neutral-300 hover:border-[#5b5bd6]"
+              disabled={busy}
+              className="rounded border border-neutral-700 px-2 py-1.5 text-neutral-300 hover:border-[#5b5bd6] disabled:opacity-50"
               onClick={async () => {
+                if (busy) return;
                 const name = window.prompt("Version name", "New version");
                 if (name) {
+                  cancelStream.current?.();
                   await api.createResumeVersion(name, true);
                   await load();
                 }
@@ -203,7 +229,8 @@ export function ResumeEditor() {
             <button
               type="button"
               onClick={() => void promote(false)}
-              className="rounded bg-[#5b5bd6] px-3 py-1.5 font-medium text-white hover:bg-[#6b6be0]"
+              disabled={busy}
+              className="rounded bg-[#5b5bd6] px-3 py-1.5 font-medium text-white hover:bg-[#6b6be0] disabled:opacity-50"
             >
               Save to master
             </button>
@@ -267,11 +294,14 @@ export function ResumeEditor() {
           </button>
         </div>
 
+        {/* v1 undo affordance: single-step undo + rev indicator. Full revision
+            browser (listResumeRevisions/restoreResume) deferred. */}
         <div className="flex items-center gap-3 text-xs text-neutral-400">
           <button
             type="button"
             onClick={() => void undo()}
-            className="inline-flex items-center gap-1 hover:text-neutral-200"
+            disabled={busy}
+            className="inline-flex items-center gap-1 hover:text-neutral-200 disabled:opacity-50"
           >
             <Undo2 className="size-3.5" /> Undo
           </button>
@@ -325,7 +355,8 @@ export function ResumeEditor() {
               <button
                 type="button"
                 onClick={() => void promote(true)}
-                className="rounded bg-[#5b5bd6] px-3 py-1.5 font-medium text-white"
+                disabled={busy}
+                className="rounded bg-[#5b5bd6] px-3 py-1.5 font-medium text-white disabled:opacity-50"
               >
                 Save anyway
               </button>
