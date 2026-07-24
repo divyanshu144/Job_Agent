@@ -62,6 +62,14 @@ export interface ProfileReviewLink {
   url: string;
 }
 
+export interface ResumeIdentity {
+  name: string;
+  location: string;
+  email: string;
+  phone: string;
+  links: ProfileReviewLink[];
+}
+
 export interface ProfileWorkPreferences {
   locations: string[];
   remote?: string | null;

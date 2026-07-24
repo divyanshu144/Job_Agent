@@ -1,4 +1,4 @@
-import type { ProfileResponse, ProfileReviewData, ProfileReviewResponse, AnalysisDetail, AgentName, SSECallbacks, RetryRequest, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback, AnalysisSummary, InviteResponse, PasswordResetRequestResponse, CampaignRun, TargetCompany, ResumeDocumentResponse, ResumeVersionSummary, ResumeRevisionSummary, EditRuleResponse, ResumeChatResult, ResumeTailorerOutput } from "../types";
+import type { ProfileResponse, ProfileReviewData, ProfileReviewResponse, AnalysisDetail, AgentName, SSECallbacks, RetryRequest, DiscoveryRun, DiscoveryFeedResponse, DiscoverySources, User, RunCost, CostSummary, Contact, ColdEmailDraft, Feedback, AnalysisSummary, InviteResponse, PasswordResetRequestResponse, CampaignRun, TargetCompany, ResumeDocumentResponse, ResumeVersionSummary, ResumeRevisionSummary, EditRuleResponse, ResumeChatResult, ResumeTailorerOutput, ResumeIdentity } from "../types";
 
 const BASE = "/api";
 
@@ -103,6 +103,7 @@ async function del(path: string): Promise<void> {
 
 export const api = {
   getProfile: () => get<ProfileResponse>("/profile"),
+  getProfileIdentity: () => get<ResumeIdentity>("/profile/identity"),
   getProfileReview: () => get<ProfileReviewResponse>("/profile/review"),
   saveProfileReview: (reviewData: ProfileReviewData) =>
     put<ProfileReviewResponse>("/profile/review", { review_data: reviewData }),

@@ -18,6 +18,7 @@ from backend.schemas import (
     ProfileReviewResponse,
     ProfileReviewUpdate,
     ProfileYamlUpdate,
+    ResumeIdentity,
 )
 from backend.services.auth_service import get_current_user
 from backend.services.cv_parser import extract_text_from_docx_bytes, extract_text_from_pdf_bytes
@@ -27,6 +28,7 @@ from backend.services.profile_builder import (
     default_profile_yaml,
     extracted_profile_to_yaml,
     parse_profile_review_data,
+    resume_identity_from_profile,
     review_seed_from_extracted,
 )
 
@@ -82,6 +84,17 @@ async def get_profile(
         await db.commit()
         await db.refresh(profile)
     return _profile_response(profile)
+
+
+@router.get("/profile/identity", response_model=ResumeIdentity)
+async def get_profile_identity(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ResumeIdentity:
+    """Header identity (name, location, phone, email, links) for the profile page —
+    built from the user's profile YAML + review links + account email."""
+    profile = await _latest_user_profile(db, current_user.id)
+    return resume_identity_from_profile(profile, current_user.email)
 
 
 @router.get("/profile/review", response_model=ProfileReviewResponse)

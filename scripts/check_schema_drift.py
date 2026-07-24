@@ -24,6 +24,7 @@ PAIRS = [
     ("ResumeRevisionSummary", "ResumeRevisionSummary"),
     ("ResumeChatResult", "ResumeChatResult"),
     ("EditRuleResponse", "EditRuleResponse"),
+    ("ResumeIdentity", "ResumeIdentity"),
 ]
 
 

@@ -1,8 +1,20 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, FileUp, GraduationCap, Link2, RefreshCw, ShieldCheck, Sparkles, Tags, UserRound, X } from "lucide-react";
+import {
+  Briefcase,
+  FileText,
+  FileUp,
+  GraduationCap,
+  Link2,
+  Mail,
+  MapPin,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { api, errorMessage } from "../api/client";
-import { PageHeader, PageShell, Panel, PrimaryButton, SectionHeader, StatusPill } from "../components/portal";
 import { useAuth } from "../context/AuthContext";
 import type {
   ProfileResponse,
@@ -10,6 +22,8 @@ import type {
   ProfileReviewEducation,
   ProfileReviewLink,
   ProfileReviewResponse,
+  ResumeIdentity,
+  ResumeVersionSummary,
 } from "../types";
 
 const emptyReviewData = (): ProfileReviewData => ({
@@ -20,19 +34,10 @@ const emptyReviewData = (): ProfileReviewData => ({
   experience: [],
   education: [],
   links: [],
-  work_preferences: {
-    locations: [],
-    remote: "",
-    role_types: [],
-    industries: [],
-  },
+  work_preferences: { locations: [], remote: "", role_types: [], industries: [] },
 });
 
-const emptyLink = (): ProfileReviewLink => ({
-  label: "",
-  url: "",
-});
-
+const emptyLink = (): ProfileReviewLink => ({ label: "", url: "" });
 const emptyEducation = (): ProfileReviewEducation => ({
   institution: "",
   degree: "",
@@ -59,266 +64,27 @@ function reviewFromProfile(profile: ProfileResponse): ProfileReviewResponse {
   };
 }
 
-function ResumeUpload({
-  uploading,
-  disabled,
-  onUpload,
-}: {
-  uploading: boolean;
-  disabled: boolean;
-  onUpload: (file: File) => Promise<void>;
-}) {
-  const fileRef = useRef<HTMLInputElement>(null);
+const CARD = "rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white p-5";
+const EYEBROW = "mb-3 font-mono text-[11px] uppercase tracking-[0.18em] text-[#a1a1aa]";
+const INPUT =
+  "w-full rounded-xl border border-[rgba(0,0,0,0.1)] bg-white px-3 py-2.5 text-sm text-[#0f0f17] outline-none transition focus:border-[#5b5bd6] focus:ring-2 focus:ring-[rgba(91,91,214,0.15)]";
+const PILL = "inline-flex items-center rounded-full bg-[#f0f0f4] px-2.5 py-1 text-xs font-medium text-[#52525b]";
 
-  const handleChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    await onUpload(file);
-    if (fileRef.current) fileRef.current.value = "";
-  };
-
+function EditLink({ onClick, to }: { onClick?: () => void; to?: string }) {
+  const cls =
+    "inline-flex items-center gap-1 text-sm font-medium text-[#5b5bd6] transition-colors hover:text-[#4f4fc9]";
+  if (to) return <Link to={to} className={cls}>Edit →</Link>;
   return (
-    <div className="rounded-2xl border border-dashed border-zinc-200 bg-white p-6 text-center shadow-sm">
-      <div className="mx-auto flex size-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700 shadow-sm">
-        <FileUp className="size-5" />
-      </div>
-      <div className="mt-3">
-        <p className="text-sm font-semibold text-zinc-950">Upload resume</p>
-        <p className="mt-1 text-xs text-zinc-500">PDF or DOCX</p>
-      </div>
-      <div className="mt-4">
-        <label
-          className={`inline-flex cursor-pointer rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-            uploading || disabled
-              ? "bg-zinc-200 text-zinc-400"
-              : "bg-blue-600 text-white hover:bg-blue-500"
-          }`}
-        >
-          {uploading ? "Uploading..." : "Choose File"}
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            className="hidden"
-            onChange={handleChange}
-            disabled={uploading || disabled}
-          />
-        </label>
-      </div>
-    </div>
+    <button type="button" onClick={onClick} className={cls}>
+      Edit →
+    </button>
   );
 }
 
-function YamlEditor({
-  value,
-  onSave,
-  saving,
-}: {
-  value: string;
-  onSave: (yaml: string) => Promise<void>;
-  saving: boolean;
-}) {
-  const [draft, setDraft] = useState(value);
-
-  useEffect(() => {
-    setDraft(value);
-  }, [value]);
-
+function IconTile({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-4 text-blue-600" />
-          <h2 className="text-sm font-semibold text-slate-800">YAML Profile</h2>
-        </div>
-        <button
-          type="button"
-          onClick={() => onSave(draft)}
-          disabled={saving}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
-        >
-          {saving ? "Saving..." : "Save YAML"}
-        </button>
-      </div>
-      <textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        spellCheck={false}
-        className="h-72 w-full resize-y rounded-xl border border-zinc-200 bg-zinc-50 p-4 font-mono text-xs leading-5 text-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-      />
-      <p className="mt-2 text-xs text-zinc-400">
-        Skills, experience, and projects live here. Auto-filled from your resume on upload.
-      </p>
-    </div>
-  );
-}
-
-function AdminProfileTools() {
-  const [profile, setProfile] = useState<ProfileResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [savingYaml, setSavingYaml] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
-
-  const loadProfile = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setProfile(await api.getProfile());
-    } catch (error) {
-      setError(errorMessage(error));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadProfile();
-  }, []);
-
-  const refresh = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setProfile(await api.refreshProfile());
-    } catch (error) {
-      setError(errorMessage(error));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const upload = async (file: File) => {
-    setUploading(true);
-    setError(null);
-    setUploadSuccess(false);
-    try {
-      setProfile(await api.uploadCv(file));
-      setUploadSuccess(true);
-      window.setTimeout(() => setUploadSuccess(false), 3000);
-    } catch (error) {
-      setError(errorMessage(error));
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const saveYaml = async (yaml: string) => {
-    setSavingYaml(true);
-    setError(null);
-    try {
-      setProfile(await api.saveProfileYaml(yaml));
-    } catch (error) {
-      setError(errorMessage(error));
-    } finally {
-      setSavingYaml(false);
-    }
-  };
-
-  const busy = loading || uploading;
-
-  return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
-        <div className="grid gap-0 lg:grid-cols-[1fr_360px]">
-          <div className="space-y-6 p-6 md:p-8">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <div className="mb-3 inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
-                  <ShieldCheck className="size-3.5" />
-                  Profile readiness
-                </div>
-                <h1 className="text-2xl font-bold text-slate-950 md:text-3xl">Candidate Profile</h1>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                  Maintain the shared candidate profile and resume source used by admin workflows.
-                </p>
-              </div>
-              <button
-                onClick={refresh}
-                disabled={busy}
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
-              >
-                <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
-                {loading ? "Refreshing..." : "Refresh profile"}
-              </button>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                <p className="text-xs font-medium text-emerald-700">Profile status</p>
-                <p className="mt-2 text-sm font-semibold text-emerald-950">{profile ? "Loaded" : "Waiting"}</p>
-              </div>
-              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-                <p className="text-xs font-medium text-blue-700">Resume text</p>
-                <p className="mt-2 text-sm font-semibold text-blue-950">{profile?.cv_text ? "Available" : "Missing"}</p>
-              </div>
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                <p className="text-xs font-medium text-amber-700">Last refresh</p>
-                <p className="mt-2 truncate text-sm font-semibold text-amber-950">
-                  {profile ? new Date(profile.last_refreshed_at).toLocaleDateString() : "Not yet"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <aside className="border-t border-zinc-200 bg-zinc-50 p-6 text-zinc-950 lg:border-l lg:border-t-0 md:p-8">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-zinc-950 text-white shadow-sm">
-                <UserRound className="size-5" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-zinc-950">Resume source</p>
-                <p className="text-xs text-zinc-500">Used for matching and package preparation</p>
-              </div>
-            </div>
-            <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-4">
-              <ResumeUpload uploading={uploading} disabled={loading} onUpload={upload} />
-            </div>
-          </aside>
-        </div>
-      </section>
-
-      {uploadSuccess && (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-          Resume uploaded.
-        </p>
-      )}
-      {error && (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
-      )}
-
-      {profile && (
-        <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-          {profile.warnings.length > 0 && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 lg:col-span-2">
-              {profile.warnings.map((warning, index) => (
-                <p key={index} className="text-xs font-medium text-amber-800">
-                  {warning}
-                </p>
-              ))}
-            </div>
-          )}
-
-          <YamlEditor value={profile.yaml_data} onSave={saveYaml} saving={savingYaml} />
-
-          {profile.cv_text && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="mb-3 flex items-center gap-2">
-                <FileUp className="size-4 text-emerald-600" />
-                <h2 className="text-sm font-semibold text-slate-800">CV Text Preview</h2>
-              </div>
-              <p className="max-h-72 overflow-auto whitespace-pre-wrap rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 text-sm leading-6 text-slate-700">
-                {profile.cv_text.slice(0, 500)}...
-              </p>
-            </div>
-          )}
-
-          <p className="text-xs text-slate-400 lg:col-span-2">
-            Last refreshed: {new Date(profile.last_refreshed_at).toLocaleString()}
-          </p>
-        </section>
-      )}
+    <div className="flex size-10 items-center justify-center rounded-xl bg-[#ededf8] text-[#5b5bd6]">
+      {children}
     </div>
   );
 }
@@ -327,113 +93,82 @@ export function ProfileSetup() {
   const { user } = useAuth();
   const [review, setReview] = useState<ProfileReviewResponse | null>(null);
   const [form, setForm] = useState<ProfileReviewData>(emptyReviewData);
-  const [resumePreview, setResumePreview] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [identity, setIdentity] = useState<ResumeIdentity | null>(null);
+  const [versions, setVersions] = useState<ResumeVersionSummary[]>([]);
+  const [summary, setSummary] = useState("");
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [yamlData, setYamlData] = useState("");
-  const [savingYaml, setSavingYaml] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [skillDraft, setSkillDraft] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const loadReview = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getProfileReview();
-      setReview(data);
-      setForm(data.review_data);
-      const profile = await api.getProfile();
-      setYamlData(profile.yaml_data);
-      if (data.has_cv_text) {
-        setResumePreview(profile.cv_text);
-      }
-    } catch (error) {
-      try {
-        const profile = await api.getProfile();
-        const fallbackReview = reviewFromProfile(profile);
-        setReview(fallbackReview);
-        setForm(fallbackReview.review_data);
-        setYamlData(profile.yaml_data);
-        setResumePreview(profile.cv_text);
-        if (!fallbackReview.has_cv_text) {
-          setError(errorMessage(error));
-        }
-      } catch {
-        setError(errorMessage(error));
-      }
+      const [rev, prof] = await Promise.all([
+        api.getProfileReview().catch(() => null),
+        api.getProfile(),
+      ]);
+      const resolved = rev ?? reviewFromProfile(prof);
+      setReview(resolved);
+      setForm(resolved.review_data);
+      // Best-effort extras — never block the page if they fail.
+      void api.getProfileIdentity().then(setIdentity).catch(() => setIdentity(null));
+      void api.listResumeVersions().then(setVersions).catch(() => setVersions([]));
+      void api
+        .getMasterResume()
+        .then((d) => setSummary(d.content.summary ?? ""))
+        .catch(() => setSummary(""));
+    } catch (e) {
+      setError(errorMessage(e, "Couldn't load your profile"));
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    if (!user?.is_admin) loadReview();
-  }, [user?.is_admin]);
+    void load();
+  }, [load]);
 
-  if (user?.is_admin) {
-    return <AdminProfileTools />;
-  }
-
-  const setField = <K extends keyof ProfileReviewData>(key: K, value: ProfileReviewData[K]) => {
-    setForm((current) => ({ ...current, [key]: value }));
-  };
-
-  const updateLink = (index: number, updater: (link: ProfileReviewLink) => ProfileReviewLink) => {
-    setField("links", form.links.map((link, i) => (i === index ? updater(link) : link)));
-  };
+  const setField = <K extends keyof ProfileReviewData>(key: K, value: ProfileReviewData[K]) =>
+    setForm((c) => ({ ...c, [key]: value }));
 
   const addSkill = (raw: string) => {
-    const value = raw.trim();
-    if (!value) return;
-    const exists = form.key_skills.some((skill) => skill.toLowerCase() === value.toLowerCase());
-    if (!exists) setField("key_skills", [...form.key_skills, value]);
+    const v = raw.trim();
+    if (v && !form.key_skills.some((s) => s.toLowerCase() === v.toLowerCase())) {
+      setField("key_skills", [...form.key_skills, v]);
+    }
     setSkillDraft("");
   };
 
-  const removeSkill = (index: number) => {
-    setField("key_skills", form.key_skills.filter((_, i) => i !== index));
-  };
-
-  const updateEducation = (
-    index: number,
-    updater: (item: ProfileReviewEducation) => ProfileReviewEducation,
-  ) => {
-    setField("education", form.education.map((item, i) => (i === index ? updater(item) : item)));
-  };
-
-  const autofilledFromCv =
-    review?.review_status === "draft" && (form.key_skills.length > 0 || form.education.length > 0);
-
-  const upload = async (file: File) => {
+  const upload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
     setUploading(true);
     setError(null);
     setSuccess(null);
     try {
-      const uploadedProfile = await api.uploadCv(file);
-      const uploadedReview = reviewFromProfile(uploadedProfile);
-      setReview(uploadedReview);
-      setForm(uploadedReview.review_data);
-      setResumePreview(uploadedProfile.cv_text);
-      setYamlData(uploadedProfile.yaml_data);
-      setSuccess("Resume uploaded.");
-      try {
-        const data = await api.getProfileReview();
-        setReview(data);
-        setForm(data.review_data);
-      } catch {
-        // The upload response already confirms the resume is stored; keep the UI usable.
-      }
-    } catch (error) {
-      setError(errorMessage(error));
+      const p = await api.uploadCv(file);
+      const r = reviewFromProfile(p);
+      setReview(r);
+      setForm(r.review_data);
+      setSuccess("Resume uploaded and profile updated.");
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
     } finally {
       setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
     }
   };
 
-  const save = async (event: FormEvent) => {
-    event.preventDefault();
+  const saveDetails = async (e: FormEvent) => {
+    e.preventDefault();
     setSaving(true);
     setError(null);
     setSuccess(null);
@@ -441,284 +176,523 @@ export function ProfileSetup() {
       const data = await api.saveProfileReview(form);
       setReview(data);
       setForm(data.review_data);
-      setSuccess("Profile review saved.");
-    } catch (error) {
-      setError(errorMessage(error));
+      setSuccess("Profile saved.");
+      setEditing(false);
+    } catch (err) {
+      setError(errorMessage(err));
     } finally {
       setSaving(false);
     }
   };
 
-  const saveYaml = async (yaml: string) => {
-    setSavingYaml(true);
+  const refresh = async () => {
+    setRefreshing(true);
     setError(null);
-    setSuccess(null);
     try {
-      const profile = await api.saveProfileYaml(yaml);
-      setYamlData(profile.yaml_data);
-      setSuccess("YAML profile saved.");
-    } catch (error) {
-      setError(errorMessage(error));
+      await api.refreshProfile();
+      await load();
+      setSuccess("Profile rebuilt from your source.");
+    } catch (err) {
+      setError(errorMessage(err));
     } finally {
-      setSavingYaml(false);
+      setRefreshing(false);
     }
   };
 
-  const busy = loading || saving || uploading;
-  const readinessItems = [
-    { label: "Resume uploaded", ready: Boolean(review?.has_cv_text), detail: "Auto-fills your YAML profile" },
-    { label: "YAML profile", ready: yamlData.trim().length > 0, detail: "Skills, experience, projects" },
-    { label: "Links added", ready: form.links.some((link) => link.url.trim()), detail: `${form.links.length} link${form.links.length === 1 ? "" : "s"}` },
-  ];
-  const completeCount = readinessItems.filter((item) => item.ready).length;
+  const completion = useMemo(() => {
+    const checks = [
+      Boolean(review?.has_cv_text),
+      form.key_skills.length > 0,
+      form.experience.length > 0,
+      form.education.length > 0,
+      Boolean(summary.trim() || form.target_role.trim()),
+      form.links.some((l) => l.url.trim()),
+    ];
+    return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  }, [review, form, summary]);
+
+  const name = identity?.name?.trim() || user?.email?.split("@")[0] || "Your profile";
+  const initials =
+    name
+      .split(/\s+/)
+      .map((p) => p[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "?";
+  const email = identity?.email || user?.email || "";
+  const contact = [identity?.location, email, identity?.phone].filter(Boolean).join("  ·  ");
+  const roles = form.experience.length;
+  const skills = form.key_skills.length;
+  const wp = form.work_preferences;
+
+  if (loading && !review) {
+    return (
+      <div className="rounded-2xl border border-[rgba(0,0,0,0.06)] bg-white p-10 text-center text-sm text-[#71717a]">
+        Loading your profile…
+      </div>
+    );
+  }
 
   return (
-    <PageShell>
-      <PageHeader
-        title="Profile readiness"
-        description="Keep your background, target roles, projects, and preferences current so each application package can be tailored accurately."
-        actions={
-          <Link
-            to="/analyse"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-500"
-          >
-            Submit a role
-          </Link>
-        }
-      />
-
-      {loading && <p className="text-sm text-zinc-500">Loading profile...</p>}
-      {error && <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+    <div className="space-y-8">
+      {error && (
+        <div className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-2.5 text-sm text-rose-600">
+          {error}
+        </div>
+      )}
       {success && (
-        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">
           {success}
-        </p>
+        </div>
       )}
 
-      <section className="grid gap-4 lg:grid-cols-[1fr_360px]">
-        <Panel>
-          <SectionHeader
-            title="Readiness checklist"
-            description={`${completeCount} of ${readinessItems.length} essentials complete`}
-            action={<StatusPill tone={completeCount === readinessItems.length ? "success" : "warning"}>{review?.review_status ?? "draft"}</StatusPill>}
-          />
-          <div className="grid gap-3 sm:grid-cols-2">
-            {readinessItems.map((item) => (
-              <div key={item.label} className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className={`mt-0.5 size-5 ${item.ready ? "text-emerald-600" : "text-zinc-300"}`} />
+      {/* ── Identity & documents ── */}
+      <section>
+        <p className={EYEBROW}>Identity &amp; documents</p>
+        <div className="grid gap-4 lg:grid-cols-[1.15fr_1fr_1fr]">
+          {/* Identity */}
+          <div className={CARD}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-[#0f0f17] text-sm font-semibold text-white">
+                  {initials}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="truncate text-base font-semibold text-[#0f0f17]">{name}</h3>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                      <span className="size-1.5 rounded-full bg-emerald-500" /> Open to work
+                    </span>
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                      {completion}% complete
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate text-xs text-[#71717a]">{contact || email}</p>
+                </div>
+              </div>
+              <EditLink onClick={() => setEditing(true)} />
+            </div>
+          </div>
+
+          {/* Resume */}
+          <div className={CARD}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <IconTile>
+                  <FileText className="size-5" />
+                </IconTile>
+                <div>
+                  <h3 className="text-base font-semibold text-[#0f0f17]">Resume</h3>
+                  <p className="mt-0.5 text-xs text-[#71717a]">
+                    Edit the wording, or replace it from a file.
+                  </p>
+                </div>
+              </div>
+              <EditLink to="/resume" />
+            </div>
+          </div>
+
+          {/* Cover letter */}
+          <div className={CARD}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <IconTile>
+                  <Mail className="size-5" />
+                </IconTile>
+                <div>
+                  <h3 className="text-base font-semibold text-[#0f0f17]">Cover letter</h3>
+                  <p className="mt-0.5 text-xs text-[#71717a]">
+                    Drafted and tailored each time you prepare a package.
+                  </p>
+                </div>
+              </div>
+              <EditLink to="/analyse" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Resume versions ── */}
+      <section>
+        <p className={EYEBROW}>
+          Resume versions{" "}
+          <span className="normal-case tracking-normal text-[#a1a1aa]">
+            — each carries its own emphasis &amp; formatting
+          </span>
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {versions.map((v) => (
+            <Link
+              key={v.id}
+              to="/resume"
+              className={`${CARD} block transition-shadow hover:shadow-[0_2px_10px_rgba(0,0,0,0.06)] ${
+                v.is_active ? "ring-1 ring-[#5b5bd6]" : ""
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                {v.is_active ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#5b5bd6]">
+                    <span className="size-1.5 rounded-full bg-[#5b5bd6]" /> Active
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-[#a1a1aa]">
+                    Updated {new Date(v.updated_at).toLocaleDateString()}
+                  </span>
+                )}
+                <span className="rounded-md bg-[#f0f0f4] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#71717a]">
+                  rev {v.rev}
+                </span>
+              </div>
+              <h3 className="mt-3 text-sm font-semibold text-[#0f0f17]">{v.name}</h3>
+              <p className="mt-0.5 text-xs text-[#71717a]">
+                {roles} role{roles === 1 ? "" : "s"} · {skills} skill{skills === 1 ? "" : "s"}
+              </p>
+            </Link>
+          ))}
+          <Link
+            to="/resume"
+            className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-[rgba(91,91,214,0.3)] bg-[rgba(91,91,214,0.03)] p-5 text-center transition-colors hover:bg-[rgba(91,91,214,0.06)]"
+          >
+            <Plus className="size-5 text-[#5b5bd6]" />
+            <span className="text-sm font-medium text-[#0f0f17]">New version</span>
+            <span className="text-xs text-[#71717a]">Duplicate this one or start fresh</span>
+          </Link>
+        </div>
+      </section>
+
+      {/* ── Profile details ── */}
+      <section>
+        <p className={EYEBROW}>Profile details</p>
+        <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+          {/* Left column */}
+          <div className="space-y-4">
+            {/* Summary */}
+            <div className={CARD}>
+              <div className="mb-2 flex items-start justify-between gap-3">
+                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#a1a1aa]">
+                  Professional summary
+                </p>
+                <EditLink to="/resume" />
+              </div>
+              {summary.trim() ? (
+                <p className="text-sm leading-6 text-[#3f3f46]">{summary}</p>
+              ) : (
+                <p className="text-sm italic text-[#a1a1aa]">
+                  Add a professional summary — the first thing recruiters read.
+                </p>
+              )}
+            </div>
+
+            {/* Education */}
+            <div className={CARD}>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <IconTile>
+                    <GraduationCap className="size-5" />
+                  </IconTile>
                   <div>
-                    <p className="text-sm font-semibold text-zinc-950">{item.label}</p>
-                    <p className="mt-1 text-xs leading-5 text-zinc-500">{item.detail}</p>
+                    <h3 className="text-base font-semibold text-[#0f0f17]">Education</h3>
+                    <p className="text-xs text-[#71717a]">
+                      {form.education.length} entr{form.education.length === 1 ? "y" : "ies"}
+                    </p>
+                  </div>
+                </div>
+                <EditLink onClick={() => setEditing(true)} />
+              </div>
+              {form.education.length === 0 ? (
+                <p className="text-sm italic text-[#a1a1aa]">No education added yet.</p>
+              ) : (
+                <div className="space-y-4">
+                  {form.education.map((ed, i) => (
+                    <div key={i} className="border-l-2 border-[rgba(0,0,0,0.08)] pl-4">
+                      <p className="text-sm font-semibold text-[#0f0f17]">{ed.institution}</p>
+                      <p className="text-sm text-[#3f3f46]">
+                        {[ed.degree, ed.field_of_study].filter(Boolean).join(" · ")}
+                      </p>
+                      {ed.dates && <p className="mt-0.5 text-xs text-[#71717a]">{ed.dates}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Experience */}
+            <div className={CARD}>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <IconTile>
+                    <Briefcase className="size-5" />
+                  </IconTile>
+                  <div>
+                    <h3 className="text-base font-semibold text-[#0f0f17]">Experience</h3>
+                    <p className="text-xs text-[#71717a]">
+                      {roles} role{roles === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                </div>
+                <EditLink to="/resume" />
+              </div>
+              {roles === 0 ? (
+                <p className="text-sm italic text-[#a1a1aa]">No experience added yet.</p>
+              ) : (
+                <div className="space-y-5">
+                  {form.experience.map((exp, i) => (
+                    <div key={i} className="border-l-2 border-[rgba(0,0,0,0.08)] pl-4">
+                      <p className="text-sm font-semibold text-[#0f0f17]">{exp.role}</p>
+                      <p className="text-sm text-[#3f3f46]">{exp.company}</p>
+                      {exp.dates && <p className="mt-0.5 text-xs text-[#71717a]">{exp.dates}</p>}
+                      {exp.highlights?.length > 0 && (
+                        <ul className="mt-2 list-disc space-y-1 pl-4 text-sm leading-6 text-[#3f3f46]">
+                          {exp.highlights.slice(0, 3).map((h, j) => (
+                            <li key={j}>{h}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right column — preferences */}
+          <div className="space-y-4">
+            <div className={CARD}>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <IconTile>
+                    <Sparkles className="size-5" />
+                  </IconTile>
+                  <div>
+                    <h3 className="text-base font-semibold text-[#0f0f17]">Preferences</h3>
+                    <p className="text-xs text-[#71717a]">What we tailor every package toward.</p>
+                  </div>
+                </div>
+                <EditLink onClick={() => setEditing(true)} />
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-[#a1a1aa]">
+                    Target roles
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[form.target_role, ...form.target_roles].filter(Boolean).length === 0 ? (
+                      <span className="text-sm italic text-[#a1a1aa]">Not set</span>
+                    ) : (
+                      [...new Set([form.target_role, ...form.target_roles].filter(Boolean))].map(
+                        (r) => (
+                          <span key={r} className={PILL}>
+                            {r}
+                          </span>
+                        ),
+                      )
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-[#a1a1aa]">
+                    Work preferences
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {wp.remote && <span className={PILL}>{wp.remote}</span>}
+                    {wp.locations.map((l) => (
+                      <span key={l} className={PILL}>
+                        <MapPin className="mr-1 size-3" />
+                        {l}
+                      </span>
+                    ))}
+                    {wp.role_types.map((r) => (
+                      <span key={r} className={PILL}>
+                        {r}
+                      </span>
+                    ))}
+                    {wp.industries.map((r) => (
+                      <span key={r} className={PILL}>
+                        {r}
+                      </span>
+                    ))}
+                    {!wp.remote &&
+                      wp.locations.length === 0 &&
+                      wp.role_types.length === 0 &&
+                      wp.industries.length === 0 && (
+                        <span className="text-sm italic text-[#a1a1aa]">Not set</span>
+                      )}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-[#a1a1aa]">
+                    Skills{skills > 0 ? ` · ${skills}` : ""}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {skills === 0 ? (
+                      <span className="text-sm italic text-[#a1a1aa]">Not set</span>
+                    ) : (
+                      form.key_skills.slice(0, 18).map((s) => (
+                        <span key={s} className={PILL}>
+                          {s}
+                        </span>
+                      ))
+                    )}
+                    {skills > 18 && <span className={PILL}>+{skills - 18} more</span>}
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel>
-          <SectionHeader title="Resume" description={review?.has_cv_text ? "Resume is ready for package preparation" : "Upload a resume to improve tailoring"} />
-          <ResumeUpload uploading={uploading} disabled={loading || saving} onUpload={upload} />
-          {resumePreview.trim() && (
-            <details className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-              <summary className="cursor-pointer text-sm font-medium text-blue-700">
-                Preview saved resume text
-              </summary>
-              <p className="mt-3 max-h-36 overflow-auto whitespace-pre-wrap rounded-xl bg-white p-3 text-xs leading-5 text-zinc-600">
-                {resumePreview.slice(0, 1200)}
-                {resumePreview.length > 1200 ? "..." : ""}
-              </p>
-            </details>
-          )}
-          {review?.reviewed_at && (
-            <p className="mt-4 text-xs text-zinc-500">
-              Last saved {new Date(review.reviewed_at).toLocaleString()}
-            </p>
-          )}
-        </Panel>
-      </section>
-
-      {autofilledFromCv && (
-        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <Sparkles className="mt-0.5 size-5 shrink-0 text-amber-600" />
-          <div>
-            <p className="text-sm font-semibold text-amber-900">Autofilled from your resume</p>
-            <p className="mt-0.5 text-xs leading-5 text-amber-700">
-              Check the skills and education below, fix anything that looks off, then save to
-              confirm. We use this to tailor every resume and cover letter.
-            </p>
-          </div>
-        </div>
-      )}
-
-      <form onSubmit={save} className="grid gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-12">
-          <YamlEditor value={yamlData} onSave={saveYaml} saving={savingYaml} />
-        </div>
-
-        <Panel className="space-y-4 lg:col-span-12">
-          <div className="flex items-center gap-2">
-            <Tags className="size-4 text-zinc-500" />
-            <h2 className="text-lg font-semibold text-zinc-950">Skills</h2>
-          </div>
-          <p className="-mt-2 text-sm text-zinc-500">
-            The skills we lead with when tailoring. Add the tools and technologies you want
-            employers to see first.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {form.key_skills.length === 0 && (
-              <p className="text-sm text-zinc-400">No skills yet. Add your first below.</p>
-            )}
-            {form.key_skills.map((skill, index) => (
-              <span
-                key={`${skill}-${index}`}
-                className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 py-1 pl-3 pr-1.5 text-sm font-medium text-blue-700"
-              >
-                {skill}
-                <button
-                  type="button"
-                  onClick={() => removeSkill(index)}
-                  aria-label={`Remove ${skill}`}
-                  className="grid size-5 place-items-center rounded-full text-blue-500 transition-colors hover:bg-blue-100 hover:text-blue-700"
-                >
-                  <X className="size-3.5" />
-                </button>
-              </span>
-            ))}
-          </div>
-          <input
-            value={skillDraft}
-            onChange={(e) => setSkillDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === ",") {
-                e.preventDefault();
-                addSkill(skillDraft);
-              } else if (e.key === "Backspace" && !skillDraft && form.key_skills.length > 0) {
-                removeSkill(form.key_skills.length - 1);
-              }
-            }}
-            onBlur={() => addSkill(skillDraft)}
-            className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-            placeholder="Add a skill and press Enter"
-          />
-        </Panel>
-
-        <Panel className="space-y-4 lg:col-span-12">
-          <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2">
-              <GraduationCap className="size-4 text-zinc-500" />
-              <h2 className="text-lg font-semibold text-zinc-950">Education</h2>
             </div>
-            <button
-              type="button"
-              onClick={() => setField("education", [...form.education, emptyEducation()])}
-              className="text-sm font-medium text-blue-700 hover:text-blue-600"
-            >
-              Add education
-            </button>
-          </div>
-          {form.education.length === 0 && (
-            <p className="text-sm text-zinc-400">No education added.</p>
-          )}
-          <div className="space-y-3">
-            {form.education.map((item, index) => (
-              <div key={index} className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                <div className="grid gap-2 sm:grid-cols-2">
+
+            {/* Source / tools */}
+            <div className={CARD}>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#0f0f17] px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1a1a28]">
+                  <FileUp className="size-4" />
+                  {uploading ? "Uploading…" : "Replace resume"}
                   <input
-                    value={item.institution}
-                    onChange={(e) => updateEducation(index, (edu) => ({ ...edu, institution: e.target.value }))}
-                    className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-                    placeholder="Institution"
+                    ref={fileRef}
+                    type="file"
+                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    className="hidden"
+                    onChange={upload}
+                    disabled={uploading}
                   />
-                  <input
-                    value={item.dates}
-                    onChange={(e) => updateEducation(index, (edu) => ({ ...edu, dates: e.target.value }))}
-                    className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-                    placeholder="Dates (e.g. 2021-2025)"
-                  />
-                  <input
-                    value={item.degree}
-                    onChange={(e) => updateEducation(index, (edu) => ({ ...edu, degree: e.target.value }))}
-                    className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-                    placeholder="Degree (e.g. MSc)"
-                  />
-                  <input
-                    value={item.field_of_study}
-                    onChange={(e) => updateEducation(index, (edu) => ({ ...edu, field_of_study: e.target.value }))}
-                    className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-                    placeholder="Field of study"
-                  />
-                </div>
-                <div className="mt-2 flex justify-end">
+                </label>
+                {user?.is_admin && (
                   <button
                     type="button"
-                    onClick={() => setField("education", form.education.filter((_, i) => i !== index))}
-                    className="text-sm font-medium text-zinc-500 hover:text-rose-600"
+                    onClick={() => void refresh()}
+                    disabled={refreshing}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(0,0,0,0.08)] bg-white px-3.5 py-2 text-sm font-medium text-[#71717a] transition-colors hover:text-[#0f0f17] disabled:opacity-50"
                   >
+                    <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} /> Rebuild
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setEditing((e) => !e)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(0,0,0,0.08)] bg-white px-3.5 py-2 text-sm font-medium text-[#71717a] transition-colors hover:text-[#0f0f17]"
+                >
+                  <Pencil className="size-4" /> {editing ? "Close editor" : "Edit details"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Inline editor (skills / education / links) ── */}
+      {editing && (
+        <form onSubmit={saveDetails} className="space-y-4 rounded-2xl border border-[#5b5bd6]/30 bg-white p-5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-semibold text-[#0f0f17]">Edit profile details</h3>
+            <button type="button" onClick={() => setEditing(false)} aria-label="Close" className="text-[#71717a] hover:text-[#0f0f17]">
+              <X className="size-4" />
+            </button>
+          </div>
+
+          {/* Target role */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[#71717a]">Target role</label>
+            <input
+              value={form.target_role}
+              onChange={(e) => setField("target_role", e.target.value)}
+              className={INPUT}
+              placeholder="e.g. Senior Backend Engineer"
+            />
+          </div>
+
+          {/* Skills */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-[#71717a]">Skills</label>
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {form.key_skills.map((s, i) => (
+                <span key={`${s}-${i}`} className="inline-flex items-center gap-1 rounded-full border border-[rgba(91,91,214,0.2)] bg-[#ededf8] py-1 pl-2.5 pr-1 text-xs font-medium text-[#3d3d80]">
+                  {s}
+                  <button
+                    type="button"
+                    onClick={() => setField("key_skills", form.key_skills.filter((_, j) => j !== i))}
+                    aria-label={`Remove ${s}`}
+                    className="grid size-4 place-items-center rounded-full text-[#5b5bd6] hover:bg-[rgba(91,91,214,0.15)]"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <input
+              value={skillDraft}
+              onChange={(e) => setSkillDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  addSkill(skillDraft);
+                }
+              }}
+              onBlur={() => addSkill(skillDraft)}
+              className={INPUT}
+              placeholder="Add a skill and press Enter"
+            />
+          </div>
+
+          {/* Education */}
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="text-xs font-medium text-[#71717a]">Education</label>
+              <button
+                type="button"
+                onClick={() => setField("education", [...form.education, emptyEducation()])}
+                className="text-xs font-medium text-[#5b5bd6] hover:text-[#4f4fc9]"
+              >
+                + Add
+              </button>
+            </div>
+            <div className="space-y-2">
+              {form.education.map((ed, i) => (
+                <div key={i} className="grid gap-2 rounded-xl border border-[rgba(0,0,0,0.06)] bg-[#faf9f7] p-3 sm:grid-cols-2">
+                  <input value={ed.institution} onChange={(e) => setField("education", form.education.map((x, j) => (j === i ? { ...x, institution: e.target.value } : x)))} className={INPUT} placeholder="Institution" />
+                  <input value={ed.dates} onChange={(e) => setField("education", form.education.map((x, j) => (j === i ? { ...x, dates: e.target.value } : x)))} className={INPUT} placeholder="Dates" />
+                  <input value={ed.degree} onChange={(e) => setField("education", form.education.map((x, j) => (j === i ? { ...x, degree: e.target.value } : x)))} className={INPUT} placeholder="Degree" />
+                  <input value={ed.field_of_study} onChange={(e) => setField("education", form.education.map((x, j) => (j === i ? { ...x, field_of_study: e.target.value } : x)))} className={INPUT} placeholder="Field of study" />
+                  <button type="button" onClick={() => setField("education", form.education.filter((_, j) => j !== i))} className="justify-self-start text-xs text-[#71717a] hover:text-rose-600 sm:col-span-2">
                     Remove
                   </button>
                 </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel className="space-y-4 lg:col-span-12">
-          <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2">
-              <Link2 className="size-4 text-zinc-500" />
-              <h2 className="text-lg font-semibold text-zinc-950">Links</h2>
+              ))}
             </div>
-            <button
-              type="button"
-              onClick={() => setField("links", [...form.links, emptyLink()])}
-              className="text-sm font-medium text-blue-700 hover:text-blue-600"
-            >
-              Add link
-            </button>
           </div>
-          {form.links.length === 0 && <p className="text-sm text-zinc-400">No links added.</p>}
-          {form.links.map((link, index) => (
-            <div key={index} className="grid gap-2 md:grid-cols-[1fr_2fr_auto]">
-              <input
-                value={link.label}
-                onChange={(e) => updateLink(index, (item) => ({ ...item, label: e.target.value }))}
-                className="rounded-xl border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-                placeholder="Label"
-              />
-              <input
-                value={link.url}
-                onChange={(e) => updateLink(index, (item) => ({ ...item, url: e.target.value }))}
-                className="rounded-xl border border-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-                placeholder="https://..."
-              />
-              <button
-                type="button"
-                onClick={() => setField("links", form.links.filter((_, i) => i !== index))}
-                className="rounded-xl border border-zinc-200 px-3 py-2.5 text-sm text-zinc-600 hover:bg-zinc-50"
-              >
-                Remove
+
+          {/* Links */}
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="text-xs font-medium text-[#71717a]">Links</label>
+              <button type="button" onClick={() => setField("links", [...form.links, emptyLink()])} className="text-xs font-medium text-[#5b5bd6] hover:text-[#4f4fc9]">
+                + Add
               </button>
             </div>
-          ))}
-        </Panel>
+            <div className="space-y-2">
+              {form.links.map((lnk, i) => (
+                <div key={i} className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
+                  <input value={lnk.label} onChange={(e) => setField("links", form.links.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} className={INPUT} placeholder="Label" />
+                  <input value={lnk.url} onChange={(e) => setField("links", form.links.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)))} className={INPUT} placeholder="https://…" />
+                  <button type="button" onClick={() => setField("links", form.links.filter((_, j) => j !== i))} className="rounded-xl border border-[rgba(0,0,0,0.08)] px-3 text-sm text-[#71717a] hover:text-[#0f0f17]">
+                    <Link2 className="size-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-3 rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm lg:col-span-12">
-          <PrimaryButton
-            type="submit"
-            disabled={busy}
-          >
-            {saving ? "Saving..." : "Save profile"}
-          </PrimaryButton>
-          <Link
-            to="/analyse"
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
-          >
-            Continue to role review
-          </Link>
-        </div>
-      </form>
-    </PageShell>
+          <div className="flex items-center gap-2 pt-1">
+            <button type="submit" disabled={saving} className="rounded-xl bg-[#0f0f17] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1a1a28] disabled:opacity-50">
+              {saving ? "Saving…" : "Save profile"}
+            </button>
+            <button type="button" onClick={() => setEditing(false)} className="rounded-xl border border-[rgba(0,0,0,0.08)] bg-white px-4 py-2.5 text-sm font-medium text-[#71717a] hover:text-[#0f0f17]">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
   );
 }

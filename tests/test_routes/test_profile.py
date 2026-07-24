@@ -65,6 +65,19 @@ async def test_get_profile_builds_on_first_call(app_client):
     assert "merged_profile" in data
 
 
+async def test_get_profile_identity_returns_email_and_shape(app_client):
+    resp = await app_client.get("/api/profile/identity")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) >= {"name", "location", "email", "phone", "links"}
+    assert "@" in body["email"]  # authoritative account email
+
+
+async def test_profile_identity_requires_authentication(unauthenticated_client):
+    resp = await unauthenticated_client.get("/api/profile/identity")
+    assert resp.status_code == 401
+
+
 async def test_profile_refresh(app_client):
     from unittest.mock import AsyncMock, patch
 
