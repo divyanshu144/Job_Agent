@@ -392,3 +392,16 @@ real scanned PDF (or at minimum `docker run <image> tesseract --version && pdfto
 this is considered verified.
 
 See: Dockerfile backend-tex stage, backend/services/cv_parser.py (_extract_pdf_ocr_sync)
+
+## 2026-07-24 "Preparing package" broke — stopped Docker api container
+Pattern: `docker stop job_ready_agent-api-1` (done repeatedly to free :8000 for a host
+  uvicorn during live smokes) leaves the Docker app at :8080 with no backend — its nginx
+  proxies /api → http://api:8000, so every request fails. Looked like a pipeline bug; the
+  pipeline was fine (ran end-to-end on current code, backend log clean).
+Fix: `docker start job_ready_agent-api-1`. When a feature "stops working" in a running app,
+  check `docker ps -a` for an Exited container BEFORE reading feature code.
+Avoid: don't leave the compose api container stopped after borrowing :8000. Prefer running the
+  host backend on a DIFFERENT port and pointing the dev proxy at it, or `docker compose stop
+  api` only for the duration and restart immediately. Also note: the Docker image is STALE
+  (pre-resume-editor) — the :8080 app lacks all 5 plans' features until `docker compose up
+  -d --build` rebuilds it.
