@@ -221,7 +221,10 @@ async def download_resume_pdf(
     profile = await get_owned_profile(db, current_user.id)
     identity = resume_identity_from_profile(profile, current_user.email)
     try:
-        body = await render_resume_pdf(output, identity)
+        # Faithful (WYSIWYG) render: the downloaded PDF must match the on-screen
+        # preview and the DOCX exactly — never silently truncate the user's curated
+        # content to force one page.
+        body = await render_resume_pdf(output, identity, faithful=True)
     except ResumeTemplateError as exc:
         raise HTTPException(
             status_code=503,

@@ -405,3 +405,21 @@ Avoid: don't leave the compose api container stopped after borrowing :8000. Pref
   api` only for the duration and restart immediately. Also note: the Docker image is STALE
   (pre-resume-editor) — the :8080 app lacks all 5 plans' features until `docker compose up
   -d --build` rebuilds it.
+
+## 2026-07-25 Resume PDF download truncated curated content
+Pattern: The editor/preview and DOCX render the FULL resume, but the PDF renderer
+  (`resume_latex_template.py`) truncated everything (summary→52 words, experience[:3]
+  + 3 bullets/role + 24 words/bullet, projects[:3], skills[:24], education[:2]) and
+  used `identity.name` as the header title, ignoring `content.headline`. All the caps
+  existed to force the AUTO-GENERATED resume onto one page — but they also silently
+  mangled resumes the user had curated by hand, so downloads didn't match what they
+  edited ("missing parts" + "changes not saved").
+Fix: Added a `faithful=True` (WYSIWYG) mode threaded through render_resume_latex →
+  sub-renderers that disables every cap (`_limit_words(..., None)`, no slicing), and a
+  `faithful` path in `render_resume_pdf` that compiles with `require_one_page=False`
+  (multi-page OK). The download route (`history.py`) now passes `faithful=True`. Also
+  surfaced `output.headline` as an italic tagline under the name in `_render_header`,
+  suppressed when it just repeats the name.
+Avoid: don't assume the three render paths (preview/DOCX/PDF) agree — the PDF was the
+  outlier. A "download" of user-curated content must be WYSIWYG; keep the one-page
+  discipline only for the machine-generated pipeline output, never for hand edits.

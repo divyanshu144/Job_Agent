@@ -167,3 +167,66 @@ def test_render_resume_latex_fills_format_without_mutating_resume_source() -> No
 def test_render_resume_latex_raises_for_unfilled_marker() -> None:
     with pytest.raises(RuntimeError):
         render_resume_latex(ResumeTailorerOutput(summary="x"), template="%%JOBFIT_UNKNOWN%%")
+
+
+def _many_section_output() -> ResumeTailorerOutput:
+    """Content that overflows every default cap (summary words, 3 experiences,
+    3 bullets/role, 24 skills) so faithful-vs-capped rendering is observable."""
+    long_summary = " ".join(f"Sentence number {i} about impact." for i in range(1, 40))
+    return ResumeTailorerOutput(
+        headline="Staff Backend Engineer",
+        summary=long_summary,
+        skills=[f"Skill{i}" for i in range(1, 31)],  # 30 > 24 cap
+        experience=[
+            ResumeExperienceItem(
+                company=f"Company{i}",
+                role="Engineer",
+                dates="2020-2024",
+                bullets=[f"Achievement bullet number {b} at company {i}." for b in range(1, 6)],
+            )
+            for i in range(1, 6)  # 5 roles > 3 cap; 5 bullets/role > 3 cap
+        ],
+    )
+
+
+def test_faithful_render_keeps_all_content_uncapped() -> None:
+    """The WYSIWYG download must never drop the user's curated content: every
+    experience, every bullet, every skill, and the full summary survive."""
+    output = _many_section_output()
+
+    tex = render_resume_latex(output, faithful=True)
+
+    assert "Sentence number 39 about impact." in tex  # full summary, not truncated
+    assert "Company5" in tex  # 5th role kept (default caps at 3)
+    assert "Skill30" in tex  # 30th skill kept (default caps at 24)
+    assert "Achievement bullet number 5 at company 5." in tex  # 5th bullet kept
+
+
+def test_default_render_still_caps_content() -> None:
+    """The auto-generated one-page path keeps its caps — faithful mode is opt-in."""
+    output = _many_section_output()
+
+    tex = render_resume_latex(output)  # faithful defaults to False
+
+    assert "Company4" not in tex  # only first 3 roles
+    assert "Skill30" not in tex  # skills capped at 24
+
+
+def test_faithful_render_surfaces_edited_headline_as_tagline() -> None:
+    """A headline edited in the resume editor must reach the PDF header, but is
+    suppressed when it merely repeats the name."""
+    identity = ResumeIdentity(name="Ada Lovelace")
+
+    with_tagline = render_resume_latex(
+        ResumeTailorerOutput(headline="Staff Backend Engineer", summary="x"),
+        identity=identity,
+        template="%%JOBFIT_HEADER%%\n%%JOBFIT_SUMMARY%%",
+    )
+    assert "Staff Backend Engineer" in with_tagline
+
+    no_tagline = render_resume_latex(
+        ResumeTailorerOutput(headline="Ada Lovelace", summary="x"),
+        identity=identity,
+        template="%%JOBFIT_HEADER%%\n%%JOBFIT_SUMMARY%%",
+    )
+    assert no_tagline.count("Ada Lovelace") == 1  # no duplicate name line

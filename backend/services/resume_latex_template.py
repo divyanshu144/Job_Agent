@@ -77,16 +77,19 @@ def _clean(value: str | None) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
 
 
-def _limit_words(value: str, max_words: int) -> str:
+def _limit_words(value: str, max_words: int | None) -> str:
     """Trim text toward a word budget WITHOUT ever cutting a sentence in half.
 
     Over budget, drop whole trailing sentences. If even the first sentence exceeds
     the budget, keep it whole rather than amputate it mid-clause and bolt on a fake
     period (the "giving the team better." defect). One-page fit is handled by the
     bullet/entry caps and the compact + overflow fallbacks in render_resume_pdf, not
-    by mutilating prose.
+    by mutilating prose. ``max_words=None`` disables the budget entirely — used by
+    the faithful (WYSIWYG) download path, which never truncates curated content.
     """
     cleaned = _clean(value)
+    if max_words is None:
+        return cleaned
     words = cleaned.split()
     if len(words) <= max_words:
         return cleaned
@@ -103,15 +106,21 @@ def _limit_words(value: str, max_words: int) -> str:
     return " ".join(kept) if kept else cleaned
 
 
-def _bullet_list(items: list[str], *, limit: int, max_words: int = 24) -> str:
-    bullets = [_clean(item) for item in items if _clean(item)][:limit]
+def _bullet_list(
+    items: list[str], *, limit: int, max_words: int = 24, faithful: bool = False
+) -> str:
+    cleaned = [_clean(item) for item in items if _clean(item)]
+    bullets = cleaned if faithful else cleaned[:limit]
     if not bullets:
         return ""
-    body = "\n".join(f"  \\item {escape_latex(_limit_words(item, max_words))}" for item in bullets)
+    word_cap = None if faithful else max_words
+    body = "\n".join(f"  \\item {escape_latex(_limit_words(item, word_cap))}" for item in bullets)
     return "\\begin{itemize}\n" + body + "\n\\end{itemize}"
 
 
-def _render_experience_item(item: ResumeExperienceItem, *, compact: bool = False) -> str:
+def _render_experience_item(
+    item: ResumeExperienceItem, *, compact: bool = False, faithful: bool = False
+) -> str:
     company = escape_latex(_clean(item.company))
     role = escape_latex(_clean(item.role))
     dates = escape_latex(_clean(item.dates))
@@ -119,6 +128,7 @@ def _render_experience_item(item: ResumeExperienceItem, *, compact: bool = False
         item.bullets,
         limit=2 if compact else 3,
         max_words=18 if compact else 24,
+        faithful=faithful,
     )
     if not any([company, role, dates, bullets]):
         return ""
@@ -126,20 +136,28 @@ def _render_experience_item(item: ResumeExperienceItem, *, compact: bool = False
     return "\n".join(part for part in [heading, bullets] if part)
 
 
-def _render_experience(items: list[ResumeExperienceItem], *, compact: bool = False) -> str:
+def _render_experience(
+    items: list[ResumeExperienceItem], *, compact: bool = False, faithful: bool = False
+) -> str:
+    selected = items if faithful else items[: 2 if compact else 3]
     rendered = [
-        _render_experience_item(item, compact=compact) for item in items[: 2 if compact else 3]
+        _render_experience_item(item, compact=compact, faithful=faithful) for item in selected
     ]
     return "\n\n".join(item for item in rendered if item)
 
 
-def _render_project_item(item: ResumeProjectItem, *, compact: bool = False) -> str:
+def _render_project_item(
+    item: ResumeProjectItem, *, compact: bool = False, faithful: bool = False
+) -> str:
     name = escape_latex(_clean(item.name))
-    description = escape_latex(_limit_words(item.description or "", 6 if compact else 10))
+    description = escape_latex(
+        _limit_words(item.description or "", None if faithful else (6 if compact else 10))
+    )
     bullets = _bullet_list(
         item.bullets,
         limit=1 if compact else 2,
         max_words=16 if compact else 22,
+        faithful=faithful,
     )
     if not any([name, description, bullets]):
         return ""
@@ -147,17 +165,17 @@ def _render_project_item(item: ResumeProjectItem, *, compact: bool = False) -> s
     return "\n".join(part for part in [heading, bullets] if part)
 
 
-def _render_projects(items: list[ResumeProjectItem], *, compact: bool = False) -> str:
-    rendered = [
-        _render_project_item(item, compact=compact) for item in items[: 2 if compact else 3]
-    ]
+def _render_projects(
+    items: list[ResumeProjectItem], *, compact: bool = False, faithful: bool = False
+) -> str:
+    selected = items if faithful else items[: 2 if compact else 3]
+    rendered = [_render_project_item(item, compact=compact, faithful=faithful) for item in selected]
     return "\n\n".join(item for item in rendered if item)
 
 
-def _render_skills(skills: list[str], *, compact: bool = False) -> str:
-    selected = [escape_latex(_clean(skill)) for skill in skills if _clean(skill)][
-        : 16 if compact else 24
-    ]
+def _render_skills(skills: list[str], *, compact: bool = False, faithful: bool = False) -> str:
+    cleaned = [escape_latex(_clean(skill)) for skill in skills if _clean(skill)]
+    selected = cleaned if faithful else cleaned[: 16 if compact else 24]
     if not selected:
         return (
             r"  \textbf{Relevant Skills} & "
@@ -175,19 +193,26 @@ def _render_education_item(item: ResumeEducationItem) -> str:
     return f"\\resumeheading{{{institution}}}{{}}{{{degree}}}{{{dates}}}"
 
 
-def _render_education(items: list[ResumeEducationItem]) -> str:
-    rendered = [_render_education_item(item) for item in items[:2]]
+def _render_education(items: list[ResumeEducationItem], *, faithful: bool = False) -> str:
+    selected = items if faithful else items[:2]
+    rendered = [_render_education_item(item) for item in selected]
     return "\n\n".join(item for item in rendered if item)
 
 
-def _render_header(identity: ResumeIdentity) -> str:
+def _render_header(identity: ResumeIdentity, *, headline: str = "") -> str:
     """Build the centered name + contact + links block from the user's own identity.
 
     Each piece is optional and omitted cleanly (no dangling separators) so a sparse
-    profile still produces a valid header — and never another user's details.
+    profile still produces a valid header — and never another user's details. The
+    optional ``headline`` renders as a tagline under the name so a title edited in
+    the resume editor reaches the PDF; it is suppressed when it merely repeats the
+    name (a common default) to avoid printing the name twice.
     """
     sep = r" $\cdot$ "
     name = escape_latex(_clean(identity.name))
+    tagline = _clean(headline)
+    if tagline and tagline.casefold() == _clean(identity.name).casefold():
+        tagline = ""
 
     contact: list[str] = []
     if identity.location.strip():
@@ -209,6 +234,8 @@ def _render_header(identity: ResumeIdentity) -> str:
     lines: list[str] = []
     if name:
         lines.append(rf"    {{\LARGE \textbf{{{name}}}}} \\[3pt]")
+    if tagline:
+        lines.append(rf"    {{\normalsize \textit{{{escape_latex(tagline)}}}}} \\[2pt]")
     if contact:
         lines.append(rf"    \small {sep.join(contact)} \\[2pt]")
     if links:
@@ -224,21 +251,30 @@ def render_resume_latex(
     *,
     identity: ResumeIdentity | None = None,
     compact: bool = False,
+    faithful: bool = False,
 ) -> str:
     """Render structured resume output into the fixed LaTeX format.
 
     The model controls content only. This renderer owns the LaTeX structure,
-    escaping, the per-user header, and one-page-oriented content caps.
+    escaping, the per-user header, and one-page-oriented content caps. ``faithful``
+    renders the curated content in full (no summary/bullet/entry caps) for the
+    WYSIWYG download path, matching the DOCX and on-screen preview; it takes
+    precedence over ``compact``.
     """
     source = template if template is not None else load_latex_format()
-    summary = escape_latex(_limit_words(output.summary or output.headline, 36 if compact else 52))
+    summary_cap = None if faithful else (36 if compact else 52)
+    summary = escape_latex(_limit_words(output.summary or output.headline, summary_cap))
     replacements = {
-        "%%JOBFIT_HEADER%%": _render_header(identity or ResumeIdentity()),
+        "%%JOBFIT_HEADER%%": _render_header(identity or ResumeIdentity(), headline=output.headline),
         "%%JOBFIT_SUMMARY%%": summary or "Tailored summary available in the application package.",
-        "%%JOBFIT_EXPERIENCE%%": _render_experience(output.experience, compact=compact),
-        "%%JOBFIT_PROJECTS%%": _render_projects(output.projects, compact=compact),
-        "%%JOBFIT_SKILLS%%": _render_skills(output.skills, compact=compact),
-        "%%JOBFIT_EDUCATION%%": _render_education(output.education),
+        "%%JOBFIT_EXPERIENCE%%": _render_experience(
+            output.experience, compact=compact, faithful=faithful
+        ),
+        "%%JOBFIT_PROJECTS%%": _render_projects(
+            output.projects, compact=compact, faithful=faithful
+        ),
+        "%%JOBFIT_SKILLS%%": _render_skills(output.skills, compact=compact, faithful=faithful),
+        "%%JOBFIT_EDUCATION%%": _render_education(output.education, faithful=faithful),
     }
     rendered = source
     for marker, value in replacements.items():
@@ -290,8 +326,23 @@ async def compile_latex_to_pdf(tex: str, *, require_one_page: bool = True) -> by
 
 
 async def render_resume_pdf(
-    output: ResumeTailorerOutput, identity: ResumeIdentity | None = None
+    output: ResumeTailorerOutput,
+    identity: ResumeIdentity | None = None,
+    *,
+    faithful: bool = False,
 ) -> bytes:
+    """Compile the resume to PDF.
+
+    ``faithful`` renders the curated content in full over as many pages as it
+    needs — the WYSIWYG download the user sees in the editor/preview. The default
+    (auto-generated) path keeps the one-page discipline, falling back to a compact
+    render and finally an uncapped multi-page render only if it overflows.
+    """
+    if faithful:
+        return await compile_latex_to_pdf(
+            render_resume_latex(output, identity=identity, faithful=True),
+            require_one_page=False,
+        )
     try:
         return await compile_latex_to_pdf(
             render_resume_latex(output, identity=identity), require_one_page=True
