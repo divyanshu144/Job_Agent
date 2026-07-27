@@ -301,10 +301,6 @@ export default function App() {
             <Route path="/results" element={<ProtectedRoute><MyResults /></ProtectedRoute>} />
             <Route path="/results/:id" element={<ProtectedRoute><Results /></ProtectedRoute>} />
             <Route path="/resume" element={<ProtectedRoute><ResumeEditor /></ProtectedRoute>} />
-            <Route
-              path="/resume/analysis/:analysisId"
-              element={<ProtectedRoute><ResumeEditor /></ProtectedRoute>}
-            />
             <Route path="/campaign" element={<ProtectedRoute requireAdmin><Campaign /></ProtectedRoute>} />
             <Route path="/discover" element={<ProtectedRoute requireAdmin><Discover /></ProtectedRoute>} />
             <Route path="/saved" element={<ProtectedRoute requireAdmin><Saved /></ProtectedRoute>} />
