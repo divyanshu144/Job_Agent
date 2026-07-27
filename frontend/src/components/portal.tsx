@@ -2,12 +2,16 @@ import type { ComponentType, ReactNode } from "react";
 
 type IconType = ComponentType<{ className?: string }>;
 
-export function PageShell({ children, width = "wide" }: { children: ReactNode; width?: "wide" | "medium" }) {
-  return (
-    <div className={`mx-auto space-y-6 ${width === "wide" ? "max-w-5xl" : "max-w-3xl"}`}>
-      {children}
-    </div>
-  );
+export function PageShell({
+  children,
+  width = "wide",
+}: {
+  children: ReactNode;
+  width?: "xwide" | "wide" | "medium";
+}) {
+  const maxWidth =
+    width === "xwide" ? "max-w-7xl" : width === "wide" ? "max-w-5xl" : "max-w-3xl";
+  return <div className={`mx-auto space-y-6 ${maxWidth}`}>{children}</div>;
 }
 
 export function PageHeader({

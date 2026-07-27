@@ -229,7 +229,7 @@ export function Results() {
       : "Evaluation ready";
 
   return (
-    <PageShell width="medium">
+    <PageShell width={tab === "resume" ? "xwide" : "medium"}>
       <Panel className="overflow-hidden p-6 sm:p-7">
         <div className="flex flex-col items-start justify-between gap-5 lg:flex-row lg:items-center">
           <div>
