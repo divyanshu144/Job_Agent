@@ -1,40 +1,41 @@
 # Session Handoff
 
-**Updated:** 2026-07-25
-**Branch:** feat/resume-editor-chat
+**Updated:** 2026-07-27
+**Branch:** main
 
 ---
 
 ## Current State
 
-Resume Editor Plans 1-5 are merged. This session fixed a download bug: the resume PDF
-renderer (`resume_latex_template.py`) silently truncated user-curated content (summary→52
-words, experience[:3]/3 bullets/24 words, projects[:3], skills[:24], education[:2]) and
-ignored `content.headline`, so PDF downloads didn't match the editor/preview/DOCX
-("missing parts" + "changes not saved"). Added a `faithful=True` WYSIWYG mode threaded
-through the renderer that disables every cap and allows multi-page output; the download
-route (`history.py`) now uses it, and the edited headline renders as a tagline in the PDF
-header. Fix verified against a real "Tailored" fork (101-word summary now renders verbatim,
-all 18 skills, clean 2-page PDF) and baked into the rebuilt Docker api image (:8080, healthy).
+**v1.5.0 shipped to production (AWS ECS).** Pushed 51 commits main was ahead by
+(resume editor Plans 1–5, profile dashboard redesign, faithful WYSIWYG PDF download)
+to `origin/main` (`b1e45b2`), then tagged and pushed `v1.5.0` to trigger `deploy-aws.yml`.
+
+The prior `v1.4.0` deploy (2026-07-20) had failed at the Alembic-migration step with
+`ResourceInitializationError: invalid ssm parameters: /jobfit/staging/sentry-dsn` — the
+api/worker/beat task defs declare `SENTRY_DSN` as a required SSM `secrets` entry, but that
+parameter never existed. Root-caused and fixed this session: created
+`/jobfit/staging/sentry-dsn` as a `SecureString` with the real Sentry DSN. The execution
+role's SSM policy is path-scoped (`/jobfit/staging/*`) so it covers the new param with no
+IAM change. Sentry error alerting is now live in prod (was a no-op with an empty DSN).
+
+Deploy run `30265401119` completed **success**; all four ECS services report
+desired=running=1, rollout COMPLETED (api on task def `jobfit-api:35`).
 
 ## Next Action
 
-Commit the working tree (4 modified files listed under In-Flight), then have the user
-re-download from the editor on localhost:8080 to visually confirm PDF = preview = DOCX.
-Deferred follow-ups if resumed: Plan 6 (cover-letter mode); wire version-card "N roles"
-to pull from resume content instead of the review record.
+Nothing pending. Optionally verify Sentry is receiving events (trigger a handled pipeline
+error and confirm it surfaces in the Sentry `production` environment). Deferred product
+follow-ups if resumed: Plan 6 (cover-letter editor mode); wire the profile version-card
+"N roles" to pull from resume content instead of the review record.
 
 ## Why It Stopped
 
-Task complete — bug fixed, `make check` green, Docker image rebuilt. Committing per Stop hook.
+Task complete — user asked to push + deploy all changes; both done and verified.
 
 ## In-Flight
 
-Uncommitted (about to commit):
-- backend/services/resume_latex_template.py — faithful render mode + headline tagline
-- backend/routes/history.py — PDF download passes `faithful=True`
-- tests/test_services/test_resume_latex_template.py — faithful-vs-capped regression tests
-- tasks/lessons.md — 2026-07-25 lesson entry
+Nothing uncommitted. `origin/main` = `b1e45b2`; tag `v1.5.0` pushed.
 
 ## Open Questions
 
@@ -46,6 +47,8 @@ auto-generated pipeline output). No action needed unless the user wants a one-pa
 
 | Check | Result |
 |---|---|
-| `make test` | 713 passing · 82.88% coverage ✓ |
-| `make lint` | ✓ clean (ruff + mypy on changed files) |
-| `make check` | ✓ clean (fmt + lint + test) |
+| `make test` (local, pre-push) | 713 passing · 82.88% coverage ✓ |
+| Push to `origin/main` | ✓ `b1e45b2` (triggers CI + docker-build) |
+| SSM `/jobfit/staging/sentry-dsn` | ✓ created (SecureString), role policy covers it |
+| Deploy run `30265401119` (v1.5.0) | ✓ success — migrations ran, 4 services stable |
+| ECS services | ✓ api:35 · worker:28 · beat:26 · frontend:25, all running=1 |
