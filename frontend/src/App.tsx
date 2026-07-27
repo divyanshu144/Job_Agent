@@ -1,4 +1,13 @@
-import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  NavLink,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import {
   BarChart3,
   Bell,
@@ -285,6 +294,14 @@ function Shell({ children }: { children: ReactNode }) {
   );
 }
 
+// The standalone per-analysis resume editor page was retired; its editor now
+// lives in the Results page's Resume tab. Send any bookmarked fork-editor URL
+// to that analysis's Results page (the `:id` the Results route expects).
+function ResumeAnalysisRedirect() {
+  const { analysisId } = useParams<{ analysisId: string }>();
+  return <Navigate to={`/results/${analysisId}`} replace />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -301,6 +318,9 @@ export default function App() {
             <Route path="/results" element={<ProtectedRoute><MyResults /></ProtectedRoute>} />
             <Route path="/results/:id" element={<ProtectedRoute><Results /></ProtectedRoute>} />
             <Route path="/resume" element={<ProtectedRoute><ResumeEditor /></ProtectedRoute>} />
+            {/* The per-analysis resume editor now lives inside the Results page's
+                Resume tab. Redirect any bookmarked fork-editor URL there. */}
+            <Route path="/resume/analysis/:analysisId" element={<ResumeAnalysisRedirect />} />
             <Route path="/campaign" element={<ProtectedRoute requireAdmin><Campaign /></ProtectedRoute>} />
             <Route path="/discover" element={<ProtectedRoute requireAdmin><Discover /></ProtectedRoute>} />
             <Route path="/saved" element={<ProtectedRoute requireAdmin><Saved /></ProtectedRoute>} />
