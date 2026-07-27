@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, Download, FileEdit, RefreshCw, ThumbsDown, ThumbsUp, Wand2 } from "lucide-react";
+import { useParams } from "react-router-dom";
+import { AlertTriangle, RefreshCw, ThumbsDown, ThumbsUp, Wand2 } from "lucide-react";
 import { api, streamGenerate, retryAnalysis } from "../api/client";
 import type { AnalysisDetail, AgentName, AgentStatus, Contact, Step, RetryRequest, ResumeTailorerOutput } from "../types";
 import { PHASE2_AGENTS } from "../types";
@@ -8,6 +8,7 @@ import { ScoreCard } from "../components/ScoreCard";
 import { GapList } from "../components/GapList";
 import { ResourcePanel } from "../components/ResourcePanel";
 import { DocViewer } from "../components/DocViewer";
+import { ResumeEditorPanel } from "../components/ResumeEditorPanel";
 import { EmptyState, PageShell, Panel, PrimaryButton, SecondaryButton, StatusPill } from "../components/portal";
 import { useAuth } from "../context/AuthContext";
 
@@ -62,7 +63,6 @@ export function Results() {
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
-  const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
   const [genStates, setGenStates] = useState<Partial<Record<AgentName, AgentStatus>>>({});
   const [genErrors, setGenErrors] = useState<Partial<Record<AgentName, string>>>({});
   const [isRetrying, setIsRetrying] = useState(false);
@@ -197,36 +197,6 @@ export function Results() {
     api.submitFeedback(data.id, rating).catch(() => setFeedbackRating(null));
   };
 
-  const downloadResume = async () => {
-    if (!data) return;
-    try {
-      let blob: Blob;
-      let extension = "pdf";
-      setDownloadNotice(null);
-      try {
-        blob = await api.downloadResumePdf(data.id);
-      } catch {
-        // Fall back to DOCX, but say so — a silent format switch masked a
-        // 10-day prod PDF outage. The user must know they got a fallback.
-        blob = await api.downloadResumeDocx(data.id);
-        extension = "docx";
-        setDownloadNotice(
-          "PDF generation failed, so you got the DOCX version instead. The team can check the server logs for the PDF error.",
-        );
-      }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `jobfit-resume-${data.id}.${extension}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      setError(String(e));
-    }
-  };
-
   if (error) {
     return (
       <div className="mx-auto max-w-3xl rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">
@@ -259,7 +229,7 @@ export function Results() {
       : "Evaluation ready";
 
   return (
-    <PageShell width="medium">
+    <PageShell width={tab === "resume" ? "xwide" : "medium"}>
       <Panel className="overflow-hidden p-6 sm:p-7">
         <div className="flex flex-col items-start justify-between gap-5 lg:flex-row lg:items-center">
           <div>
@@ -443,19 +413,9 @@ export function Results() {
         {tab === "resume" && (
           r.resume_tailorer
             ? (
-              <div className="space-y-3">
-                {downloadNotice && (
-                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                    {downloadNotice}
-                  </p>
-                )}
-                <Link
-                  to={`/resume/analysis/${data.id}`}
-                  className="inline-flex items-center gap-2 rounded bg-[#5b5bd6] px-4 py-2 text-sm font-medium text-white hover:bg-[#6b6be0]"
-                >
-                  <FileEdit className="size-4" /> Edit this resume
-                </Link>
-                <ResumeDownloadPreview resume={r.resume_tailorer} onDownload={downloadResume} />
+              <div className="space-y-4">
+                <ResumeEditorPanel analysisId={data.id} />
+                <ResumeTailoringNotes resume={r.resume_tailorer} />
               </div>
             )
             : <EmptyPanel>Prepare documents to see tailored resume bullets.</EmptyPanel>
@@ -700,133 +660,43 @@ function EmptyPanel({ children }: { children: string }) {
   );
 }
 
-function ResumeDownloadPreview({
-  resume,
-  onDownload,
-}: {
-  resume: ResumeTailorerOutput;
-  onDownload: () => void;
-}) {
-  const experienceBulletCount = (resume.experience ?? []).reduce(
-    (total, item) => total + (item.bullets ?? []).length,
-    0,
-  );
-  const projectBulletCount = (resume.projects ?? []).reduce(
-    (total, item) => total + (item.bullets ?? []).length,
-    0,
-  );
-  const changeItems = [
-    resume.headline ? "Headline tailored to the role" : null,
-    resume.summary ? "Professional summary rewritten" : null,
-    (resume.skills ?? []).length ? `${resume.skills.length} relevant skills selected and ordered` : null,
-    (resume.experience ?? []).length
-      ? `${resume.experience.length} experience section${resume.experience.length === 1 ? "" : "s"} included`
-      : null,
-    experienceBulletCount ? `${experienceBulletCount} experience bullet${experienceBulletCount === 1 ? "" : "s"} prepared` : null,
-    (resume.projects ?? []).length
-      ? `${resume.projects.length} project section${resume.projects.length === 1 ? "" : "s"} included`
-      : null,
-    projectBulletCount ? `${projectBulletCount} project bullet${projectBulletCount === 1 ? "" : "s"} prepared` : null,
-    (resume.education ?? []).length ? "Education section included" : null,
-  ].filter(Boolean) as string[];
-
+function ResumeTailoringNotes({ resume }: { resume: ResumeTailorerOutput }) {
+  const bullets = resume.tailored_bullets ?? [];
+  const omitted = resume.omitted_items ?? [];
+  if (bullets.length === 0 && omitted.length === 0) return null;
   return (
-    <div className="space-y-5 text-sm">
-      <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
-        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-          <div className="mx-auto max-w-[260px] rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 text-center">
-              <p className="line-clamp-2 text-sm font-semibold text-zinc-950">
-                {resume.headline || "Tailored Resume"}
-              </p>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-zinc-400">
-                PDF Preview
-              </p>
-            </div>
-            <PreviewSection label="Summary" active={Boolean(resume.summary)} />
-            <PreviewSection label="Skills" active={(resume.skills ?? []).length > 0} />
-            <PreviewSection label="Experience" active={(resume.experience ?? []).length > 0} />
-            <PreviewSection label="Projects" active={(resume.projects ?? []).length > 0} />
-            <PreviewSection label="Education" active={(resume.education ?? []).length > 0} />
-          </div>
-          <button
-            onClick={onDownload}
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0f0f17] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1a1a28]"
-          >
-            <Download className="size-4" />
-            Download Resume (.pdf)
-          </button>
-          <p className="mt-3 text-center text-xs leading-5 text-zinc-500">
-            The full resume is prepared as a one-page LaTeX PDF.
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          <section className="rounded-2xl border border-zinc-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-zinc-950">What changed</h3>
-            {changeItems.length ? (
-              <ul className="mt-3 space-y-2 text-zinc-700">
-                {changeItems.map((item) => (
-                  <li key={item} className="flex gap-2">
-                    <span className="mt-2 size-1.5 rounded-full bg-[#5b5bd6]" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-2 text-zinc-500">No resume sections were returned for this package.</p>
-            )}
-          </section>
-
-          {(resume.tailored_bullets ?? []).length > 0 && (
-            <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                Bullet changes
-              </h3>
-              {(resume.tailored_bullets ?? []).map((b, i) => (
-                <div key={i} className="space-y-2 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                  <p className="text-zinc-500 line-through">{b.original}</p>
-                  <p className="font-medium text-zinc-950">{b.rewritten}</p>
-                  <p className="text-xs italic text-zinc-500">{b.rationale}</p>
-                </div>
-              ))}
-            </section>
-          )}
-
-          {(resume.omitted_items ?? []).length > 0 && (
-            <details className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-              <summary className="cursor-pointer text-sm font-medium text-amber-800">
-                Resume tailoring notes ({(resume.omitted_items ?? []).length})
-              </summary>
-              <div className="mt-3 space-y-1">
-                {(resume.omitted_items ?? []).map((item, i) => (
-                  <p key={i} className="text-amber-700">
-                    Omitted {item.value} because it was {item.reason}.
-                  </p>
-                ))}
+    <details className="rounded-2xl border border-zinc-200 bg-white p-4 text-sm">
+      <summary className="cursor-pointer font-semibold text-zinc-950">
+        What the tailoring changed
+      </summary>
+      <div className="mt-4 space-y-4">
+        {bullets.length > 0 && (
+          <section className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+              Bullet changes
+            </h3>
+            {bullets.map((b, i) => (
+              <div key={i} className="space-y-2 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                <p className="text-zinc-500 line-through">{b.original}</p>
+                <p className="font-medium text-zinc-950">{b.rewritten}</p>
+                <p className="text-xs italic text-zinc-500">{b.rationale}</p>
               </div>
-            </details>
-          )}
-        </div>
+            ))}
+          </section>
+        )}
+        {omitted.length > 0 && (
+          <section className="space-y-1">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+              Tailoring notes
+            </h3>
+            {omitted.map((item, i) => (
+              <p key={i} className="text-amber-700">
+                Omitted {item.value} because it was {item.reason}.
+              </p>
+            ))}
+          </section>
+        )}
       </div>
-    </div>
-  );
-}
-
-function PreviewSection({ label, active }: { label: string; active: boolean }) {
-  return (
-    <div className={`border-t py-2.5 ${active ? "border-zinc-200" : "border-zinc-100 opacity-40"}`}>
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
-          {label}
-        </span>
-        <span className={`size-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-zinc-300"}`} />
-      </div>
-      <div className="space-y-1.5">
-        <div className="h-1.5 rounded-full bg-zinc-200" />
-        <div className="h-1.5 w-5/6 rounded-full bg-zinc-100" />
-        <div className="h-1.5 w-2/3 rounded-full bg-zinc-100" />
-      </div>
-    </div>
+    </details>
   );
 }
