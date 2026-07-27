@@ -7,48 +7,50 @@
 
 ## Current State
 
-**v1.5.0 shipped to production (AWS ECS).** Pushed 51 commits main was ahead by
-(resume editor Plans 1–5, profile dashboard redesign, faithful WYSIWYG PDF download)
-to `origin/main` (`b1e45b2`), then tagged and pushed `v1.5.0` to trigger `deploy-aws.yml`.
+**Resume-editor-in-Results-tab shipped and merged to `main`** (merge commit `e60e152`),
+then tagged **v1.6.0** for the AWS ECS deploy. The Results page Resume tab is now the
+editable-in-place editor with the chat agent, via a shared `ResumeEditorPanel`
+(`frontend/src/components/ResumeEditorPanel.tsx`) reused by both the Results tab and the
+master `/resume` page. Tailoring bullet-diffs + omitted-items live in a collapsed
+"What the tailoring changed" section below the editor. The standalone
+`/resume/analysis/:id` page was retired (redirects to `/results/:id`). The Resume tab
+widens the page to `xwide` (max-w-7xl) so the resume renders as a full desktop document;
+other tabs stay medium.
 
-The prior `v1.4.0` deploy (2026-07-20) had failed at the Alembic-migration step with
-`ResourceInitializationError: invalid ssm parameters: /jobfit/staging/sentry-dsn` — the
-api/worker/beat task defs declare `SENTRY_DSN` as a required SSM `secrets` entry, but that
-parameter never existed. Root-caused and fixed this session: created
-`/jobfit/staging/sentry-dsn` as a `SecureString` with the real Sentry DSN. The execution
-role's SSM policy is path-scoped (`/jobfit/staging/*`) so it covers the new param with no
-IAM change. Sentry error alerting is now live in prod (was a no-op with an empty DSN).
-
-Deploy run `30265401119` completed **success**; all four ECS services report
-desired=running=1, rollout COMPLETED (api on task def `jobfit-api:35`).
+Verified live in-app (dev server + browser): editor renders, controls present, notes
+expand, desktop width correct. Downloads already reflect edits (fork-preference in
+`history.py:_resolve_resume_output`, faithful WYSIWYG PDF) — covered by
+`test_download_resume_pdf_serves_edited_fork`. Dropped (user decision): the one-page
+overflow warning.
 
 ## Next Action
 
-Nothing pending. Optionally verify Sentry is receiving events (trigger a handled pipeline
-error and confirm it surfaces in the Sentry `production` environment). Deferred product
-follow-ups if resumed: Plan 6 (cover-letter editor mode); wire the profile version-card
-"N roles" to pull from resume content instead of the review record.
+Nothing pending on this feature. **Immediate follow-up the user raised** (not yet started):
+profile-grounded resume generation — the `resume_tailorer` over-omits items the candidate
+has in their profile/projects ("Omitted REST API design / Bachelor's ... because it was
+not found in your resume"), because it grounds against the base resume, not the full
+profile (YAML + CV + semantic memory). Worth its own brainstorm + plan; touches
+`resume_tailorer`, `context_builder`, `profile_builder`, and the faithfulness validator.
 
 ## Why It Stopped
 
-Task complete — user asked to push + deploy all changes; both done and verified.
+Feature complete, merged, pushed, and tagged for deploy per user request.
 
 ## In-Flight
 
-Nothing uncommitted. `origin/main` = `b1e45b2`; tag `v1.5.0` pushed.
+None. `main` at `e60e152` (+ HANDOFF commit), pushed to origin; tag `v1.6.0` pushed
+(deploy running/complete — see Verification Baseline).
 
 ## Open Questions
 
-Faithful downloads can now be 2 pages instead of force-fit to one. This is the intended
-WYSIWYG trade-off for hand-curated resumes (one-page discipline kept only for the
-auto-generated pipeline output). No action needed unless the user wants a one-page cap back.
+Profile-grounded generation (above) is the open design question.
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make test` (local, pre-push) | 713 passing · 82.88% coverage ✓ |
-| Push to `origin/main` | ✓ `b1e45b2` (triggers CI + docker-build) |
-| SSM `/jobfit/staging/sentry-dsn` | ✓ created (SecureString), role policy covers it |
-| Deploy run `30265401119` (v1.5.0) | ✓ success — migrations ran, 4 services stable |
-| ECS services | ✓ api:35 · worker:28 · beat:26 · frontend:25, all running=1 |
+| `make test` (merged main) | 713 passing · 82.88% coverage ✓ |
+| frontend `npm run build` + `npm run lint` | ✓ clean (4 pre-existing warnings only) |
+| Live in-app smoke (Results Resume tab) | ✓ editor renders, notes expand, desktop width |
+| Merge to main | ✓ `e60e152` (--no-ff) |
+| Tag / deploy | v1.6.0 pushed → deploy-aws.yml |
