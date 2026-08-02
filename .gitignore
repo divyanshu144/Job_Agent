@@ -85,3 +85,6 @@ infra/aws/.aws-bootstrap.env
 infra/aws/scripts/local/
 infra/aws/scripts/secrets/
 infra/aws/scripts/06_put_ssm_parameters.sh
+
+# Cost/teardown runbook — contains live account, VPC, snapshot and SG identifiers
+infra/aws/RUNBOOK.md
