@@ -33,45 +33,42 @@ PUBLIC and the doc carries account, VPC, snapshot and security-group identifiers
 Tightened the `jobfit-scheduler-scaledown` trust policy with `aws:SourceAccount` +
 `aws:SourceArn` conditions. First attempt used `schedule/default/*`; EventBridge
 Scheduler requires the **schedule group** ARN (`schedule-group/default`). Six retries
-over a minute ruled out IAM propagation lag. Corrected policy is live and accepted by
-`create-schedule`.
+over a minute ruled out IAM propagation lag. Corrected policy is live and **verified
+end-to-end** — a temporary no-op schedule fired and CloudTrail confirmed
+`assumed-role/jobfit-scheduler-scaledown` called `UpdateService` at 08:39:08Z with no
+error. Temporary schedule deleted; the four production schedules remain ENABLED.
 
-## Next Action
+Budget lowered from $50 to **$15/month**. Thresholds are percentages so they rescaled
+automatically (85% = $12.75, 100% = $15); all three notifications and the email
+subscriber survived the `update-budget` replace, verified afterwards.
 
-Read `/private/tmp/claude-501/-Users-divyanshu-Desktop-All-Projects-Job-Ready-Agent/6c8138f6-38c1-48f3-a9f6-4f57c300e686/tasks/bn8bjd24m.output`
-for `AWS/Scheduler` invocation metrics (`InvocationAttemptCount`, `TargetErrorCount`,
-`InvocationDroppedCount`, window 08:30–08:50Z on 2026-08-02).
+Trust policy verified end-to-end; temporary schedule deleted. Budget lowered to $15.
+Nothing outstanding on the AWS work.
 
-- If an invocation was attempted and `TargetErrorCount` is 0:
-  `aws scheduler delete-schedule --name jobfit-trustpolicy-verify --region eu-west-2`
-- If it errored: restore the original trust policy from
-  `scratchpad/trust-policy.backup.json` with
-  `aws iam update-assume-role-policy --role-name jobfit-scheduler-scaledown --policy-document file://<path>`,
-  then delete the temporary schedule.
-
-If the scratchpad is gone, the backup policy is simply the same document with the
-entire `Condition` block removed.
+**Decision needed:** whether `infra/aws/RUNBOOK.md` should stay gitignored (current
+state) or be committed. The repo is PUBLIC and the doc contains account, VPC, snapshot
+and security-group identifiers. A redacted copy under `docs/` is the third option.
 
 ## Why It Stopped
 
-Awaiting a timed AWS verification. Temporary no-op schedule `jobfit-trustpolicy-verify`
-was created to fire at 08:38:27 UTC (sets api desired count to 0, already 0); metrics
-queried at ~08:41:30 UTC. Creation-time validation already passed, but that only proves
-the role is assumable, not that an invocation succeeds.
+Awaiting the user's call on tracking the runbook. All requested AWS changes are applied
+and verified.
 
 ## In-Flight
 
-- `.gitignore` — added `infra/aws/RUNBOOK.md` (committed alongside this handoff)
 - `infra/aws/RUNBOOK.md` — gitignored, intentionally untracked, lives only on this machine
-- AWS: temporary schedule `jobfit-trustpolicy-verify` exists and **must be deleted**
+- No uncommitted tracked files
 
 ## Open Questions
 
-- **Budget threshold.** $50/month against a ~$2/month idle run rate. Lowering to $15
-  was recommended (trips at ~2 days of the rebuilt stack running) but not applied.
-- **Next real scale-down is 2026-08-03 02:00 UTC.** Even if the temporary verify passes,
-  spot-check `TargetErrorCount` after it to confirm the production schedules fire under
-  the new trust policy.
+- **Runbook tracking** — see Next Action.
+- **Next real scale-down is 2026-08-03 02:00 UTC.** The trust policy is verified via a
+  synthetic invocation, but the production schedules have not yet fired under it. Worth
+  a CloudTrail spot-check (`EventName=UpdateService`, principal
+  `assumed-role/jobfit-scheduler-scaledown`) after that run.
+- **Forecast alert will fire spuriously** for a few days — the budget forecast still
+  reads ~$195 against the new $15 limit because Cost Explorer has not re-baselined on
+  idle data. Not a real signal until the forecast settles near $2.
 - **Carried over, not started:** profile-grounded resume generation. `resume_tailorer`
   over-omits items the candidate has in their profile/projects because it grounds against
   the base resume rather than the full profile (YAML + CV + semantic memory). Needs its
