@@ -108,6 +108,16 @@ def evaluate_case(case: EvalCase) -> EvalCaseResult:
     warnings.extend(validate_cover_letter(cl, prior))
     warnings.extend(validate_resume_tailorer(rt, prior, source_text=case.resume_text))
 
+    # A validator warning graded severity="error" is a failure, not a note. Without this
+    # the suite collects error-severity findings into the report and still returns
+    # passed=True (`passed = not failures`), so it can never go red on a validator
+    # regression. severity="warn" stays advisory and does not fail the case.
+    failures.extend(
+        f"[{warning.agent}] {warning.rule}: {warning.detail}"
+        for warning in warnings
+        if warning.severity == "error"
+    )
+
     expected = case.expected
     _expect_keywords("job_parser.role_type", jp.role_type, expected.title_keywords, failures)
     if expected.company and (jp.company or "").lower() != expected.company.lower():
