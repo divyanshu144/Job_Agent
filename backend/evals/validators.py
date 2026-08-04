@@ -17,6 +17,14 @@ from backend.schemas import (
 
 logger = logging.getLogger(__name__)
 
+# Single source of truth for the cover-letter length floor. Previously this lived in
+# three places that disagreed: a hard-coded 150 here, a CompletenessRules default of
+# 120, and per-case fixture overrides of 65-75 tuned just under each mock — so the
+# rule never fired. `cover_letter.md` asks for a "3-4 paragraph letter" and names no
+# word count, so 150 was unsourced. Anything below this floor is a genuine defect
+# (an empty or one-line letter), not a style preference.
+COVER_LETTER_MIN_WORDS = 75
+
 _VALID_SENIORITIES = {"Junior", "Mid", "Senior", "Lead", "Staff", "Principal"}
 
 _SKILL_ALIASES: dict[str, set[str]] = {
@@ -238,12 +246,12 @@ def validate_cover_letter(
 ) -> list[ValidationWarning]:
     warnings: list[ValidationWarning] = []
     word_count = len(output.body.split())
-    if word_count < 150:
+    if word_count < COVER_LETTER_MIN_WORDS:
         warnings.append(
             _warn(
                 "cover_letter",
                 "body_too_short",
-                f"body has {word_count} words, minimum is 150",
+                f"body has {word_count} words, minimum is {COVER_LETTER_MIN_WORDS}",
                 severity="error",
             )
         )
