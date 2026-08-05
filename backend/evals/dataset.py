@@ -6,11 +6,16 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from backend.evals.validators import COVER_LETTER_MIN_WORDS
+
 DEFAULT_FIXTURE_PATH = Path("tests/fixtures/evals/jobfit_eval_cases.json")
 
 
 class CompletenessRules(BaseModel):
-    cover_letter_min_words: int = 120
+    # Defaults to the validator's floor so the fixture and the production rule cannot
+    # drift apart. Cases may still tighten this, but a case that *loosens* it below
+    # COVER_LETTER_MIN_WORDS no longer hides a validator error — that fires regardless.
+    cover_letter_min_words: int = COVER_LETTER_MIN_WORDS
     resume_min_skills: int = 2
     resume_min_bullets: int = 1
 

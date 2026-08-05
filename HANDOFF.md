@@ -42,22 +42,51 @@ Budget lowered from $50 to **$15/month**. Thresholds are percentages so they res
 automatically (85% = $12.75, 100% = $15); all three notifications and the email
 subscriber survived the `update-budget` replace, verified afterwards.
 
-Trust policy verified end-to-end; temporary schedule deleted. Budget lowered to $15.
-Nothing outstanding on the AWS work.
+Then, on branch `fix/eval-severity-gating`: fixed the eval suite's severity gating.
+`runner.py` computed `passed = not failures` and never consulted warnings, so
+`severity="error"` findings were reported and ignored — the suite could not go red.
+Error-severity warnings now promote into `failures`; `severity="warn"` stays advisory.
 
-**Decision needed:** whether `infra/aws/RUNBOOK.md` should stay gitignored (current
-state) or be committed. The repo is PUBLIC and the doc contains account, VPC, snapshot
-and security-group identifiers. A redacted copy under `docs/` is the third option.
+This exposed that the fixture was never compliant: all 5 cases violate the production
+`cover_letter` 150-word minimum (bodies are 75-86 words). Suite went 5/5 → **0/5**,
+exit code 1. That is the intended outcome, not a regression.
+
+## Next Action
+
+**Branch `fix/eval-severity-gating` is intentionally RED.** Decide how to make the
+fixture honest, then unblock:
+
+- **Option A (recommended):** raise the five mocked `cover_letter.body` texts in
+  `tests/fixtures/evals/jobfit_eval_cases.json` to >=150 words so they meet the
+  production validator, and delete the per-case `cover_letter_min_words` overrides
+  (75/70/70/65/70) — each was tuned just *below* its own mock, which is why this
+  never fired.
+- **Option B:** lower `validators.py:241` from 150 if 150 is not the real product
+  standard.
+
+Pick ONE source of truth. Today there are three: validator 150,
+`CompletenessRules` default 120, per-case fixture overrides 65-75.
+
+Then re-run `python3 scripts/run_evals.py` (expect 5/5, exit 0) and
+`python3 -m pytest tests/test_evals/ -q` (expect 56 passed).
+
+Also still open from the AWS work: whether `infra/aws/RUNBOOK.md` stays gitignored
+(current state) or gets committed. Repo is PUBLIC and the doc has account, VPC,
+snapshot and SG identifiers; a redacted copy under `docs/` is a third option.
 
 ## Why It Stopped
 
-Awaiting the user's call on tracking the runbook. All requested AWS changes are applied
-and verified.
+Awaiting a decision on the eval fixture (Option A vs B). The severity-gating fix is
+complete and correct; the red suite is the honest outcome, not a defect to patch away.
 
 ## In-Flight
 
+- Branch `fix/eval-severity-gating` — `backend/evals/runner.py` committed there.
+  `tests/test_evals/test_dataset_regression.py::test_deterministic_eval_dataset_passes`
+  FAILS by design (it asserted the fixture passes; it no longer does). 55 other eval
+  tests pass. **Do not merge until the fixture decision is made.**
+- `main` is clean and green — the red is isolated to the branch.
 - `infra/aws/RUNBOOK.md` — gitignored, intentionally untracked, lives only on this machine
-- No uncommitted tracked files
 
 ## Open Questions
 
