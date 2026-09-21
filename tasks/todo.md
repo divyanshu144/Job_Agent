@@ -100,3 +100,26 @@ on-disk yaml not in image; no DB profile has search_profiles). Admin-only for no
 - [x] Verified in prod: 503→142 semantic→36 scored; feed 0→55 jobs, top matches highly relevant
 - [x] Threshold calibrated (0.35 sweet spot; prod on 0.30 default — bump if Stage-2 spend high)
 - [x] Backlog rescore: SKIPPED deliberately (June jobs stale; endpoint exists API-only)
+
+## Railway deployment (PLAN — awaiting go-ahead, nothing implemented)
+
+Goal: get the app running cheaply again (AWS is shut down for cost). Six services in one
+Railway project: api, worker, beat, frontend, Postgres (pgvector), Redis.
+
+- [ ] Per-service Dockerfiles that reuse the existing multi-stage build (Railway can't pick a
+      `--target`): `Dockerfile.api`, `Dockerfile.worker`, `Dockerfile.beat` (verify against docs)
+- [ ] Frontend: add `/api/` reverse proxy to `nginx.prod.conf`, upstream from env via nginx
+      templates (`API_UPSTREAM`), `proxy_buffering off` for the SSE route `/api/analyse`,
+      Railway private-DNS `resolver`. Must keep same-origin so cookie JWT works.
+- [ ] Verify locally: build the frontend image, confirm `/healthz` and `/api/health` proxy path
+- [ ] Railway project: Postgres via pgvector template, Redis, 4 app services, private networking
+- [ ] Env vars: DATABASE_URL (+ DB_SSL if needed), REDIS_URL, APP_ENV=production,
+      COOKIE_SECURE=true, CORS_ORIGINS=<public domain>, JWT_SECRET (new, random),
+      ANTHROPIC_API_KEY, OPENAI_API_KEY, EMBEDDING_PROVIDER, Hunter/Gmail/Reed/Adzuna, SENTRY_DSN
+- [ ] Migrations: rely on RUN_MIGRATIONS_ON_STARTUP on the api service ONLY (worker/beat off)
+- [ ] Cost guard: small worker/beat, spend cap in Railway, confirm campaign per-user caps set
+- [ ] Smoke test through the app's own flows (register via invite, upload CV, run analysis,
+      PDF download). No hand-edited DB rows.
+- [ ] HANDOFF.md updated; runbook kept out of the public repo (contains project/service IDs)
+
+Open questions: fresh DB vs restoring the RDS snapshot; custom domain vs *.up.railway.app.
