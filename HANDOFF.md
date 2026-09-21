@@ -1,39 +1,40 @@
 # Session Handoff
 
 **Updated:** 2026-09-21
-**Branch:** docs/railway-plan (off main at `f2845a3`)
+**Branch:** feat/railway-deploy (off docs/railway-plan, off main `f2845a3`)
 
 ---
 
 ## Current State
 
-Planning a Railway deployment. AWS is shut down to stop cost; the goal is just to get the app running again cheaply. **No application code changed.** This session only read the deploy surface (`Dockerfile`, `docker-compose.prod.yml`, `frontend/nginx.prod.conf`, `backend/config.py`) and wrote the plan into `tasks/todo.md` under "Railway deployment". The eval-fixture decision from the previous handoff is resolved (merged in `f2845a3`, single source of truth for the cover-letter floor).
+Railway deployment: **code changes are done and verified; nothing is deployed yet.** AWS is shut down for cost. Decisions made: fresh database (no RDS restore), custom domain already bought on Cloudflare.
 
-Findings that shape the plan: `nginx.prod.conf` has no `/api` proxy (AWS ALB did the routing), so the Railway frontend needs one to keep cookie-JWT auth same-origin; Railway likely cannot select a Docker `--target`, so api/worker/beat need per-service Dockerfiles; `run_migrations_on_startup` already defaults to true, so migrations should run on the api service only.
+Changes: `Dockerfile` now ends with the `api` stage (Railway cannot pick `--target`; worker/beat reuse the image with a start-command override, replacing the earlier per-service-Dockerfile idea). `frontend/nginx.railway.conf.template` proxies `/api/` to `api.railway.internal:8000` so cookie-JWT auth stays same-origin; `frontend/Dockerfile` now installs the config as an nginx template (envsubst) with `PORT`/`API_UPSTREAM`/`DNS_RESOLVER` defaults. Runbook is `docs/railway.md` (variable names only; repo is public).
+
+Verified: proxy path/proto/SPA fallback/healthz against a stub API in Docker; existing `nginx.conf` and `nginx.prod.conf` render byte-identical; default backend build yields the uvicorn image with pdflatex; `make check` green (713 passed, 82.9% coverage).
 
 ## Next Action
 
-Get the user's answers to the two open questions below, then start step 1 of the plan in `tasks/todo.md`: add `Dockerfile.api`, `Dockerfile.worker`, `Dockerfile.beat` (reusing the existing stages) and an env-driven `/api/` proxy (with `proxy_buffering off` for the SSE route) in `frontend/nginx.prod.conf`; build the images locally to verify. Railway CLI login (`railway login`) is needed only for the later project-setup step.
+Follow `docs/railway.md` "First deploy checklist": run `railway login` (`! railway login` in the prompt), create the project (Postgres pgvector template, Redis, `api`, `frontend`), set variables, attach the custom domain (needs the domain name for `CORS_ORIGINS`), add the Cloudflare CNAME as DNS-only first, then smoke test through the app. Enable `worker` and `beat` last.
 
 ## Why It Stopped
 
-Awaiting user answers on data and domain before implementing (per the "check in before implementation" rule).
+Needs user input: the domain name, and Railway CLI login for the setup steps.
 
 ## In-Flight
 
-- `tasks/todo.md` (plan section added)
-- `HANDOFF.md`
+No uncommitted changes (all committed on `feat/railway-deploy`).
 
 ## Open Questions
 
-- Fresh database, or restore the old RDS snapshot (users, saved jobs, analyses)? Fresh is much simpler.
-- Free `*.up.railway.app` URL for now, or a custom domain?
+- What is the domain name (for `CORS_ORIGINS` and the CNAME)?
 - Whether `infra/aws/RUNBOOK.md` stays gitignored (carried over; repo is public).
+- Untested assumptions to confirm on first deploy: Railway private DNS resolver `[fd12::10]` works with the nginx config; the `${{...}}` reference-variable syntax in `docs/railway.md`.
 
 ## Verification Baseline
 
 | Check | Result |
 |---|---|
-| `make test` | not run this session (docs-only change) |
-| `make lint` | not run this session (docs-only change) |
-| `make check` | not run this session (docs-only change) |
+| `make test` | 713 passed · 82.89% coverage ✓ |
+| `make lint` | ✓ clean (part of `make check`) |
+| `make check` | ✓ clean |

@@ -101,25 +101,24 @@ on-disk yaml not in image; no DB profile has search_profiles). Admin-only for no
 - [x] Threshold calibrated (0.35 sweet spot; prod on 0.30 default — bump if Stage-2 spend high)
 - [x] Backlog rescore: SKIPPED deliberately (June jobs stale; endpoint exists API-only)
 
-## Railway deployment (PLAN — awaiting go-ahead, nothing implemented)
+## Railway deployment (code DONE on feat/railway-deploy; Railway setup pending)
 
 Goal: get the app running cheaply again (AWS is shut down for cost). Six services in one
-Railway project: api, worker, beat, frontend, Postgres (pgvector), Redis.
+Railway project: api, worker, beat, frontend, Postgres (pgvector), Redis. Runbook: docs/railway.md.
+Decisions: fresh DB; custom domain bought on Cloudflare.
 
-- [ ] Per-service Dockerfiles that reuse the existing multi-stage build (Railway can't pick a
-      `--target`): `Dockerfile.api`, `Dockerfile.worker`, `Dockerfile.beat` (verify against docs)
-- [ ] Frontend: add `/api/` reverse proxy to `nginx.prod.conf`, upstream from env via nginx
-      templates (`API_UPSTREAM`), `proxy_buffering off` for the SSE route `/api/analyse`,
-      Railway private-DNS `resolver`. Must keep same-origin so cookie JWT works.
-- [ ] Verify locally: build the frontend image, confirm `/healthz` and `/api/health` proxy path
-- [ ] Railway project: Postgres via pgvector template, Redis, 4 app services, private networking
-- [ ] Env vars: DATABASE_URL (+ DB_SSL if needed), REDIS_URL, APP_ENV=production,
-      COOKIE_SECURE=true, CORS_ORIGINS=<public domain>, JWT_SECRET (new, random),
-      ANTHROPIC_API_KEY, OPENAI_API_KEY, EMBEDDING_PROVIDER, Hunter/Gmail/Reed/Adzuna, SENTRY_DSN
-- [ ] Migrations: rely on RUN_MIGRATIONS_ON_STARTUP on the api service ONLY (worker/beat off)
-- [ ] Cost guard: small worker/beat, spend cap in Railway, confirm campaign per-user caps set
-- [ ] Smoke test through the app's own flows (register via invite, upload CV, run analysis,
-      PDF download). No hand-edited DB rows.
-- [ ] HANDOFF.md updated; runbook kept out of the public repo (contains project/service IDs)
-
-Open questions: fresh DB vs restoring the RDS snapshot; custom domain vs *.up.railway.app.
+- [x] Build targets: made `api` the LAST stage of `Dockerfile` (Railway can't pick `--target`);
+      worker/beat reuse the image with a start-command override. Replaces the planned
+      per-service Dockerfiles. Verified: default build = uvicorn CMD, pdflatex present
+- [x] Frontend: `nginx.railway.conf.template` (envsubst; `/api/` proxy, per-request resolver,
+      X-Forwarded-Proto from the edge). Dockerfile copies config into nginx templates dir,
+      `PORT`/`API_UPSTREAM`/`DNS_RESOLVER` defaults, healthcheck uses `${PORT}`
+- [x] Verified locally in Docker: proxy keeps `/api/...` path + forwards proto, SPA fallback,
+      `/healthz`, default `[fd12::10]` resolver parses; compose + AWS configs render identical
+- [x] `make check` green (713 passed, 82.9% cov)
+- [x] docs/railway.md runbook (variable NAMES only; repo is public)
+- [ ] Railway project: Postgres (pgvector template), Redis, api/worker/beat/frontend (needs CLI login)
+- [ ] Env vars per docs/railway.md (new JWT_SECRET, COOKIE_SECURE, CORS_ORIGINS=<domain>)
+- [ ] Cloudflare CNAME -> frontend service (DNS-only first), then verify TLS
+- [ ] Smoke test via the app's own flows (register, CV upload, analysis, PDF). No hand-edited DB rows
+- [ ] Enable worker + beat only after caps confirmed

@@ -51,11 +51,15 @@ ENV PYTHONPATH=/app
 EXPOSE 8000
 USER appuser
 
-FROM backend-tex AS api
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+FROM backend-base AS beat
+CMD ["celery", "-A", "backend.celery_app:celery_app", "beat", "--loglevel=info"]
 
 FROM backend-tex AS worker
 CMD ["celery", "-A", "backend.celery_app:celery_app", "worker", "--loglevel=info"]
 
-FROM backend-base AS beat
-CMD ["celery", "-A", "backend.celery_app:celery_app", "beat", "--loglevel=info"]
+# `api` stays LAST on purpose: a plain `docker build` (no --target) builds the final
+# stage, and Railway cannot select a target. On Railway the worker and beat services
+# reuse this image and override the start command instead. Compose/ECS/k8s still pick
+# their stage explicitly with `target:`.
+FROM backend-tex AS api
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
