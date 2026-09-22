@@ -123,9 +123,10 @@ Decisions: fresh DB; custom domain bought on Cloudflare.
       CORS_ORIGINS=https://app.jobfitapp.uk, NGINX_CONF build arg)
 - [x] All 4 services confirmed running the correct image/code (api + frontend fully healthy;
       worker/beat correct image but still on default uvicorn CMD — start command is next)
-- [ ] Dashboard-only fields (no CLI path): worker/beat Custom Start Command; frontend Root
-      Directory = `frontend`. See HANDOFF.md Next Action.
-- [ ] Branch decision: point Railway services at feat/railway-deploy, or merge to main
+- [x] Branch decision: merged feat/railway-deploy -> main (Railway already tracked main;
+      kept Railway's default deploy-on-push, declined tag-gating as unneeded complexity)
+- [ ] Dashboard-only fields (no CLI path): worker/beat Custom Start Command. See HANDOFF.md
+      Next Action. (Root Directory not needed — CI/manual deploys use --path-as-root.)
 - [ ] Cloudflare CNAME app.jobfitapp.uk -> cteyjilb.up.railway.app (DNS-only first), then verify TLS
 - [ ] Smoke test via the app's own flows (register, CV upload, analysis, PDF). No hand-edited DB rows
 - [ ] Enable worker + beat only after caps confirmed
