@@ -8,6 +8,29 @@ Fix: what the correct approach is
 Avoid: what not to do next time
 -->
 
+## [2026-09-22] `railway add --repo` links the GitHub repo's default branch, not the current branch
+
+Pattern: Created api/worker/beat/frontend services via `railway add --service X --repo
+divyanshu144/Job_Agent` while on `feat/railway-deploy`. All three backend services'
+first auto-deploy built and ran the **`beat`** stage (`celery ... beat`) regardless of
+service name — traced it by comparing build logs (none reached `backend-tex`/texlive)
+and runtime logs (`beat: Starting...` on all three). Root cause: `railway add --repo`
+silently tracks the repo's default branch (`main`), and on `main` the Dockerfile still
+has `beat` as the textually-last stage (pre-dates the `feat/railway-deploy` reorder that
+put `api` last). So "Railway can't pick a Docker --target, but builds the last stage by
+default" was true — just applied to the wrong branch's Dockerfile.
+
+Fix: `railway up --service <name>` deploys the **local working directory**, independent
+of the linked GitHub branch — used it to get the correct branch's image built and
+running immediately. For `frontend`, ran `railway up` from inside `frontend/` itself to
+also sidestep the (dashboard-only, non-CLI-settable) Root Directory setting.
+
+Avoid: After `railway add --repo` on a non-default branch, don't assume the first
+auto-triggered deploy used your branch — check build logs for the stage/layer you
+expect (e.g. `backend-tex`/texlive here) before trusting deploy "SUCCESS" status. Either
+set the service's branch in the dashboard (Settings → Source → Branch) or merge to the
+default branch before relying on GitHub-triggered auto-deploys.
+
 ## [2026-06-10] A "tailor the resume" prompt must constrain length, or it overflows the page
 
 Pattern: The resume_latex `_SYSTEM` prompt told the model to edit summary/skills/bullets to
