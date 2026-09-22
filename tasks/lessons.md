@@ -31,6 +31,48 @@ expect (e.g. `backend-tex`/texlive here) before trusting deploy "SUCCESS" status
 set the service's branch in the dashboard (Settings → Source → Branch) or merge to the
 default branch before relying on GitHub-triggered auto-deploys.
 
+## [2026-09-22] Celery beat's default schedule file needs a writable path picked explicitly
+
+Pattern: `beat` crash-looped on Railway immediately after deploy — hundreds of log lines/sec
+(hit Railway's 500 logs/sec rate limit) all repeating the same traceback:
+`_gdbm.error: [Errno 13] Permission denied: 'celerybeat-schedule'`. Celery beat's default
+`PersistentScheduler` writes a `celerybeat-schedule` file (via `shelve`/`gdbm`) into the
+process's working directory (`/app`), which Railway's container filesystem didn't allow
+writing to — even though the Dockerfile explicitly `chown -R appuser:appuser /app` and runs
+as that user. This had been latent since the beat stage was first added; AWS ECS Fargate
+apparently allows the write (no readonly-root-style restriction), so it was never hit there.
+
+Fix: pass `--schedule=/tmp/celerybeat-schedule` explicitly. `/tmp` is a safe default
+writable path on effectively every container platform, and the schedule file is disposable
+state anyway (no reason it should need to persist across restarts/deploys). Fixed in all
+three places the beat command is defined: `Dockerfile` CMD, `docker-compose.yml`, and
+`infra/aws/task-definitions/beat.json` — for consistency, not because AWS needed it.
+
+Avoid: Don't assume a container's working directory is writable just because the Dockerfile
+chowns it — some platforms restrict writes outside of `/tmp` or declared volumes regardless.
+Also: a Railway dashboard **Custom Start Command** override shadows the image's Dockerfile
+CMD entirely, so a code-level fix to the CMD doesn't take effect until the dashboard field is
+updated to match by hand — check both when debugging a start-command-related crash.
+
+## [2026-09-22] `railway up --path-as-root` fixes the deploy, but not future auto-deploys
+
+Pattern: After fixing `frontend`'s build with `railway up frontend --path-as-root --service
+frontend` (see the "linked project root, not shell cwd" lesson above), assumed Root
+Directory was no longer needed in the dashboard since CLI/manual deploys sidestepped it —
+documented this in `tasks/todo.md` as "not needed." Wrong: the *next* `git push` to `main`
+triggered Railway's normal GitHub auto-deploy (which the user had explicitly chosen to keep
+rather than tag-gate), and that auto-deploy path reads the service's own Root Directory
+setting, not any CLI flag from a previous manual deploy. `frontend` broke again identically
+(backend Dockerfile, crash-looped trying to reach a DB it has no credentials for).
+
+Fix: Root Directory = `frontend` in the dashboard (Settings → Source) is genuinely required
+whenever GitHub auto-deploy is in play — not optional, not superseded by a one-off CLI fix.
+
+Avoid: A CLI workaround that fixes *this* deploy doesn't fix the *next* one if a different
+trigger path (GitHub push vs. manual `railway up`) reads different configuration. Before
+declaring a dashboard field "not needed," check every path that can trigger a deploy, not
+just the one just used.
+
 ## [2026-06-10] A "tailor the resume" prompt must constrain length, or it overflows the page
 
 Pattern: The resume_latex `_SYSTEM` prompt told the model to edit summary/skills/bullets to

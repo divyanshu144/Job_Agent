@@ -125,8 +125,13 @@ Decisions: fresh DB; custom domain bought on Cloudflare.
       worker/beat correct image but still on default uvicorn CMD — start command is next)
 - [x] Branch decision: merged feat/railway-deploy -> main (Railway already tracked main;
       kept Railway's default deploy-on-push, declined tag-gating as unneeded complexity)
-- [ ] Dashboard-only fields (no CLI path): worker/beat Custom Start Command. See HANDOFF.md
-      Next Action. (Root Directory not needed — CI/manual deploys use --path-as-root.)
-- [ ] Cloudflare CNAME app.jobfitapp.uk -> cteyjilb.up.railway.app (DNS-only first), then verify TLS
-- [ ] Smoke test via the app's own flows (register, CV upload, analysis, PDF). No hand-edited DB rows
-- [ ] Enable worker + beat only after caps confirmed
+- [x] Dashboard fields set: worker/beat Custom Start Command (beat needed
+      --schedule=/tmp/celerybeat-schedule after a gdbm permission crash — fixed in code too);
+      frontend Root Directory = `frontend` (turned out required, not optional — GitHub
+      auto-deploy reads this field, unlike my CLI --path-as-root workaround)
+- [x] Cloudflare CNAME app.jobfitapp.uk -> cteyjilb.up.railway.app (DNS-only) — verified live:
+      DNS resolves, Let's Encrypt cert issued, /healthz 200, /api/health 200 w/ db:ok
+- [ ] Smoke test via the app's own flows (register, CV upload, analysis, PDF). No hand-edited
+      DB rows — deferred to user (real CV/profile data + a live LLM call)
+- [ ] Enable worker + beat only after caps confirmed (both already running — just confirm
+      nightly campaign spend caps are set as wanted before relying on them)
