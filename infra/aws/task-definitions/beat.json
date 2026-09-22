@@ -15,7 +15,7 @@
       "name": "beat",
       "image": "896476315730.dkr.ecr.eu-west-2.amazonaws.com/jobfit-beat:latest",
       "essential": true,
-      "command": ["celery", "-A", "backend.celery_app:celery_app", "beat", "--loglevel=info"],
+      "command": ["celery", "-A", "backend.celery_app:celery_app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"],
       "environment": [
         { "name": "APP_ENV", "value": "production" },
         { "name": "API_PREFIX", "value": "/api" },

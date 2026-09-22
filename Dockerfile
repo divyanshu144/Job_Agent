@@ -52,7 +52,10 @@ EXPOSE 8000
 USER appuser
 
 FROM backend-base AS beat
-CMD ["celery", "-A", "backend.celery_app:celery_app", "beat", "--loglevel=info"]
+# --schedule writes to /tmp: the working directory (/app) isn't guaranteed writable on
+# every platform (Railway's container fs rejected the gdbm write here), and the
+# schedule file is disposable state anyway — no reason to want it to persist.
+CMD ["celery", "-A", "backend.celery_app:celery_app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
 
 FROM backend-tex AS worker
 CMD ["celery", "-A", "backend.celery_app:celery_app", "worker", "--loglevel=info"]
