@@ -35,53 +35,67 @@ present, resume-template compile guard passed at build time, uvicorn running, al
 cleanly through `0014_resume_documents` (head), confirming the `DATABASE_URL` reference var to
 the `pgvector` service works.
 
-`worker`, `beat`, `frontend` redeploys via `railway up` were **in progress (backgrounded) when
-this session paused** — outcome unknown, must be checked first thing next session (see Next Action).
-Even once those finish, `worker`/`beat` will still be running the **default `uvicorn` command**
-(same image as `api`) until their Start Command is overridden — Railway has no CLI flag or
-config-as-code path for this when services share a root directory, confirmed via Railway docs
-and a community feedback thread (no `--target` support either, despite one misleading secondhand
-PR summary claiming otherwise — verified against Railway's own feedback board that it's still an
-open feature request). This is a genuine dashboard-only step, not a gap in our tooling.
+`worker` and `beat` are also confirmed rebuilt correctly (texlive/backend-tex stage present,
+compile guard passed) — both currently run the default `uvicorn` command (same image as `api`)
+since their Start Command hasn't been overridden yet. Railway has no CLI flag or config-as-code
+path for Start Command, Root Directory, or build `--target` (confirmed via Railway's own docs and
+an open feedback-board request — no secret `--target` support despite one misleading secondhand
+source claiming otherwise). These are genuine dashboard-only fields, not a gap in our tooling.
+
+`frontend` hit a second, separate bug: `railway up` uploads the *linked project's root*, not the
+shell's cwd, so `cd frontend && railway up` still built the repo-root (backend) Dockerfile —
+deployed "successfully" but crash-looped (tried connecting to Postgres with no `DATABASE_URL`,
+since it's not the api service). Fixed with `railway up frontend --path-as-root --service
+frontend` from the repo root, which correctly scopes the upload to `frontend/`. **Now confirmed
+healthy**: nginx running, built with `nginx.railway.conf.template` (confirmed via build log —
+Railway auto-forwards service vars as Dockerfile `ARG`s, no build-arg-specific field needed).
+Both gotchas are now documented in `docs/railway.md`'s new "CLI gotchas" section and
+`tasks/lessons.md`.
+
+Couldn't smoke-test the `/api/` proxy through the real domain yet — Railway won't issue a TLS
+cert for `app.jobfitapp.uk` until DNS actually resolves there (chicken-and-egg with the pending
+Cloudflare change), and Railway refuses to generate a fallback `*.up.railway.app` domain once a
+custom domain is already attached to a service. The CNAME target itself
+(`cteyjilb.up.railway.app`) 404s directly — Railway's edge only routes it once the custom domain
+is verified. This step genuinely needs the Cloudflare DNS change first.
 
 ## Next Action
 
-1. Check the 3 backgrounded `railway up` builds (worker, beat, frontend) — re-run and inspect,
-   don't assume success:
-   `railway logs --service <name> --build -n 60 --latest` (look for `backend-tex`/texlive lines)
-   and `railway logs --service <name> --deployment -n 20 --latest` (look for the actual running
-   process, not just "Starting Container").
-2. In the Railway dashboard (`railway open`), set on **worker**: Settings → Deploy → Custom Start
-   Command = `celery -A backend.celery_app:celery_app worker --loglevel=info --concurrency=2`.
-   On **beat**: same field = `celery -A backend.celery_app:celery_app beat --loglevel=info`.
-   Redeploy both after saving (dashboard "Redeploy" or `railway redeploy --service worker`/`beat`).
-3. On **frontend**, dashboard Settings → Source → Root Directory = `frontend` (needed so future
-   GitHub-triggered deploys build the right Dockerfile — today's `railway up` deploy bypassed this
-   by running from inside `frontend/` directly, but that fix doesn't persist to the dashboard).
-4. Decide + fix the GitHub branch mismatch for future auto-deploys: either set each service's
-   Settings → Source → Branch to `feat/railway-deploy`, or merge this branch to `main` (code is
-   verified/tested — `make check` was green before this session; Railway-side verification is what
-   this session's work was for). User has not been asked which yet.
-5. User must repoint the Cloudflare CNAME: `app.jobfitapp.uk` → `cteyjilb.up.railway.app`
-   (get the current required value fresh via `railway domain --service frontend --json` in case
-   it rotated), DNS-only (grey cloud) first, then Full (strict) SSL once Railway issues the cert.
-6. Full smoke test per `docs/railway.md`: register, upload CV, run an analysis, download the PDF.
-   Never hand-edit the database.
-7. Only then enable real traffic on worker + beat (confirm nightly campaign spend caps first).
+Waiting on the user for 3 things (all handed off, none blocking each other):
+
+1. **Dashboard fields** (`railway open`), no CLI path exists for these:
+   - `worker` → Settings → Deploy → Custom Start Command =
+     `celery -A backend.celery_app:celery_app worker --loglevel=info --concurrency=2`
+   - `beat` → Settings → Deploy → Custom Start Command =
+     `celery -A backend.celery_app:celery_app beat --loglevel=info`
+   - Redeploy both after saving (`railway redeploy --service worker`/`beat` works fine).
+   - `frontend` → Settings → Source → Root Directory = `frontend` (so future GitHub-triggered
+     deploys build the right Dockerfile — today's fix used `--path-as-root`, which doesn't
+     persist to the dashboard's own source config).
+2. **Branch decision**: point every service's Settings → Source → Branch at
+   `feat/railway-deploy`, or merge this branch to `main` now that Railway-side deploys are
+   verified working (code was already `make check`-green before this session). Not yet asked.
+3. **Cloudflare CNAME**: `app.jobfitapp.uk` → `cteyjilb.up.railway.app` (reconfirm the value
+   with `railway domain --service frontend --json` in case it rotated), DNS-only (grey cloud)
+   first, then Full (strict) SSL once Railway issues the cert. No Cloudflare access in this
+   session, so this is 100% on the user.
+
+Once those land: full smoke test per `docs/railway.md` (register, upload CV, run an analysis,
+download the PDF — never hand-edit the database), then enable real traffic on worker + beat
+(confirm nightly campaign spend caps first).
 
 ## Why It Stopped
 
-Stop-hook checkpoint (uncommitted `tasks/lessons.md`, 30-min rule) while 3 backgrounds deploys
-were still running — not a natural stopping point, mid-deploy. No blocking user question pending;
-purely a "background work in flight" pause.
+Needs user input on 3 things (dashboard fields, branch-vs-merge decision, Cloudflare DNS) — none
+of which this session can do (no dashboard/browser access for the first, a decision only the user
+can make for the second, no Cloudflare access for the third).
 
 ## In-Flight
 
-- `tasks/lessons.md` — modified, being committed alongside this HANDOFF update.
-- 3 background `railway up` processes (worker, beat, frontend) — may have finished by next read;
-  check with the commands in Next Action step 1 rather than trusting exit status alone (a
-  "SUCCESS" deploy status does NOT mean the correct stage/process is running — that's exactly
-  today's bug).
+No uncommitted changes — `tasks/lessons.md`, `HANDOFF.md`, and `docs/railway.md` all committed
+this session. All 4 GitHub-connected services (api/worker/beat/frontend) have a working deploy
+live on Railway right now via `railway up`; nothing further needs pushing from this session until
+the user's 3 items above are done.
 
 ## Open Questions
 
@@ -102,4 +116,5 @@ purely a "background work in flight" pause.
 | `make lint` (local, prior session) | ✓ clean (part of `make check`) |
 | `make check` (local, prior session) | ✓ clean |
 | `api` on Railway | ✓ confirmed — uvicorn running, migrated to head, DB reachable |
-| `worker` / `beat` / `frontend` on Railway | ⏳ unknown — check before trusting |
+| `worker` / `beat` on Railway | ✓ correct image (texlive present) — ⏳ still running default `uvicorn`, needs dashboard Start Command |
+| `frontend` on Railway | ✓ confirmed — nginx running, correct config, `/api/` proxy path untestable until DNS cutover |

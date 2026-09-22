@@ -117,8 +117,15 @@ Decisions: fresh DB; custom domain bought on Cloudflare.
       `/healthz`, default `[fd12::10]` resolver parses; compose + AWS configs render identical
 - [x] `make check` green (713 passed, 82.9% cov)
 - [x] docs/railway.md runbook (variable NAMES only; repo is public)
-- [ ] Railway project: Postgres (pgvector template), Redis, api/worker/beat/frontend (needs CLI login)
-- [ ] Env vars per docs/railway.md (new JWT_SECRET, COOKIE_SECURE, CORS_ORIGINS=<domain>)
-- [ ] Cloudflare CNAME -> frontend service (DNS-only first), then verify TLS
+- [x] Railway project `jobfit-agent` created; Postgres (pgvector template 3jJFCA, service
+      named `pgvector`), Redis, api/worker/beat/frontend all provisioned
+- [x] Env vars set on api/worker/beat/frontend (new JWT_SECRET, COOKIE_SECURE,
+      CORS_ORIGINS=https://app.jobfitapp.uk, NGINX_CONF build arg)
+- [x] All 4 services confirmed running the correct image/code (api + frontend fully healthy;
+      worker/beat correct image but still on default uvicorn CMD — start command is next)
+- [ ] Dashboard-only fields (no CLI path): worker/beat Custom Start Command; frontend Root
+      Directory = `frontend`. See HANDOFF.md Next Action.
+- [ ] Branch decision: point Railway services at feat/railway-deploy, or merge to main
+- [ ] Cloudflare CNAME app.jobfitapp.uk -> cteyjilb.up.railway.app (DNS-only first), then verify TLS
 - [ ] Smoke test via the app's own flows (register, CV upload, analysis, PDF). No hand-edited DB rows
 - [ ] Enable worker + beat only after caps confirmed
