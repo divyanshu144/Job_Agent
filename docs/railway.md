@@ -29,7 +29,7 @@ Reference variables (`${{Service.VAR}}`) keep credentials out of the config.
 | Variable | Value |
 |---|---|
 | `APP_ENV` | `production` |
-| `DATABASE_URL` | `postgresql+asyncpg://${{Postgres.PGUSER}}:${{Postgres.PGPASSWORD}}@${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{Postgres.PGDATABASE}}` (must be the `+asyncpg` scheme, not Railway's plain `postgresql://`) |
+| `DATABASE_URL` | `postgresql+asyncpg://${{pgvector.PGUSER}}:${{pgvector.PGPASSWORD}}@${{pgvector.RAILWAY_PRIVATE_DOMAIN}}:5432/${{pgvector.PGDATABASE}}` (must be the `+asyncpg` scheme, not Railway's plain `postgresql://`; the service name is `pgvector` — that's the default name Railway's own pgvector template (`3jJFCA`) provisions it under, not `Postgres`. Deployed via `railway deploy -t 3jJFCA`, not `railway add -d postgres` — the latter is plain Postgres without the extension baked in.) |
 | `REDIS_URL` | `${{Redis.REDIS_URL}}` |
 | `JWT_SECRET` | new long random string (never reuse the default) |
 | `COOKIE_SECURE` | `true` |
@@ -37,8 +37,9 @@ Reference variables (`${{Service.VAR}}`) keep credentials out of the config.
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `EMBEDDING_PROVIDER` | as in `.env.example` |
 | `HUNTER_API_KEY`, `GMAIL_*`, `REED_API_KEY`, `ADZUNA_*`, `SENTRY_DSN` | optional integrations |
 
-`DB_SSL` stays unset: the private network does not need TLS.
-Set `RUN_MIGRATIONS_ON_STARTUP=false` on `worker` and `beat` so only the api migrates.
+`DB_SSL` stays unset (or explicitly `false`): the private network does not need TLS.
+Set `RUN_MIGRATIONS_ON_STARTUP=false` on `worker` and `beat` so only the api migrates
+(`true`, or unset — the `.env.example` default — on `api`).
 
 **frontend:**
 
@@ -62,6 +63,29 @@ certificate; once it is issued you can turn the proxy on, with SSL mode **Full (
    the PDF. Never hand-edit the database.
 4. Only then enable `worker` and `beat`; confirm the nightly campaign caps are set before
    letting beat dispatch anything that spends on the LLM.
+
+## CLI gotchas (learned the hard way)
+
+- **`railway add --repo <owner/repo>` tracks the GitHub repo's default branch**, not
+  whatever branch you're working on locally, and there's no CLI/config-as-code flag to
+  change it (branch is a dashboard-only field: Settings → Source → Branch). If you're
+  deploying from a feature branch, either set that field per service or use `railway up`
+  (below) to get the right code running immediately, and fix the branch/merge before
+  relying on GitHub-triggered auto-deploys.
+- **No CLI or config-as-code support for Docker build `--target`, Root Directory, or
+  Start Command** — confirmed against Railway's own docs and an open feedback-board
+  request (`support-target-for-multi-stage-dockerfil`). These are dashboard-only fields
+  (Settings → Build / Deploy / Source respectively). `worker`/`beat` need their Start
+  Command set explicitly to the celery commands in the table above, or they silently run
+  the image's default `uvicorn` CMD.
+- **`railway up` uploads the *linked project's* root, not your shell's cwd** — `cd
+  frontend && railway up` still built the repo-root Dockerfile. Use
+  `railway up frontend --path-as-root --service frontend` from the repo root instead;
+  `--path-as-root` is what actually scopes the archive to that subdirectory.
+- A Dockerfile whose last stage isn't reachable from the branch Railway is actually
+  building **still deploys "SUCCESS"** — it just runs the wrong CMD. Always check build
+  logs for the layer you expect (e.g. the `backend-tex`/texlive install here) before
+  trusting a green deploy status.
 
 ## Cost notes
 
