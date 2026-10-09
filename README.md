@@ -4,6 +4,10 @@ JobFit Agent is a full-stack AI job-application assistant that evaluates job fit
 
 It is built as a real application system rather than a thin ChatGPT prompt wrapper: the backend persists workflow state, validates LLM outputs with Pydantic schemas, streams progress to the UI, tracks LLM cost/latency, runs background Celery jobs, and ships with Docker Compose plus local Kubernetes manifests.
 
+use the below mentioned credentials to login to the app and check out 
+Email : divyanshucharak@gmail.com
+password: admin123
+
 ## What It Does
 
 Users create a profile from CV/profile data, paste a job description, and receive:
